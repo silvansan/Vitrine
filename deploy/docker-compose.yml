@@ -74,4 +74,6 @@ volumes:
 networks:
   internal:
   proxy:
+    # Your Nginx Proxy Manager network; set VITRINE_PROXY_NETWORK if it isn't called "proxy".
     external: true
+    name: ${VITRINE_PROXY_NETWORK:-proxy}

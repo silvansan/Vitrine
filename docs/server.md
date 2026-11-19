@@ -17,7 +17,7 @@ The server runs on your Linux box at home as one Portainer stack: Django (web), 
 
 If the pull fails with "denied" or "unauthorized", the packages are private: either make them public on GitHub (your profile → **Packages** → the package → **Package settings** → **Change visibility**), or add `ghcr.io` under Portainer → **Registries** with your GitHub username and a token with `read:packages`.
 
-The stack joins the existing external network `proxy` (your Nginx Proxy Manager network). If yours has another name, change it at the bottom of the compose file.
+The stack joins the existing external network `proxy` (your Nginx Proxy Manager network). If yours has another name (e.g. `nginx-proxy_default`), set `VITRINE_PROXY_NETWORK` to it in the environment variables. NPM must be attached to that network so it can reach `vitrine-nginx` by name.
 
 ## 2. Public guest address (Nginx Proxy Manager)
 
