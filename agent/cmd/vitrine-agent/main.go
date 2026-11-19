@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -28,7 +29,10 @@ func usage() {
 
 Usage: vitrine-agent <command> [-config path]
 
+Double-click vitrine-agent.exe to install or update it (asks for administrator rights).
+
 Commands:
+  setup       what a double-click does: copy to Program Files, install or update, start
   install     install and start the Windows service (as administrator)
   uninstall   stop and remove the Windows service
   start       start the installed service
@@ -100,6 +104,14 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
+		if runtime.GOOS == "windows" {
+			// Double-clicked: install or update, asking for administrator rights.
+			if err := service.Elevate("setup"); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				service.Pause()
+			}
+			return
+		}
 		usage()
 		os.Exit(2)
 	}
@@ -111,6 +123,24 @@ func main() {
 
 	var err error
 	switch command {
+	case "setup":
+		port := 8090
+		if cfg, cerr := config.Load(abs); cerr == nil {
+			port = cfg.ListenPort()
+		}
+		if !service.IsAdmin() {
+			err = service.Elevate("setup")
+			break
+		}
+		err = service.Setup(abs, port)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
+		service.Pause()
+		if err != nil {
+			os.Exit(1)
+		}
+		return
 	case "install":
 		port := 8090
 		if cfg, cerr := config.Load(abs); cerr == nil {

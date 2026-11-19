@@ -16,3 +16,7 @@ func RunService(run func(ctx context.Context) error) error { return errWindowsOn
 func Install(configPath string, port int) error            { return errWindowsOnly }
 func Uninstall() error                                     { return errWindowsOnly }
 func Control(start bool) error                             { return errWindowsOnly }
+func IsAdmin() bool                                        { return false }
+func Elevate(args string) error                            { return errWindowsOnly }
+func Setup(configPath string, port int) error              { return errWindowsOnly }
+func Pause()                                               {}

@@ -25,7 +25,7 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
 ## Quick start
 
 1. **Server**: deploy `deploy/docker-compose.yml` as a Portainer stack, point a Nginx Proxy Manager host at `vitrine-nginx:80`. See [docs/server.md](docs/server.md).
-2. **Agent**: in `/manage/agents/` create an agent token. On the vMix PC run `vitrine-agent install` once as administrator, start `vitrine-tray.exe`, and paste the server address and token under **Open settings… → Connection**. See [docs/agent.md](docs/agent.md).
+2. **Agent**: in `/manage/agents/` create an agent token. On the vMix PC double-click `vitrine-agent.exe` (it installs or updates itself and opens its settings page), then paste the server address and token under **Connection**. See [docs/agent.md](docs/agent.md).
 3. **Tablets**: pair each tablet by scanning a QR code from the backend or the tray companion.
 4. **Use it**: create a service, add guests, send them their links. See [docs/usage.md](docs/usage.md).
 

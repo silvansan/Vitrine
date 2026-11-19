@@ -8,21 +8,19 @@ The agent is one Windows service (`vitrine-agent.exe`) plus a tray icon (`vitrin
 - Decide which **mix** feeds the projector (e.g. Mix 2) and which input is the **default** (e.g. your banner).
 - Optional: add two **List** inputs named `GM_A` and `GM_B` and save them in your preset. If they're missing, the agent tries to create them on the first take.
 
-## 2. Install
+## 2. Install or update
 
-1. Download `vitrine-agent.exe` and `vitrine-tray.exe` from the latest GitHub release (or the build artifacts) and put them together in a folder on a **local disk**, e.g. `C:\Program Files\Vitrine\`.
-2. Open a Command Prompt **as administrator** and run (use `cd /d` to change drive):
-   ```
-   cd /d "C:\Program Files\Vitrine"
-   vitrine-agent install
-   ```
-   This registers the `VitrineAgent` service (starts at boot, restarts itself after a crash), opens TCP port 8090 in the Windows firewall (all network types, since venue networks are often marked Public), and starts the tray icon at every logon.
+1. Download the agent zip (from the latest GitHub release or the build artifacts) and unzip it anywhere, e.g. Downloads.
+2. **Double-click `vitrine-agent.exe`** and allow the Windows permission prompt. It:
+   - stops the agent and tray if an older version is running,
+   - copies itself and `vitrine-tray.exe` to `C:\Program Files\Vitrine\`,
+   - installs (or updates) the `VitrineAgent` service, which starts at boot and restarts itself after a crash,
+   - opens TCP port 8090 in the Windows firewall for all network types (venue networks are often marked Public),
+   - starts the tray icon (and sets it to start at every logon),
+   - opens the settings page in your browser.
+3. In the settings page, under **Connection**, paste the **server address** (e.g. `https://vitrine.yourdomain.ch`) and the **agent token** from the backend (Agents & tablets), then **Save and restart agent**. The agent checks the connection before saving.
 
-   **Updating** to a new version: close the tray icon, unzip the new version into a new folder (the running exe can't be overwritten), and run `vitrine-agent install` from there as administrator. It stops the service, switches it and the tray autostart to the new folder and starts it again; your settings are kept. Then start the new `vitrine-tray.exe` and delete the old folder.
-3. Double-click `vitrine-tray.exe` once (later it starts by itself), right-click its icon near the clock → **Open settings…**.
-4. Under **Connection**, paste the **server address** (e.g. `https://vitrine.yourdomain.ch`, or the Tailscale address `http://100.x.y.z:8080`) and the **agent token** from the backend (Agents & tablets), then **Save and restart agent**. The agent checks the connection before saving.
-
-That's the only time you need the command prompt.
+**Updating** is the same: unzip the new version and double-click its `vitrine-agent.exe`. Your settings, tablets and downloaded files are kept (they live in `C:\ProgramData\Vitrine\`).
 
 ### Tray menu
 
@@ -50,7 +48,7 @@ All of these are in **Open settings… → Connection** (the first two) and **Mo
 | vMix Mix parameter offset | `mix_param_offset` | vMix's API `Mix` parameter = mix number + this. With `-1`, Mix 2 is sent as `Mix=1`. Check with **Show default on the projector**; if the wrong mix switches, try `0` |
 | Download limit while live | `live_throttle_kbps` | KB/s while something is on the projector; `0` = no limit |
 
-Command line, if you ever need it (as administrator): `vitrine-agent install`, `uninstall`, `start`, `stop`, `run` (in the console, for testing), `version`. Log file: `C:\ProgramData\Vitrine\agent.log` (also under **Agent log** in the settings page).
+Command line, if you ever need it (as administrator): `vitrine-agent setup` (same as double-click), `install` (register the service from the exe's current folder), `uninstall`, `start`, `stop`, `run` (in the console, for testing), `version`. Log file: `C:\ProgramData\Vitrine\agent.log` (also under **Agent log** in the settings page).
 
 ## 3. Companion (tray icon → Open settings)
 
