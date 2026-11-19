@@ -57,4 +57,4 @@ go run ./cmd/vitrine-fakevmix &
 go run ./cmd/vitrine-agent run -config ./dev/config.json
 ```
 
-GitHub Actions runs both test suites, publishes `ghcr.io/silvansan/vitrine-server`, and builds the Windows executables (attached to releases for `v*` tags).
+GitHub Actions runs both test suites, publishes `ghcr.io/silvansan/vitrine-server` and `ghcr.io/silvansan/vitrine-nginx` (the images the Portainer stack pulls), and builds the Windows executables (attached to releases for `v*` tags).

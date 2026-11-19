@@ -22,15 +22,17 @@ jobs:
       - run: pip install -r server/requirements.txt
       - run: python manage.py test guestmedia
         working-directory: server
-      - name: Build and push image
+      - name: Build and push images
         if: github.event_name == 'push'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/vitrine-server
+          REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}
           TAG=latest
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG=${GITHUB_REF#refs/tags/}; fi
-          docker build -t $IMAGE:$TAG server
-          docker push $IMAGE:$TAG
+          docker build -t $REGISTRY/vitrine-server:$TAG server
+          docker push $REGISTRY/vitrine-server:$TAG
+          docker build -t $REGISTRY/vitrine-nginx:$TAG deploy/nginx
+          docker push $REGISTRY/vitrine-nginx:$TAG
 
   agent:
     runs-on: ubuntu-latest

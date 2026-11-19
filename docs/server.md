@@ -5,7 +5,7 @@ The server runs on your Linux box at home as one Portainer stack: Django (web), 
 ## 1. Create the stack
 
 1. Portainer → **Stacks → Add stack → Repository**.
-2. Repository URL `https://github.com/silvansan/Vitrine`, reference `refs/heads/main`, compose path `deploy/docker-compose.yml`.
+2. Repository URL `https://github.com/silvansan/Vitrine`, reference `refs/heads/main`, compose path `deploy/docker-compose.yml`. (Pasting `deploy/docker-compose.yml` into the **Web editor** works too.)
 3. Under **Environment variables**, paste the contents of `deploy/.env.example` and change at least:
    - `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD`: long random strings.
    - `VITRINE_PUBLIC_URL`: the public address guests use, e.g. `https://vitrine.example.org`.
@@ -13,7 +13,9 @@ The server runs on your Linux box at home as one Portainer stack: Django (web), 
    - `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD`: your first login.
    - `VITRINE_VIDEO_FPS`: your vMix project frame rate (25 or 50 in Europe).
    - `VITRINE_BIND`: the server's Tailscale IP (e.g. `100.101.102.103`), so port 8080 is only reachable over Tailscale.
-4. Deploy. Portainer builds the images from the repository (`server/` and `deploy/nginx/`); the first build takes a few minutes.
+4. Deploy. Portainer pulls `ghcr.io/silvansan/vitrine-server` and `ghcr.io/silvansan/vitrine-nginx`, which GitHub Actions builds on every push to `main`. Nothing is built on the server.
+
+If the pull fails with "denied" or "unauthorized", the packages are private: either make them public on GitHub (your profile → **Packages** → the package → **Package settings** → **Change visibility**), or add `ghcr.io` under Portainer → **Registries** with your GitHub username and a token with `read:packages`.
 
 The stack joins the existing external network `proxy` (your Nginx Proxy Manager network). If yours has another name, change it at the bottom of the compose file.
 
@@ -69,6 +71,8 @@ Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the 
 
 ## Updating
 
-Portainer → the stack → **Pull and redeploy** (tick *Re-pull image and redeploy* so it rebuilds from the latest commit). Migrations run on start.
+Push to `main` and wait for the **build** workflow to finish, then Portainer → the stack → **Pull and redeploy** (tick *Re-pull image and redeploy*). Migrations run on start.
 
-GitHub Actions also publishes `ghcr.io/silvansan/vitrine-server`; to use it instead of building, replace `image: vitrine-server:local` with that name (log Portainer in to ghcr.io if the package is private).
+To pin a release instead of following `main`, tag it (`v1.2.0`); the workflow publishes both images with that tag, and you change `:latest` to `:v1.2.0` in the stack.
+
+For local development, build the images yourself: `docker build -t ghcr.io/silvansan/vitrine-server:latest server` and `docker build -t ghcr.io/silvansan/vitrine-nginx:latest deploy/nginx`.
