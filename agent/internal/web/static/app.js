@@ -246,7 +246,9 @@
         html += '<span class="badge">Photo</span>';
       }
       html += '</div>';
-    } else if (video) {
+    } else if (!video) {
+      html += '<div class="strip"><span class="t">Photo</span></div>';
+    } else {
       html += '<div class="strip"><span class="t">Video · ' + fmt(a.duration_ms) + '</span>';
       if (saved && state !== 'live') html += '<button type="button" class="small-btn" data-act="resume" data-id="' + entry.id + '">' + ICON.play + ' Resume ' + fmt(saved) + '</button>';
       else if (opts().video_seek) html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '" aria-label="Cue">' + ICON.more + '</button>';

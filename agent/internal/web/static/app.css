@@ -56,16 +56,18 @@ button:focus-visible { outline: 3px solid #6E8CFF; outline-offset: 2px; }
 .stack-right strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 
 /* grid */
-.grid { flex: 1; min-height: 0; padding: 18px 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 18px; touch-action: pan-y; }
+/* Six tiles fill the space on a tablet. On a small screen (a phone held sideways) the
+   tiles keep a usable minimum height and the grid scrolls instead of squashing them. */
+.grid { flex: 1; min-height: 0; padding: 18px 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(180px, 1fr)); gap: 18px; overflow-y: auto; touch-action: pan-y; }
 .theme-pulpit .grid { gap: 22px; padding: 6px 28px 18px; }
-@media (orientation: portrait) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); } }
+@media (orientation: portrait) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(170px, 1fr)); } }
 .empty { grid-column: 1 / -1; grid-row: 1 / -1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; text-align: center; padding: 20px; }
-.tile { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-radius: 14px; background: var(--surface); border: 3px solid var(--tile-border); transition: border-color .15s, box-shadow .15s; }
+.tile { display: flex; flex-direction: column; overflow: hidden; border-radius: 14px; background: var(--surface); border: 3px solid var(--tile-border); transition: border-color .15s, box-shadow .15s; }
 .theme-pulpit .tile { border-width: 4px; border-radius: 16px; }
 .tile.pending { border-color: var(--pend-border); box-shadow: 0 0 0 4px rgba(245,184,61,.2); }
 .tile.live { border-color: #F2555A; box-shadow: 0 0 0 4px rgba(242,85,90,.2); }
 .tile.notready { opacity: .55; }
-.thumb { flex: 1; min-height: 0; position: relative; width: 100%; padding: 0; margin: 0; border: none; cursor: pointer; background: var(--ph); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.thumb { flex: 1; min-height: 90px; position: relative; width: 100%; padding: 0; margin: 0; border: none; cursor: pointer; background: var(--ph); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .thumb .ph-icon { color: var(--icon); }
 .ov { position: absolute; z-index: 2; }
@@ -189,3 +191,35 @@ fieldset.box legend { padding: 0 6px; }
 .tablets { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tablets td { padding: 8px 4px; border-bottom: 1px solid var(--border); }
 .error-text { color: var(--live-text); font-weight: 600; }
+
+/* Phones and other short screens (e.g. a phone held sideways): smaller bars. */
+@media (max-height: 560px) {
+  .head, .p-head { height: 52px; padding: 0 16px; }
+  .head .title, .p-head .title { font-size: 18px; }
+  .head .sub, .pill { font-size: 12px; }
+  .pill { height: 30px; padding: 0 10px; }
+  .pill.strong, .head .pill:not(.strong) { display: none; }
+  .nav { height: 52px; padding: 0 16px; }
+  .chip { height: 36px; font-size: 13px; }
+  .stack-right { display: none; }
+  .grid, .theme-pulpit .grid { padding: 8px 16px; gap: 10px; grid-template-rows: repeat(2, minmax(150px, 1fr)); }
+  .caption { height: 50px; padding: 4px 8px 4px 10px; }
+  .caption .who { font-size: 13px; }
+  .strip { height: 48px; }
+  .ov-num { width: 28px; height: 28px; font-size: 13px; left: 8px; top: 8px; }
+  .transport, .theme-pulpit .transport { height: 56px; padding: 0 16px; }
+  .t-btn, .theme-pulpit .t-btn, .mk-btn, .theme-pulpit .mk-btn { height: 44px; font-size: 14px; }
+  .foot, .theme-pulpit .foot { height: 64px; padding: 0 16px; }
+  .nav-btn, .theme-pulpit .nav-btn { width: 44px; height: 44px; }
+  .default-btn, .theme-pulpit .default-btn { height: 48px; padding: 0 18px; font-size: 15px; }
+  .now strong { font-size: 14px; }
+  .p-status { font-size: 13px; }
+}
+/* Narrow phones held upright. */
+@media (max-width: 600px) {
+  .head, .nav, .grid, .foot, .p-head, .transport { padding-left: 12px; padding-right: 12px; }
+  .head-right .pill { display: none; }
+  .foot { grid-template-columns: 1fr auto; }
+  .foot .now { display: none; }
+  .nav-right { display: none; }
+}

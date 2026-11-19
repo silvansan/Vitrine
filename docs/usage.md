@@ -34,6 +34,10 @@ Unpair from the companion, or **Unpair** next to the code in the backend (takes 
 - Sun/moon button: dark or light theme for this tablet.
 - Swipe left/right on the tiles to change pages.
 
+## Phones
+
+The tablet pages also work on a phone (upright or sideways): the bars get smaller and the tiles scroll instead of shrinking. Use Chrome, Samsung Internet or Safari; Brave's HTTPS upgrade blocks the local address unless you turn its Shields down for it.
+
 ## Pulpit tablet
 
 Shows the set chosen from the back, 6 numbered tiles per page, the status ("Screen shows the banner" / "A picture is on screen") and, if allowed, **Clear screen** and the video bar (From start, Pause, markers). When a speaker asks for a picture they can't find, switch their set or page from the back; the pulpit follows within a second.
