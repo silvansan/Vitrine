@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -77,14 +76,14 @@ type Engine struct {
 	errorTill time.Time
 }
 
-// transitionList is what the companion offers, in vMix's function names.
-// Transition1-4 run whatever effect is set on vMix's four transition buttons,
-// so any effect (including ones that suit inputs with transparency) can be used.
+// transitionList is what the companion offers, in vMix's function names. Only
+// effects that take an Input and a Mix are listed: vMix's Transition1-4 buttons
+// and stingers act on the main output and would switch Mix 1.
+// AlphaFade fades correctly onto inputs with transparency.
 var transitionList = []string{
-	"Fade", "Cut", "Merge", "Wipe", "WipeReverse", "Zoom", "CrossZoom", "Slide", "SlideReverse",
+	"Fade", "AlphaFade", "Cut", "Merge", "Wipe", "WipeReverse", "Zoom", "CrossZoom", "Slide", "SlideReverse",
 	"Fly", "FlyRotate", "Cube", "CubeZoom", "VerticalWipe", "VerticalWipeReverse", "VerticalSlide",
-	"VerticalSlideReverse", "Transition1", "Transition2", "Transition3", "Transition4",
-	"Stinger1", "Stinger2", "Stinger3", "Stinger4",
+	"VerticalSlideReverse",
 }
 
 var transitions = func() map[string]bool {
@@ -162,13 +161,12 @@ func (e *Engine) transition(ctx context.Context, s store.Settings, input string,
 }
 
 // transitionWith runs a named vMix transition onto the projector mix.
-// Transition1-4 and stingers use the duration set in vMix.
 func (e *Engine) transitionWith(ctx context.Context, s store.Settings, fn, input string, durationMs int) error {
 	if !transitions[fn] {
 		fn = "Fade"
 	}
 	params := map[string]string{"Input": input}
-	if fn != "Cut" && !strings.HasPrefix(fn, "Transition") && !strings.HasPrefix(fn, "Stinger") {
+	if fn != "Cut" {
 		params["Duration"] = strconv.Itoa(durationMs)
 	}
 	return e.VMix.Call(ctx, fn, e.mixParams(s, params))

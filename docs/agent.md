@@ -57,7 +57,7 @@ The companion is a page at `http://127.0.0.1:8090/companion`; the back tablet ca
 - **Session**: which active service the tablets show.
 - **Projector output**: the mix the tablets switch.
 - **Default input**: chosen by number and name from vMix's live input list. The agent stores vMix's input key, so the right input is found even if numbers shift; if the banner changes, pick the new one here.
-- **Transition** and duration for taking media, and separately the **transition back to the default** (e.g. when the default input has transparency and Fade looks like a cut: set one of vMix's transition buttons, *Transition 1–4*, to an effect that works for it and choose it here; Transition 1–4 and stingers use the duration set in vMix).
+- **Transition** and duration for taking media, and separately the **transition back to the default** (choose **AlphaFade** when the default input has transparency and Fade looks like a cut). Only transitions that can target the projector mix are listed; vMix's Transition 1–4 buttons and stingers act on the main output, so they aren't offered.
 - **Go back to default when a video ends**, **jump mode** (crossfade between GM_A/GM_B, or jump in place), input names.
 - **Tablets**: the paired list, unpair, and **Show pairing QR** (signed by the server when online, by the agent itself when the server is unreachable).
 

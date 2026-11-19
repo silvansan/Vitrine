@@ -129,7 +129,7 @@ func TestMissingFile(t *testing.T) {
 
 func TestSeparateTransitionBack(t *testing.T) {
 	e, fake := setup(t)
-	_ = e.Store.Update(func(s *store.State) { s.Settings.ClearTransition = "Transition2" })
+	_ = e.Store.Update(func(s *store.State) { s.Settings.ClearTransition = "AlphaFade" })
 	if err := e.Take(1, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestSeparateTransitionBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	last := fake.Calls[len(fake.Calls)-1]
-	if fake.Active(2) != "Banner Sunday" || last[:12] != "Transition2 " {
-		t.Fatalf("back to default should use Transition2, last call %q", last)
+	if fake.Active(2) != "Banner Sunday" || last[:10] != "AlphaFade " {
+		t.Fatalf("back to default should use AlphaFade, last call %q", last)
 	}
 }
