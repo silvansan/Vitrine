@@ -1,0 +1,42 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Vitrine{% endblock %} · Vitrine</title>
+<link rel="stylesheet" href="{% static 'guestmedia/manage.css' %}">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="{% url 'manage-dashboard' %}">Vitrine</a>
+  <nav>
+    <a href="{% url 'manage-dashboard' %}">Services</a>
+    <a href="{% url 'manage-library' %}">Library</a>
+    <a href="{% url 'manage-agents' %}">Agents &amp; tablets</a>
+    <a href="/admin/">Admin</a>
+  </nav>
+</header>
+<main class="page">
+  {% if messages %}
+    <ul class="messages">
+      {% for message in messages %}<li class="msg {{ message.tags }}">{{ message }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<script>
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
+    var old = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = old; }, 1200);
+  });
+});
+document.addEventListener('change', function (e) {
+  if (e.target.matches('[data-select-all]')) {
+    document.querySelectorAll('input[name=ids]').forEach(function (cb) { cb.checked = e.target.checked; });
+  }
+});
+</script>
+</body>
+</html>

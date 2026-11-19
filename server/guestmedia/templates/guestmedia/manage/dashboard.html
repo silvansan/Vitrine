@@ -1,0 +1,45 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}Services{% endblock %}
+{% block content %}
+<div class="row-head">
+  <h1>Services</h1>
+  {% if pending %}<a class="pill warn" href="{% url 'manage-library' %}?approval=pending">{{ pending }} waiting for approval</a>{% endif %}
+</div>
+
+<section class="card">
+  <h2>New service</h2>
+  <form method="post" class="inline-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="btn primary" type="submit">Create</button>
+  </form>
+</section>
+
+<section class="card">
+  <table class="table">
+    <thead><tr><th>Service</th><th>Date</th><th>Guests</th><th>Sent to agents</th></tr></thead>
+    <tbody>
+    {% for s in services %}
+      <tr>
+        <td><a href="{% url 'manage-service' s.pk %}">{{ s.name }}</a></td>
+        <td>{{ s.date|date:"D d M Y" }}</td>
+        <td>{{ s.guest_count }}</td>
+        <td>{% if s.is_active %}<span class="pill ok">Active</span>{% else %}<span class="pill">Off</span>{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="muted">No services yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Agents</h2>
+  {% for a in agents %}
+    <p><span class="dot {% if a.is_online %}on{% endif %}"></span> <strong>{{ a.name }}</strong>
+      {% if a.is_online %}online · {{ a.lan_ip }}{% else %}offline{% if a.last_seen %} · last seen {{ a.last_seen|timesince }} ago{% endif %}{% endif %}</p>
+  {% empty %}
+    <p class="muted">No agent yet. <a href="{% url 'manage-agents' %}">Add the vMix PC</a>.</p>
+  {% endfor %}
+</section>
+{% endblock %}

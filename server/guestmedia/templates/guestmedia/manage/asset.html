@@ -1,0 +1,57 @@
+{% extends "guestmedia/manage/base.html" %}
+{% load vitrine %}
+{% block title %}{{ asset.original_name }}{% endblock %}
+{% block content %}
+<div class="row-head">
+  <h1>{{ asset.original_name }}</h1>
+  <span class="pill {{ asset.approval }}">{{ asset.get_approval_display }}</span>
+  {% if asset.deleted_at %}<span class="pill warn">In trash</span>{% endif %}
+</div>
+
+<div class="grid-2">
+<section class="card">
+  {% if asset.status == 'ready' and asset.kind == 'video' %}
+    <video controls preload="metadata" src="{% url 'manage-asset-file' asset.pk 'processed' %}" class="preview"></video>
+  {% elif asset.status == 'ready' %}
+    <img class="preview" src="{% url 'manage-asset-file' asset.pk 'processed' %}" alt="">
+  {% elif asset.status == 'failed' %}
+    <p class="error">Processing failed:</p><pre class="log">{{ asset.error }}</pre>
+  {% else %}
+    <p class="muted">Still processing…</p>
+  {% endif %}
+  <div class="actions">
+    <form method="post" action="{% url 'manage-approve' asset.pk %}" class="inline">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn primary" name="decision" value="approve">Approve</button><button class="btn danger" name="decision" value="reject">Reject</button></form>
+    <a class="btn" href="{% url 'manage-asset-file' asset.pk 'original' %}">Original file</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Details</h2>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="update">
+    <p><label>Shown as from <input name="owner_name" value="{{ asset.owner_name }}"></label></p>
+    <p><label><input type="checkbox" name="private" {% if asset.private %}checked{% endif %}> Private (only the uploader can pick it)</label></p>
+    <button class="btn" type="submit">Save</button>
+  </form>
+  <p class="muted">{{ asset.get_kind_display }} · {{ asset.processed_size|filesizeformat }} · uploaded {{ asset.created|date:"d M Y H:i" }}{% if asset.service %} for {{ asset.service.name }}{% endif %}</p>
+  <p class="muted">In sets: {% for s in sets %}{{ s.title }} ({{ s.service.name }}){% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
+
+  {% if asset.kind == 'video' %}
+  <h2>Markers</h2>
+  <ul class="markers">
+    {% for m in asset.markers.all %}
+      <li>{{ m.label }} · {{ m.t_ms|mmss }} <span class="muted">by {{ m.created_by|default:"?" }}</span>
+        <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="delete_marker"><input type="hidden" name="marker_id" value="{{ m.pk }}"><button class="btn small" type="submit">Remove</button></form>
+      </li>
+    {% empty %}<li class="muted">No markers.</li>{% endfor %}
+  </ul>
+  <form method="post" class="inline-form">
+    {% csrf_token %}<input type="hidden" name="action" value="add_marker">
+    <input name="label" placeholder="Label, e.g. Baptism" aria-label="Marker label">
+    <input name="time" placeholder="1:12" aria-label="Time (m:ss)" size="6">
+    <button class="btn" type="submit">Add marker</button>
+  </form>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

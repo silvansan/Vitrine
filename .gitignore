@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+server/data/
+deploy/stack.env
+agent/dist/
+agent/go.local.mod
+agent/go.local.sum
+.DS_Store

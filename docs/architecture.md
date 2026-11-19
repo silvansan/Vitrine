@@ -1,0 +1,62 @@
+# Architecture
+
+## Components
+
+| Part | Where | Tech |
+|---|---|---|
+| Server | Home server, Portainer stack | Django 5 + Channels (daphne), Celery worker with ffmpeg/Pillow, Postgres, Redis, nginx |
+| Agent | vMix PC, Windows service | Go, single exe; embeds the tablet app |
+| Tray | vMix PC, user session | Go (`fyne.io/systray`), opens the companion page |
+| Tablets | Venue LAN | Browser; pages served by the agent |
+
+The agent connects **out** to the server over Tailscale (WebSocket + HTTP). The server never connects to the venue, so no port forwarding is needed. Tablets talk only to the agent on the LAN, so the show keeps running when the internet drops.
+
+## Data model (`server/guestmedia/models.py`)
+
+- **Service**: a date and name; only active services are sent to agents.
+- **Guest**: belongs to a service; has the token in their link.
+- **MediaAsset**: one file in the library (original + converted file, thumbnail, filmstrip, approval, private flag, last used, soft delete).
+- **MediaSet** / **SetItem**: a guest's ordered list in a service, pointing at library files. The same file can be in many sets without being copied.
+- **Marker**: named start point in a video.
+- **Agent**: a vMix PC; token stored hashed; last heartbeat kept as JSON for the backend.
+- **ScreenGrant**: a pairing code issued from the backend; revoking it unpairs the tablet.
+- **Upload**: a resumable upload in progress.
+
+## Uploads and conversion
+
+The guest page uses tus-js-client against a small tus 1.0 server in Django (`tus.py`: creation, HEAD/PATCH, termination). Finished uploads move into `/data/media/originals/`, become a MediaAsset, are added to the guest's set, and a Celery task converts them (`processing.py`):
+
+- Photos: EXIF rotation, HEIC support, 1920×1080 JPG, contained over a blurred, darkened cover of itself.
+- Videos: one ffmpeg pass with the same blurred fill, `fps=VITRINE_VIDEO_FPS`, H.264 High CRF 20, GOP = 2 s, AAC 48 kHz stereo, `+faststart`; thumbnail; a sprite of frames every N seconds (10 per row) for the cue panel.
+
+The SHA-256 of the converted file goes into the manifest; the agent checks it after downloading.
+
+## Agent sync
+
+`GET /api/agent/manifest` returns the active services, their sets (only approved, ready, not deleted files) and the files with markers, plus the server's Ed25519 public key and revoked pairing codes. Any change bumps every agent's `manifest_version` and pings them over the WebSocket (`/ws/agent/`); agents also poll every 60 s and heartbeat every 20 s (`POST /api/agent/heartbeat`: LAN IP, vMix state, sync progress, settings, tablets, assets shown since the last heartbeat).
+
+Downloads resume with HTTP Range (served by nginx via `X-Accel-Redirect`), are verified, then renamed into place. While anything is live, the download speed is capped (`live_throttle_kbps`). Files no longer in the manifest are deleted unless on air.
+
+## vMix control (`agent/internal/engine`)
+
+Two List inputs, A and B, take turns:
+
+1. **Take**: load the file into the input that is off-air (`ListRemoveAll`, `ListAdd`, `SelectIndex 1`), for videos `SetPosition` + `Play`, then the transition (`Fade`/`Cut`/… with `Input=<key>`, `Duration`, `Mix`). The tile is *Sending…* until the agent reads from vMix's XML that the mix shows that input; then it is *Live*. The previous input is paused once it has faded out (unless something new was loaded into it in the meantime).
+2. **Back to default**: transition the default input (found by key, then by name) onto the mix.
+3. **Jump** (crossfade mode): load the same video into the other input at the new position and fade over 400 ms; in direct mode `SetPosition` on the live input.
+4. **Pause / Play** on the live input.
+5. The poller reads `/api` every 300 ms while a video is live (1 s otherwise): position and duration for the progress bars, end of video (→ back to default if enabled), and changes made directly in vMix (→ tablets clear the live frame). Positions of videos taken off mid-way are remembered for **Resume**.
+
+The `Mix` parameter is `mix number + mix_param_offset` (default −1: Mix 2 → `Mix=1`); for the main output it is left out.
+
+## Tablets and pairing
+
+Pairing codes are `s1.<payload>.<Ed25519 signature>` from the server (backend or companion while online) or `a1.<payload>.<HMAC>` from the agent itself (companion while offline). The payload holds role, name, a nonce and a 15-minute expiry. The agent verifies the code locally, refuses reused or revoked nonces, creates a screen and sets a long-lived HttpOnly cookie (only its hash is stored).
+
+Roles: **back** can control everything, edit pulpit screens and open the companion; **pulpit** sees its set and the controls its options allow. Screen options and themes live in the agent's `state.json`; the server gets a copy in the heartbeat for display.
+
+Tablet ↔ agent: `GET /api/bootstrap`, WebSocket `/ws` (messages `state`, `catalog`, `screens`, `settings`, `command`), and `POST /api/take|clear|pause|play|seek|pulpit|screens/{id}|screens/{id}/command`. Companion: `GET /api/companion/state`, `POST /api/companion/settings|pair|sync|test-default|screens/{id}/delete` (loopback or back tablet only).
+
+## Running the agent elsewhere
+
+Everything vMix-related goes through `vmix_url`, so the agent can run on a second PC. vMix then plays files from a path it must be able to read (a share mapped to the same path as `media_dir`). Local disk on the vMix PC is safer for video, which is why the default is to run the agent on the vMix PC.

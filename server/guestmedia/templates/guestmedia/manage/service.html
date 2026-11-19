@@ -1,0 +1,94 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}{{ service.name }}{% endblock %}
+{% block content %}
+<div class="row-head">
+  <h1>{{ service.name }} <span class="muted">· {{ service.date|date:"D d M Y" }}</span></h1>
+</div>
+
+<div class="grid-2">
+<section class="card">
+  <h2>Settings</h2>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="update">
+    {{ service_form.as_p }}
+    <button class="btn" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Add a guest</h2>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="add_guest">
+    {{ guest_form.as_p }}
+    <button class="btn primary" type="submit">Create link</button>
+  </form>
+</section>
+</div>
+
+<section class="card">
+  <h2>Guests and their links</h2>
+  {% for g in guests %}
+    <div class="guest-row">
+      <img class="qr" src="{% url 'manage-qr' %}?d={{ g.link|urlencode }}" alt="QR code for {{ g.name }}'s link" width="120" height="120">
+      <div class="grow">
+        <div class="guest-name">{{ g.name }}{% if g.is_expired %} <span class="pill warn">Expired</span>{% endif %}</div>
+        <code class="link">{{ g.link }}</code>
+        <div class="actions">
+          <button class="btn small" type="button" data-copy="{{ g.link }}">Copy link</button>
+          <a class="btn small" href="{{ g.link }}" target="_blank" rel="noopener">Open as guest</a>
+          <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="new_link"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small" type="submit">New link</button></form>
+          <form method="post" class="inline" onsubmit="return confirm('Remove {{ g.name|escapejs }}? Their uploads stay in the library.')">{% csrf_token %}<input type="hidden" name="action" value="delete_guest"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Remove</button></form>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <p class="muted">No guests yet.</p>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>Waiting for approval</h2>
+  {% if pending %}
+  <div class="tiles">
+    {% for a in pending %}
+      <div class="tile">
+        {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph">{{ a.get_status_display }}</div>{% endif %}
+        <div class="tile-body">
+          <a href="{% url 'manage-asset' a.pk %}">{{ a.original_name }}</a>
+          <div class="muted">{{ a.owner_name }} · {{ a.get_kind_display|default:"…" }}</div>
+          <div class="actions">
+            <form method="post" action="{% url 'manage-approve' a.pk %}" class="inline">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn small primary" name="decision" value="approve">Approve</button></form>
+            <form method="post" action="{% url 'manage-approve' a.pk %}" class="inline">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn small danger" name="decision" value="reject">Reject</button></form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <p class="muted">Nothing waiting.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Sets</h2>
+  {% for s in sets %}
+    <div class="set">
+      <form method="post" class="set-title">{% csrf_token %}<input type="hidden" name="action" value="rename_set"><input type="hidden" name="set_id" value="{{ s.pk }}">
+        <input name="title" value="{{ s.title }}" aria-label="Set title"><button class="btn small" type="submit">Rename</button>
+      </form>
+      <div class="strip">
+        {% for item in s.items.all %}
+          <a href="{% url 'manage-asset' item.asset.pk %}" title="{{ item.asset.original_name }} · {{ item.asset.get_approval_display }}" class="mini {{ item.asset.approval }}">
+            {% if item.asset.thumb %}<img src="{% url 'manage-asset-file' item.asset.pk 'thumb' %}" alt="{{ item.asset.original_name }}">{% else %}<span>{{ item.asset.get_status_display }}</span>{% endif %}
+            <em>{{ forloop.counter }}</em>
+          </a>
+        {% empty %}
+          <span class="muted">Empty</span>
+        {% endfor %}
+      </div>
+    </div>
+  {% empty %}
+    <p class="muted">Sets appear when guests are added.</p>
+  {% endfor %}
+</section>
+{% endblock %}

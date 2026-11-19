@@ -1,0 +1,75 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>{{ guest.name }} · {{ service.name }}</title>
+<link rel="stylesheet" href="{% static 'guestmedia/guest.css' %}">
+</head>
+<body>
+<div class="app" id="app"
+     data-token="{{ guest.token }}"
+     data-tus="/g/{{ guest.token }}/tus/"
+     data-max-mb="{{ max_upload_mb }}"
+     data-can-upload="{{ guest.can_upload|yesno:'1,0' }}"
+     data-can-browse="{{ guest.can_browse|yesno:'1,0' }}">
+  <header class="head">
+    <div class="sub">{{ service.name }} · {{ service.date|date:"d M" }}</div>
+    <h1>Hi {{ guest.name }}</h1>
+    <p>Pick the pictures and videos for your part.</p>
+  </header>
+
+  <nav class="tabs-wrap" aria-label="Sections">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="mine" aria-selected="false">My set (<span id="count">0</span>)</button>
+      {% if guest.can_upload %}<button type="button" role="tab" data-tab="upload" aria-selected="false">Upload</button>{% endif %}
+      {% if guest.can_browse %}<button type="button" role="tab" data-tab="library" aria-selected="false">Library</button>{% endif %}
+    </div>
+  </nav>
+
+  <section class="panel" data-panel="mine">
+    <p class="hint">Your set, in the order you'll show it.</p>
+    <ol class="set-list" id="set-list"></ol>
+    <p class="empty" id="set-empty" hidden>Nothing here yet. Upload your own files or pick from the library.</p>
+  </section>
+
+  <section class="panel" data-panel="upload" hidden>
+    <label class="drop">
+      <input type="file" id="file-input" accept="image/*,video/*" multiple>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"></path><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"></path></svg>
+      <span class="drop-title">Choose photos or videos</span>
+      <span class="drop-sub">From your phone's gallery</span>
+    </label>
+    <p class="hint">Large videos keep uploading if the Wi-Fi drops; keep this page open. New files go to your set and are checked by the production team before they can be shown.</p>
+    <ul class="uploads" id="uploads"></ul>
+  </section>
+
+  <section class="panel" data-panel="library" hidden>
+    <div class="filters" id="filters">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="today" aria-pressed="false">This service</button>
+      <button type="button" data-filter="earlier" aria-pressed="false">Earlier services</button>
+      <button type="button" data-filter="mine" aria-pressed="false">My uploads</button>
+    </div>
+    <div class="grid" id="library"></div>
+    <p class="empty" id="library-empty" hidden>Nothing to pick here.</p>
+  </section>
+
+  <footer class="foot">
+    <button type="button" class="primary" id="main-action">Done</button>
+  </footer>
+</div>
+
+<template id="tpl-marker-form">
+  <form class="marker-form">
+    <input name="label" placeholder="Name, e.g. Baptism" aria-label="Marker name" maxlength="60" required>
+    <input name="time" placeholder="1:12" aria-label="Time (minutes:seconds)" inputmode="numeric" size="5" required>
+    <button type="submit">Add</button>
+  </form>
+</template>
+
+<script src="{% static 'guestmedia/tus.min.js' %}"></script>
+<script src="{% static 'guestmedia/guest.js' %}"></script>
+</body>
+</html>

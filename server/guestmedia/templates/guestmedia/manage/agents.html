@@ -1,0 +1,85 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}Agents &amp; tablets{% endblock %}
+{% block content %}
+<h1>Agents &amp; tablets</h1>
+
+{% if new_token %}
+<section class="card highlight">
+  <h2>Agent token</h2>
+  <p>Put this in the agent's config (<code>agent_token</code>). It is shown only once.</p>
+  <code class="link">{{ new_token }}</code>
+  <button class="btn small" type="button" data-copy="{{ new_token }}">Copy</button>
+</section>
+{% endif %}
+
+{% if pairing %}
+<section class="card highlight">
+  <h2>Pair “{{ pairing.grant.name }}” ({{ pairing.grant.get_role_display }})</h2>
+  <div class="guest-row">
+    <img class="qr big" src="{% url 'manage-qr' %}?d={{ pairing.url|urlencode }}" alt="Pairing QR code" width="260" height="260">
+    <div>
+      <p>Scan this with the tablet's camera while it is on the venue Wi-Fi. The code works for 15 minutes and only once.</p>
+      <code class="link">{{ pairing.url }}</code>
+      {% if not pairing.agent.lan_ip %}<p class="error">The agent hasn't reported its LAN address yet. Replace &lt;vmix-pc-ip&gt; by hand or start the agent first.</p>{% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% for a in agents %}
+<section class="card">
+  <div class="row-head">
+    <h2><span class="dot {% if a.is_online %}on{% endif %}"></span> {{ a.name }}</h2>
+    <span class="muted">token vta_{{ a.token_prefix }}… · {% if a.version %}v{{ a.version }}{% endif %}</span>
+  </div>
+  {% if a.is_online %}
+    <p>Online at <strong>{{ a.lan_ip }}:{{ a.listen_port }}</strong>
+      · vMix {% if a.status.vmix.ok %}connected{% else %}<span class="error">not reachable</span>{% endif %}
+      · files {{ a.status.sync.done|default:0 }} of {{ a.status.sync.total|default:0 }} synced
+      {% if a.status.live.asset_id %}· <strong>live:</strong> #{{ a.status.live.asset_id }}{% endif %}</p>
+  {% else %}
+    <p class="muted">Offline{% if a.last_seen %} · last seen {{ a.last_seen|timesince }} ago{% endif %}</p>
+  {% endif %}
+
+  {% if a.status.screens %}
+    <table class="table">
+      <thead><tr><th>Tablet</th><th>Role</th><th>Showing</th><th>Last seen</th></tr></thead>
+      <tbody>{% for s in a.status.screens %}<tr><td>{{ s.name }}</td><td>{{ s.role }}</td><td>{{ s.current_set_title|default:"—" }}</td><td>{{ s.last_seen|default:"—" }}</td></tr>{% endfor %}</tbody>
+    </table>
+  {% endif %}
+
+  <form method="post" class="inline-form">
+    {% csrf_token %}<input type="hidden" name="action" value="pair"><input type="hidden" name="agent_id" value="{{ a.pk }}">
+    <label>Tablet name <input name="name" placeholder="Pulpit tablet"></label>
+    <label>Role <select name="role"><option value="pulpit">Pulpit (kiosk)</option><option value="back">Back (full control)</option></select></label>
+    <button class="btn primary" type="submit">Show pairing QR</button>
+  </form>
+
+  {% with grants=a.grants.all %}
+  {% if grants %}
+  <details>
+    <summary>Pairing codes issued ({{ grants|length }})</summary>
+    <table class="table">
+      <tbody>{% for g in grants %}<tr><td>{{ g.name }}</td><td>{{ g.role }}</td><td>{{ g.created|date:"d M H:i" }}</td>
+        <td>{% if g.revoked %}<span class="pill">Unpaired</span>{% else %}<form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="revoke"><input type="hidden" name="grant_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Unpair</button></form>{% endif %}</td></tr>{% endfor %}</tbody>
+    </table>
+  </details>
+  {% endif %}
+  {% endwith %}
+
+  <div class="actions">
+    <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="rotate"><input type="hidden" name="agent_id" value="{{ a.pk }}"><button class="btn small" type="submit">New token</button></form>
+    <form method="post" class="inline" onsubmit="return confirm('Delete this agent?')">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="agent_id" value="{{ a.pk }}"><button class="btn small danger" type="submit">Delete agent</button></form>
+  </div>
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>Add an agent</h2>
+  <form method="post" class="inline-form">
+    {% csrf_token %}<input type="hidden" name="action" value="create">
+    <label>Name <input name="name" placeholder="vMix PC"></label>
+    <button class="btn primary" type="submit">Create agent token</button>
+  </form>
+</section>
+{% endblock %}

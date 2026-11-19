@@ -1,0 +1,10 @@
+{
+  "server_url": "http://100.101.102.103:8080",
+  "agent_token": "vta_paste_the_token_from_the_backend",
+  "media_dir": "D:\\Vitrine\\media",
+  "vmix_url": "http://127.0.0.1:8088",
+  "listen": ":8090",
+  "advertise_ip": "",
+  "mix_param_offset": -1,
+  "live_throttle_kbps": 4096
+}

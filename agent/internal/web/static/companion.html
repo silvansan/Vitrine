@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitrine · settings</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="theme-dark">
+<div class="companion">
+  <h1>Vitrine agent</h1>
+  <div class="muted" id="agent-line">Loading…</div>
+
+  <section aria-labelledby="h-status">
+    <h2 id="h-status">Status</h2>
+    <div class="status-list" id="status"></div>
+    <div class="inline">
+      <button type="button" class="btn" id="btn-sync">Sync now</button>
+      <button type="button" class="btn" id="btn-test">Show default on the projector</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-session">
+    <h2 id="h-session">Session</h2>
+    <div class="field">
+      <label class="label" for="service">Service shown on the tablets</label>
+      <select id="service" data-setting="service_id" data-type="int"></select>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-output">
+    <h2 id="h-output">Projector</h2>
+    <div class="inline">
+      <div class="field">
+        <label class="label" for="mix">Projector output</label>
+        <select id="mix" data-setting="mix" data-type="int"></select>
+      </div>
+      <div class="field">
+        <label class="label" for="default">Default input on the projector</label>
+        <select id="default"></select>
+      </div>
+    </div>
+    <p class="hint">The list comes from vMix (number · name). Changed the banner? Pick the new input here; the tablets follow at once.</p>
+    <div class="inline">
+      <div class="field">
+        <label class="label" for="transition">Transition</label>
+        <select id="transition" data-setting="transition"></select>
+      </div>
+      <div class="field">
+        <label class="label" for="transition_ms">Duration (ms)</label>
+        <input type="number" id="transition_ms" min="0" max="5000" step="100" data-setting="transition_ms" data-type="int">
+      </div>
+    </div>
+    <label class="check">When a video ends, go back to the default input<input type="checkbox" id="video_end_return" data-setting="video_end_return" data-type="bool"></label>
+    <div class="field">
+      <label class="label" for="seek_mode">Jumping inside a live video</label>
+      <select id="seek_mode" data-setting="seek_mode">
+        <option value="crossfade">Crossfade between GM_A and GM_B (no visible jump)</option>
+        <option value="direct">Jump in place (faster, the jump is visible)</option>
+      </select>
+    </div>
+    <div class="inline">
+      <div class="field">
+        <label class="label" for="input_a">vMix input A</label>
+        <input type="text" id="input_a" data-setting="input_a">
+      </div>
+      <div class="field">
+        <label class="label" for="input_b">vMix input B</label>
+        <input type="text" id="input_b" data-setting="input_b">
+      </div>
+    </div>
+    <p class="hint">Two List inputs take turns showing guest media. The agent creates them on the first take if they are missing; you can also add them yourself in vMix and save them in your preset.</p>
+  </section>
+
+  <section aria-labelledby="h-tablets" id="pair">
+    <h2 id="h-tablets">Tablets</h2>
+    <table class="tablets" id="tablets"></table>
+    <div class="inline">
+      <div class="field">
+        <label class="label" for="pair-name">New tablet name</label>
+        <input type="text" id="pair-name" placeholder="Pulpit tablet">
+      </div>
+      <div class="field">
+        <label class="label" for="pair-role">Role</label>
+        <select id="pair-role">
+          <option value="pulpit">Pulpit (kiosk)</option>
+          <option value="back">Back (full control)</option>
+        </select>
+      </div>
+      <button type="button" class="btn primary" id="btn-pair" style="align-self:flex-end">Show pairing QR</button>
+    </div>
+    <div class="qr-box" id="qr-box" hidden>
+      <div class="qr" id="qr"></div>
+      <div>
+        <p>Scan with the tablet's camera while it is on this network. The code works for 15 minutes, once.</p>
+        <code id="qr-url"></code>
+        <p class="hint" id="qr-source"></p>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="/static/qrcode.js"></script>
+<script src="/static/companion.js"></script>
+</body>
+</html>

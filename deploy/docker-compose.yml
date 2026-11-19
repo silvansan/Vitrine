@@ -1,0 +1,79 @@
+# Vitrine server stack for Portainer.
+#
+# Portainer: Stacks > Add stack > Repository, URL https://github.com/silvansan/Vitrine,
+# compose path deploy/docker-compose.yml, and paste the variables from .env.example.
+# Images are built from the repository (no registry needed); nginx's config is baked
+# into its image because Portainer CE can't bind-mount files from a Git stack.
+#
+# Nginx Proxy Manager forwards your public guest subdomain to vitrine-nginx:80 on the
+# "proxy" network. The agent on the vMix PC talks to the same nginx over Tailscale on
+# port ${VITRINE_TAILSCALE_PORT:-8080} of this server.
+
+services:
+  web:
+    image: vitrine-server:local
+    build: ../server
+    command: web
+    restart: unless-stopped
+    env_file: stack.env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      VITRINE_X_ACCEL: "true"
+    volumes:
+      - vitrine-data:/data
+    depends_on: [db, redis]
+    networks: [internal]
+
+  worker:
+    image: vitrine-server:local
+    build: ../server
+    command: worker
+    restart: unless-stopped
+    env_file: stack.env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - vitrine-data:/data
+    depends_on: [db, redis]
+    networks: [internal]
+
+  nginx:
+    image: vitrine-nginx:local
+    build: ./nginx
+    container_name: vitrine-nginx
+    restart: unless-stopped
+    volumes:
+      - vitrine-data:/data:ro
+    ports:
+      # For the agent over Tailscale. Bind to the server's Tailscale IP to keep it off the internet,
+      # e.g. VITRINE_BIND=100.101.102.103
+      - "${VITRINE_BIND:-0.0.0.0}:${VITRINE_TAILSCALE_PORT:-8080}:80"
+    depends_on: [web]
+    networks: [internal, proxy]
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vitrine
+      POSTGRES_USER: vitrine
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - vitrine-db:/var/lib/postgresql/data
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [internal]
+
+volumes:
+  vitrine-data:
+  vitrine-db:
+
+networks:
+  internal:
+  proxy:
+    external: true
