@@ -81,18 +81,32 @@ func Install(configPath string, port int) error {
 		return fmt.Errorf("run this from an administrator command prompt: %w", err)
 	}
 	defer m.Disconnect()
-	if s, err := m.OpenService(Name); err == nil {
-		s.Close()
-		return fmt.Errorf("service %s is already installed", Name)
-	}
-	s, err := m.CreateService(Name, exe, mgr.Config{
-		DisplayName:      displayName,
-		Description:      "Syncs guest media from the Vitrine server and puts it on vMix from the tablets.",
-		StartType:        mgr.StartAutomatic,
-		DelayedAutoStart: true,
-	}, "service", "-config", configPath)
-	if err != nil {
-		return err
+	s, err := m.OpenService(Name)
+	if err == nil {
+		// Already installed: point it at this exe (update), then restart below.
+		fmt.Println("Service already installed: updating it to this version.")
+		_, _ = s.Control(svc.Stop)
+		waitStopped(s)
+		cfg, cerr := s.Config()
+		if cerr != nil {
+			s.Close()
+			return cerr
+		}
+		cfg.BinaryPathName = fmt.Sprintf(`"%s" service -config "%s"`, exe, configPath)
+		if err := s.UpdateConfig(cfg); err != nil {
+			s.Close()
+			return err
+		}
+	} else {
+		s, err = m.CreateService(Name, exe, mgr.Config{
+			DisplayName:      displayName,
+			Description:      "Syncs guest media from the Vitrine server and puts it on vMix from the tablets.",
+			StartType:        mgr.StartAutomatic,
+			DelayedAutoStart: true,
+		}, "service", "-config", configPath)
+		if err != nil {
+			return err
+		}
 	}
 	defer s.Close()
 	_ = s.SetRecoveryActions([]mgr.RecoveryAction{
@@ -103,7 +117,7 @@ func Install(configPath string, port int) error {
 
 	_ = exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+firewallRule).Run()
 	if out, err := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+firewallRule,
-		"dir=in", "action=allow", "protocol=TCP", fmt.Sprintf("localport=%d", port), "profile=private,domain").CombinedOutput(); err != nil {
+		"dir=in", "action=allow", "protocol=TCP", fmt.Sprintf("localport=%d", port), "profile=any").CombinedOutput(); err != nil {
 		fmt.Printf("warning: firewall rule not added: %v %s\n", err, out)
 	}
 
@@ -131,7 +145,7 @@ func Uninstall() error {
 	}
 	defer s.Close()
 	_, _ = s.Control(svc.Stop)
-	time.Sleep(time.Second)
+	waitStopped(s)
 	if err := s.Delete(); err != nil {
 		return err
 	}
@@ -160,4 +174,14 @@ func Control(start bool) error {
 	}
 	_, err = s.Control(svc.Stop)
 	return err
+}
+
+func waitStopped(s *mgr.Service) {
+	for i := 0; i < 40; i++ {
+		status, err := s.Query()
+		if err != nil || status.State == svc.Stopped {
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }

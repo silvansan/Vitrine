@@ -16,7 +16,9 @@ The agent is one Windows service (`vitrine-agent.exe`) plus a tray icon (`vitrin
    cd /d "C:\Program Files\Vitrine"
    vitrine-agent install
    ```
-   This registers the `VitrineAgent` service (starts at boot, restarts itself after a crash), opens TCP port 8090 in the Windows firewall for private networks, and starts the tray icon at every logon.
+   This registers the `VitrineAgent` service (starts at boot, restarts itself after a crash), opens TCP port 8090 in the Windows firewall (all network types, since venue networks are often marked Public), and starts the tray icon at every logon.
+
+   **Updating** to a new version: close the tray icon, unzip the new version into a new folder (the running exe can't be overwritten), and run `vitrine-agent install` from there as administrator. It stops the service, switches it and the tray autostart to the new folder and starts it again; your settings are kept. Then start the new `vitrine-tray.exe` and delete the old folder.
 3. Double-click `vitrine-tray.exe` once (later it starts by itself), right-click its icon near the clock → **Open settings…**.
 4. Under **Connection**, paste the **server address** (e.g. `https://vitrine.yourdomain.ch`, or the Tailscale address `http://100.x.y.z:8080`) and the **agent token** from the backend (Agents & tablets), then **Save and restart agent**. The agent checks the connection before saving.
 
