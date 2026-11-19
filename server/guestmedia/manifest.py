@@ -25,7 +25,7 @@ def asset_entry(asset):
         "filmstrip_count": asset.filmstrip_count,
         "filmstrip_cols": asset.filmstrip_cols,
         "filmstrip_interval_ms": asset.filmstrip_interval_ms,
-        "markers": [{"label": m.label, "t_ms": m.t_ms} for m in asset.markers.all()],
+        "markers": [{"id": m.pk, "label": m.label, "t_ms": m.t_ms} for m in asset.markers.all()],
     }
     return entry
 

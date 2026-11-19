@@ -71,11 +71,23 @@ type State struct {
 	Files       map[int64]*LocalFile `json:"files"`
 	AgentSecret string               `json:"agent_secret"`
 	UsedNonces  map[string]time.Time `json:"used_nonces"`
+	// Markers added on tablets that still have to reach the server.
+	PendingMarkers []PendingMarker `json:"pending_markers"`
+	// Version of the state layout, for one-time upgrades.
+	Version int `json:"version"`
+}
+
+// PendingMarker is a marker added on a tablet while the server was unreachable.
+type PendingMarker struct {
+	AssetID int64  `json:"asset_id"`
+	TMs     int    `json:"t_ms"`
+	Label   string `json:"label"`
+	By      string `json:"by"`
 }
 
 // DefaultPulpitOptions is the safe set for a tablet on the pulpit.
 func DefaultPulpitOptions() ScreenOptions {
-	return ScreenOptions{ShowTitle: true, ShowClear: true, VideoBasic: true, AllowOverride: true}
+	return ScreenOptions{ShowTitle: true, ShowClear: true, VideoBasic: true, VideoSeek: true, AllowOverride: true}
 }
 
 // DefaultBackOptions shows everything.
@@ -141,6 +153,14 @@ func Open(dataDir string) (*Store, error) {
 	}
 	if len(data) == 0 {
 		st.Settings.VideoEndReturn = true
+	}
+	if st.Version < 2 {
+		// 0.1.5: free seeking (cue panel, ±10 s, Add marker here) is on for every tablet.
+		for _, sc := range st.Screens {
+			sc.Options.VideoBasic = true
+			sc.Options.VideoSeek = true
+		}
+		st.Version = 2
 	}
 	return s, s.saveLocked()
 }

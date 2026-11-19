@@ -107,6 +107,11 @@
   function renderExtras(asset) {
     var box = el('div', { class: 'extras' });
     if (asset.kind === 'video') {
+      var player = null;
+      if (asset.file) {
+        player = el('video', { class: 'preview', src: asset.file, controls: '', preload: 'metadata', playsinline: '' });
+        box.appendChild(player);
+      }
       box.appendChild(el('div', { text: 'Start points the operator can jump to:' }));
       var markers = el('div', { class: 'markers' });
       asset.markers.forEach(function (m) {
@@ -123,9 +128,26 @@
         e.preventDefault();
         var t = parseTime(form.elements.time.value);
         if (t === null) { form.elements.time.focus(); return; }
-        post('markers/add', { asset_id: asset.id, label: form.elements.label.value, t_ms: t });
+        var label = form.elements.label.value.trim() || 'Marker ' + fmt(t);
+        post('markers/add', { asset_id: asset.id, label: label, t_ms: t });
       });
       box.appendChild(form);
+      if (player) {
+        box.appendChild(el('button', {
+          type: 'button', class: 'link-btn', text: 'Add marker here (at the video\u2019s current time)',
+          onclick: function () {
+            player.pause();
+            var t = Math.round(player.currentTime * 1000);
+            form.elements.time.value = fmt(t);
+            if (form.elements.label.value.trim()) {
+              form.requestSubmit();
+            } else {
+              form.elements.label.placeholder = 'Name for ' + fmt(t) + ', then Add';
+              form.elements.label.focus();
+            }
+          }
+        }));
+      }
     }
     if (asset.mine) {
       var cb = el('input', { type: 'checkbox' });

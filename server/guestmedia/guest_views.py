@@ -48,6 +48,7 @@ def asset_for_guest(asset, guest):
         "mine": asset.uploaded_by_id == guest.id,
         "duration_ms": asset.duration_ms,
         "thumb": f"/g/{guest.token}/thumb/{asset.pk}" if asset.thumb else "",
+        "file": f"/g/{guest.token}/file/{asset.pk}" if asset.processed and asset.status == MediaAsset.STATUS_READY else "",
         "when": when,
         "group": group,
         "markers": [
@@ -203,3 +204,12 @@ def thumb(request, token, asset_id):
 def request_as_get(request):
     request.method = "GET"
     return request
+
+
+def media_file(request, token, asset_id):
+    """The converted file, for previewing a video and placing markers."""
+    guest = load_guest(token)
+    asset = get_object_or_404(MediaAsset, pk=asset_id)
+    if not asset.visible_to(guest) or asset.status != MediaAsset.STATUS_READY:
+        raise Http404()
+    return serve_field(request, asset.processed, asset.local_name)

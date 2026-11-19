@@ -11,7 +11,7 @@
   var app = document.getElementById('app');
   var PER_PAGE = 6;
   var S = { boot: null, status: null, screens: [], wsOk: false, renderKey: '' };
-  var ui = { set: 'all', page: 0, localSet: null, cue: null, drawer: false, drawerScreen: null, toast: '', toastTimer: null, lastError: '' };
+  var ui = { set: 'all', page: 0, localSet: null, cue: null, drawer: false, drawerScreen: null, toast: '', toastTimer: null, lastError: '', marker: null };
 
   var ICON = {
     photo: '<svg class="ph-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
@@ -29,6 +29,7 @@
     sun: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     moon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>',
     close: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    flag: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>',
     tablets: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="13" height="18" rx="2"/><path d="M20 7v13a1 1 0 01-1 1h-1"/></svg>'
   };
 
@@ -250,9 +251,10 @@
       html += '<div class="strip"><span class="t">Photo</span></div>';
     } else {
       html += '<div class="strip"><span class="t">Video · ' + fmt(a.duration_ms) + '</span>';
+      html += '<span class="row" style="gap:6px">';
       if (saved && state !== 'live') html += '<button type="button" class="small-btn" data-act="resume" data-id="' + entry.id + '">' + ICON.play + ' Resume ' + fmt(saved) + '</button>';
-      else if (opts().video_seek) html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '" aria-label="Cue">' + ICON.more + '</button>';
-      html += '</div>';
+      if (opts().video_seek) html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '" aria-label="Cue ' + h(a.name) + '">' + ICON.more + '</button>';
+      html += '</span></div>';
     }
     html += '</div>';
     return html;
@@ -278,6 +280,7 @@
     if (e.paused) html += '<button type="button" class="t-btn' + (isBack() ? ' inv' : '') + '" data-act="play" aria-label="Play">' + ICON.play + (isBack() ? '' : ' Play') + '</button>';
     else html += '<button type="button" class="t-btn' + (isBack() ? ' inv' : '') + '" data-act="pause" aria-label="Pause">' + ICON.pause + (isBack() ? '' : ' Pause') + '</button>';
     if (seek) html += '<button type="button" class="t-btn" data-act="nudge" data-d="10000" aria-label="Forward 10 seconds">+10s</button>';
+    if (seek) html += '<button type="button" class="t-btn" data-act="marker-live" aria-label="Add marker here">' + ICON.flag + ' Marker</button>';
     if (a.markers && a.markers.length) {
       html += '<span class="divider"></span>';
       a.markers.forEach(function (m) {
@@ -444,11 +447,14 @@
       html += '<button type="button" class="t-btn" data-act="cue-nudge" data-d="' + d + '">' + (d < 0 ? '−' : '+') + Math.abs(d / 1000) + 's</button>';
     });
     html += '</div>';
-    if (a.markers && a.markers.length) {
-      html += '<div class="row"><span class="label">Markers</span>';
-      a.markers.forEach(function (m) { html += '<button type="button" class="mk-btn" data-act="cue-set" data-t="' + m.t_ms + '">' + h(m.label) + ' · ' + fmt(m.t_ms) + '</button>'; });
-      html += '</div>';
-    }
+    html += '<div class="row"><span class="label">Markers</span>';
+    (a.markers || []).forEach(function (m) {
+      html += '<span class="mk-group"><button type="button" class="mk-btn" data-act="cue-set" data-t="' + m.t_ms + '">' + h(m.label) + ' · ' + fmt(m.t_ms) + '</button>';
+      if (isBack() && m.id) html += '<button type="button" class="mk-del" data-act="marker-del" data-mid="' + m.id + '" aria-label="Remove marker ' + h(m.label) + '">' + ICON.close + '</button>';
+      html += '</span>';
+    });
+    html += '<button type="button" class="t-btn" data-act="marker-cue">' + ICON.flag + ' Add marker here</button>';
+    html += '</div>';
     html += '</div>';
     html += '<div class="row end"><button type="button" class="sec-btn" data-act="cue-close">Cancel</button>';
     html += '<button type="button" class="pri-btn" data-act="cue-start">' + ICON.play + ' Start here on ' + (eng().mix > 1 ? 'Mix ' + eng().mix : 'Main') + ' · <span id="cue-start-time">' + fmt(pos) + '</span></button></div>';
@@ -466,6 +472,20 @@
     var bar = document.getElementById('cue-bar'); if (bar) bar.style.width = pct + '%';
     var knob = document.getElementById('cue-knob'); if (knob) knob.style.left = pct + '%';
     document.querySelectorAll('[data-act=cue-set]').forEach(function (btn) { btn.setAttribute('aria-pressed', 'false'); });
+  }
+
+  /* naming a new marker */
+
+  function renderMarkerSheet() {
+    if (!ui.marker) return '';
+    var a = asset(ui.marker.id);
+    if (!a) { ui.marker = null; return ''; }
+    return '<div class="overlay top"><form class="sheet small" id="marker-form" role="dialog" aria-label="New marker">' +
+      '<div class="sheet-head"><div><h2>Marker at ' + fmt(ui.marker.t) + '</h2><div class="muted">' + h(a.name) + '</div></div></div>' +
+      '<div class="field"><label class="label" for="marker-name">Name</label>' +
+      '<input id="marker-name" class="text-input" maxlength="60" autocomplete="off" placeholder="e.g. Baptism (empty = Marker ' + fmt(ui.marker.t) + ')"></div>' +
+      '<div class="row end"><button type="button" class="sec-btn" data-act="marker-cancel">Cancel</button>' +
+      '<button type="submit" class="pri-btn">' + ICON.flag + ' Save marker</button></div></form></div>';
   }
 
   /* tablets drawer (back only) */
@@ -515,11 +535,14 @@
 
   function render() {
     if (!S.boot) return;
+    var typing = document.getElementById('marker-name');
+    if (ui.marker && typing && document.activeElement === typing) { updateProgress(); return; }
     S.renderKey = liveKey();
     document.body.className = 'theme-' + theme() + (isBack() ? ' theme-back' : ' theme-pulpit');
     var html = isBack() ? renderBack() : renderPulpit();
     html += renderCue();
     html += renderDrawer();
+    html += renderMarkerSheet();
     if (ui.toast) html += '<div class="toast" role="alert">' + h(ui.toast) + '</div>';
     if (!S.wsOk) html += '<div class="offline">Reconnecting to the vMix PC…</div>';
     var scroll = {};
@@ -529,6 +552,18 @@
       if (scroll[i]) { if (el.classList.contains('chips')) el.scrollLeft = scroll[i]; else el.scrollTop = scroll[i]; }
     });
     bindCueTrack();
+    var form = document.getElementById('marker-form');
+    if (form) {
+      var input = document.getElementById('marker-name');
+      input.focus();
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var draft = ui.marker;
+        ui.marker = null;
+        post('/api/markers', { asset_id: draft.id, t_ms: draft.t, label: input.value }).then(function () { render(); });
+        render();
+      });
+    }
   }
 
   function updateProgress() {
@@ -571,6 +606,12 @@
         break;
       }
       case 'cue-start': post('/api/take', { asset_id: ui.cue.id, start_ms: ui.cue.pos }); ui.cue = null; render(); break;
+      case 'marker-cue': ui.marker = { id: ui.cue.id, t: ui.cue.pos }; render(); break;
+      case 'marker-live': ui.marker = { id: e.asset_id, t: e.position_ms || 0 }; render(); break;
+      case 'marker-cancel': ui.marker = null; render(); break;
+      case 'marker-del':
+        if (confirm('Remove this marker?')) post('/api/markers/delete', { id: parseInt(data.mid, 10) });
+        break;
       case 'clear': post('/api/clear'); break;
       case 'pause': post('/api/pause'); break;
       case 'play': post('/api/play'); break;

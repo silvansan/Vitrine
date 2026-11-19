@@ -3,14 +3,18 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/silvansan/vitrine/agent/internal/config"
 	"github.com/silvansan/vitrine/agent/internal/engine"
+	"github.com/silvansan/vitrine/agent/internal/model"
 	"github.com/silvansan/vitrine/agent/internal/netutil"
 	"github.com/silvansan/vitrine/agent/internal/serverapi"
 	"github.com/silvansan/vitrine/agent/internal/store"
@@ -38,6 +42,7 @@ type App struct {
 	ctx      context.Context
 	lanIP    atomic.Value
 	lastVers int
+	flushMu  sync.Mutex
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -71,6 +76,8 @@ func New(cfg *config.Config) (*App, error) {
 		TriggerSync:  func() { a.Syncer.Trigger(a.ctx) },
 		ServerError:  func() string { return a.srvErr.Load().(string) },
 		Restart:      a.Restart,
+		AddMarker:    a.addMarker,
+		DeleteMarker: a.deleteMarker,
 	}
 	var lastCatalog atomic.Int64
 	a.Syncer.OnChanged = func() {
@@ -195,6 +202,13 @@ func (a *App) fetchManifest(ctx context.Context) {
 			changed = false
 		}
 		st.Manifest = m
+		// Markers added on tablets that haven't reached the server yet stay visible.
+		for _, p := range st.PendingMarkers {
+			if asset := m.Asset(p.AssetID); asset != nil {
+				asset.Markers = append(asset.Markers, model.Marker{Label: p.Label, TMs: p.TMs})
+				sort.Slice(asset.Markers, func(i, j int) bool { return asset.Markers[i].TMs < asset.Markers[j].TMs })
+			}
+		}
 	})
 	a.lastVers = m.Version
 	a.Web.ApplyRevocations(m)
@@ -231,6 +245,7 @@ func (a *App) heartbeatLoop(ctx context.Context) {
 			"time":        time.Now().Format(time.RFC3339),
 			"media_dir":   a.Cfg.MediaDir,
 		}
+		a.flushMarkers(ctx)
 		reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		version, err := a.API.Heartbeat(reqCtx, payload)
 		cancel()
@@ -246,4 +261,99 @@ func (a *App) heartbeatLoop(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// addMarker records a marker added on a tablet. It shows on every tablet at
+// once and is sent to the server now, or as soon as the server is reachable.
+func (a *App) addMarker(assetID int64, tMs int, label, by string) error {
+	var found bool
+	err := a.Store.Update(func(st *store.State) {
+		asset := st.Manifest.Asset(assetID)
+		if asset == nil || !asset.IsVideo() {
+			return
+		}
+		found = true
+		if tMs < 0 {
+			tMs = 0
+		}
+		if asset.DurationMs > 0 && tMs > asset.DurationMs {
+			tMs = asset.DurationMs
+		}
+		asset.Markers = append(asset.Markers, model.Marker{Label: label, TMs: tMs})
+		sort.Slice(asset.Markers, func(i, j int) bool { return asset.Markers[i].TMs < asset.Markers[j].TMs })
+		st.PendingMarkers = append(st.PendingMarkers, store.PendingMarker{AssetID: assetID, TMs: tMs, Label: label, By: by})
+	})
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("markers can only be added to videos")
+	}
+	a.Web.BroadcastCatalog()
+	go a.flushMarkers(a.ctx)
+	return nil
+}
+
+// deleteMarker removes a marker on the server (needs the server to be reachable).
+func (a *App) deleteMarker(id int64) error {
+	if id == 0 {
+		return errors.New("this marker is still being saved; try again in a moment")
+	}
+	if !a.online.Load() {
+		return errors.New("markers can only be removed while the server is connected")
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, 10*time.Second)
+	defer cancel()
+	if err := a.API.Markers(ctx, nil, []int64{id}); err != nil {
+		return err
+	}
+	_ = a.Store.Update(func(st *store.State) {
+		if st.Manifest == nil {
+			return
+		}
+		for i := range st.Manifest.Assets {
+			kept := st.Manifest.Assets[i].Markers[:0]
+			for _, m := range st.Manifest.Assets[i].Markers {
+				if m.ID != id {
+					kept = append(kept, m)
+				}
+			}
+			st.Manifest.Assets[i].Markers = kept
+		}
+	})
+	a.Web.BroadcastCatalog()
+	a.requestRefresh()
+	return nil
+}
+
+// flushMarkers sends markers added offline to the server.
+func (a *App) flushMarkers(ctx context.Context) {
+	if ctx == nil || !a.Cfg.Configured() {
+		return
+	}
+	a.flushMu.Lock()
+	defer a.flushMu.Unlock()
+	var pending []store.PendingMarker
+	a.Store.Read(func(st *store.State) { pending = append(pending, st.PendingMarkers...) })
+	if len(pending) == 0 {
+		return
+	}
+	add := make([]serverapi.NewMarker, 0, len(pending))
+	for _, p := range pending {
+		add = append(add, serverapi.NewMarker{AssetID: p.AssetID, TMs: p.TMs, Label: p.Label, By: p.By})
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := a.API.Markers(reqCtx, add, nil); err != nil {
+		log.Printf("markers: will retry: %v", err)
+		return
+	}
+	_ = a.Store.Update(func(st *store.State) {
+		if len(st.PendingMarkers) >= len(pending) {
+			st.PendingMarkers = st.PendingMarkers[len(pending):]
+		} else {
+			st.PendingMarkers = nil
+		}
+	})
+	a.requestRefresh()
 }

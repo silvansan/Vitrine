@@ -11,7 +11,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .files import serve_field
 from .manifest import build_manifest
-from .models import Agent, MediaAsset, ScreenGrant, hash_token
+from .models import Agent, Marker, MediaAsset, ScreenGrant, hash_token
 from .signing import sign_pairing
 
 
@@ -98,3 +98,31 @@ def pairing(request):
         agent=request.agent, role=role, name=name, expires_at=timezone.now() + timedelta(minutes=15)
     )
     return JsonResponse({"token": sign_pairing(grant), "expires_at": grant.expires_at.isoformat()})
+
+
+@csrf_exempt
+@require_POST
+@agent_required
+def markers(request):
+    """Markers added or removed on a tablet ("Add marker here")."""
+    try:
+        body = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        body = {}
+    added = []
+    for item in body.get("add", []):
+        asset = MediaAsset.objects.filter(pk=item.get("asset_id"), kind=MediaAsset.KIND_VIDEO).first()
+        label = str(item.get("label", "")).strip()[:60]
+        if asset is None or not label:
+            continue
+        try:
+            t_ms = max(0, int(item.get("t_ms", 0)))
+        except (TypeError, ValueError):
+            continue
+        if asset.duration_ms:
+            t_ms = min(t_ms, asset.duration_ms)
+        marker = Marker.objects.create(asset=asset, label=label, t_ms=t_ms, created_by=str(item.get("by", "tablet"))[:120])
+        added.append(marker.pk)
+    ids = [int(i) for i in body.get("delete", []) if str(i).isdigit()]
+    deleted = Marker.objects.filter(pk__in=ids).delete()[0] if ids else 0
+    return JsonResponse({"added": added, "deleted": deleted})

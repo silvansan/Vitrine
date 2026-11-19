@@ -34,6 +34,7 @@ type Set struct {
 }
 
 type Marker struct {
+	ID    int64  `json:"id"`
 	Label string `json:"label"`
 	TMs   int    `json:"t_ms"`
 }

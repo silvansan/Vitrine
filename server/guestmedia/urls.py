@@ -13,12 +13,14 @@ urlpatterns = [
     path("g/<str:token>/api/markers/delete", guest_views.api_marker_delete, name="guest-marker-delete"),
     path("g/<str:token>/api/private", guest_views.api_private, name="guest-private"),
     path("g/<str:token>/thumb/<int:asset_id>", guest_views.thumb, name="guest-thumb"),
+    path("g/<str:token>/file/<int:asset_id>", guest_views.media_file, name="guest-file"),
     path("g/<str:token>/tus/", tus.collection, name="tus-collection"),
     path("g/<str:token>/tus/<uuid:upload_id>", tus.resource, name="tus-resource"),
     # Agent API
     path("api/agent/manifest", agent_api.manifest, name="agent-manifest"),
     path("api/agent/heartbeat", agent_api.heartbeat, name="agent-heartbeat"),
     path("api/agent/pairing", agent_api.pairing, name="agent-pairing"),
+    path("api/agent/markers", agent_api.markers, name="agent-markers"),
     path("api/agent/files/<int:asset_id>/<str:variant>", agent_api.file, name="agent-file"),
     # Staff backend
     path("manage/", manage_views.dashboard, name="manage-dashboard"),

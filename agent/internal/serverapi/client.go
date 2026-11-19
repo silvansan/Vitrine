@@ -222,3 +222,22 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, onChange fu
 		}
 	}
 }
+
+// NewMarker is a marker added on a tablet.
+type NewMarker struct {
+	AssetID int64  `json:"asset_id"`
+	TMs     int    `json:"t_ms"`
+	Label   string `json:"label"`
+	By      string `json:"by"`
+}
+
+// Markers sends added and deleted markers to the server.
+func (c *Client) Markers(ctx context.Context, add []NewMarker, del []int64) error {
+	if add == nil {
+		add = []NewMarker{}
+	}
+	if del == nil {
+		del = []int64{}
+	}
+	return c.doJSON(ctx, http.MethodPost, "/api/agent/markers", map[string]any{"add": add, "delete": del}, nil)
+}

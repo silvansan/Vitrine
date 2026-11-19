@@ -223,3 +223,10 @@ fieldset.box legend { padding: 0 6px; }
   .foot .now { display: none; }
   .nav-right { display: none; }
 }
+
+/* markers */
+.overlay.top { z-index: 25; }
+.sheet.small { width: min(520px, calc(100% - 40px)); }
+.text-input { height: 48px; border-radius: 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border2); padding: 0 14px; font: inherit; font-size: 16px; }
+.mk-group { display: inline-flex; align-items: center; gap: 2px; }
+.mk-del { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--muted); cursor: pointer; }

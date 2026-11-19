@@ -49,6 +49,8 @@ type Server struct {
 	TriggerSync  func()
 	ServerError  func() string
 	Restart      func()
+	AddMarker    func(assetID int64, tMs int, label, by string) error
+	DeleteMarker func(id int64) error
 	Version      string
 
 	hub      *Hub
@@ -89,6 +91,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/screens/{id}", s.screenOnly(s.handleScreenUpdate))
 	mux.HandleFunc("POST /api/screens/{id}/command", s.screenOnly(s.handleScreenCommand))
 	mux.HandleFunc("POST /api/pulpit", s.screenOnly(s.handlePulpitSet))
+	mux.HandleFunc("POST /api/markers", s.screenOnly(s.handleMarkerAdd))
+	mux.HandleFunc("POST /api/markers/delete", s.screenOnly(s.handleMarkerDelete))
 
 	mux.HandleFunc("GET /api/companion/state", s.adminOnly(s.handleCompanionState))
 	mux.HandleFunc("POST /api/companion/settings", s.adminOnly(s.handleSettings))
@@ -971,4 +975,50 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request, _ *store.Scre
 		data = data[len(data)-40000:]
 	}
 	writeJSON(w, map[string]string{"log": string(data), "path": path})
+}
+
+// ---------- markers ("Add marker here") ----------
+
+func (s *Server) handleMarkerAdd(w http.ResponseWriter, r *http.Request, sc *store.Screen) {
+	var body struct {
+		AssetID int64  `json:"asset_id"`
+		TMs     int    `json:"t_ms"`
+		Label   string `json:"label"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	label := strings.TrimSpace(body.Label)
+	if label == "" {
+		total := body.TMs / 1000
+		label = fmt.Sprintf("Marker %d:%02d", total/60, total%60)
+	}
+	if len(label) > 60 {
+		label = label[:60]
+	}
+	if err := s.AddMarker(body.AssetID, body.TMs, label, sc.Name); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleMarkerDelete(w http.ResponseWriter, r *http.Request, sc *store.Screen) {
+	if sc.Role != "back" {
+		writeError(w, http.StatusForbidden, "only the back tablet can remove markers")
+		return
+	}
+	var body struct {
+		ID int64 `json:"id"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if err := s.DeleteMarker(body.ID); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }
