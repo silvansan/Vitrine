@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"fyne.io/systray"
+	"golang.org/x/sys/windows"
 )
 
 //go:embed icon.ico
@@ -27,7 +28,17 @@ var iconOff []byte
 
 var base = "http://127.0.0.1:8090"
 
+// alreadyRunning keeps one tray icon per logged-in user.
+func alreadyRunning() bool {
+	name, _ := windows.UTF16PtrFromString(`Local\VitrineTray`)
+	_, err := windows.CreateMutex(nil, false, name)
+	return err == windows.ERROR_ALREADY_EXISTS
+}
+
 func main() {
+	if alreadyRunning() {
+		return
+	}
 	if port := os.Getenv("VITRINE_PORT"); port != "" {
 		base = "http://127.0.0.1:" + port
 	}
@@ -89,7 +100,7 @@ func onReady() {
 	pair := systray.AddMenuItem("Pair a tablet…", "Show a pairing QR code")
 	media := systray.AddMenuItem("Open media folder", "")
 	systray.AddSeparator()
-	quit := systray.AddMenuItem("Hide tray icon", "The agent keeps running as a service")
+	quit := systray.AddMenuItem("Close tray icon", "Closes only this icon; the agent keeps running as a service")
 
 	mediaDir := ""
 	go func() {
