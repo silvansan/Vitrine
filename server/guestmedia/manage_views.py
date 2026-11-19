@@ -103,7 +103,9 @@ def service_detail(request, pk):
             media_set.save(update_fields=["title"])
         return redirect("manage-service", service.pk)
 
-    guests = service.guests.all()
+    guests = list(service.guests.all())
+    for guest in guests:
+        guest.public_link = guest.link_for(request)
     sets = (
         MediaSet.objects.filter(service=service)
         .select_related("guest")

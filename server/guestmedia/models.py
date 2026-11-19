@@ -62,9 +62,16 @@ class Guest(models.Model):
     def is_expired(self):
         return self.expires_at is not None and self.expires_at < timezone.now()
 
+    def link_for(self, request=None):
+        """The guest's link. Uses VITRINE_PUBLIC_URL, or else the address of the current request."""
+        base = settings.VITRINE_PUBLIC_URL
+        if not base and request is not None:
+            base = f"{request.scheme}://{request.get_host()}"
+        return f"{base}/g/{self.token}/"
+
     @property
     def link(self):
-        return f"{settings.VITRINE_PUBLIC_URL}/g/{self.token}/"
+        return self.link_for()
 
     def get_set(self):
         media_set, _ = MediaSet.objects.get_or_create(

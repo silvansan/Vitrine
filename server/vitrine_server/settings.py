@@ -30,8 +30,12 @@ CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
-# Public address guests use, e.g. https://vitrine.example.org (no trailing slash).
-VITRINE_PUBLIC_URL = os.environ.get("VITRINE_PUBLIC_URL", "http://localhost:8000").rstrip("/")
+# Public address guests use, e.g. https://vitrine.yourdomain.org (no trailing slash).
+# Leave it empty to build guest links from the address you opened /manage/ with.
+VITRINE_PUBLIC_URL = os.environ.get("VITRINE_PUBLIC_URL", "").strip().rstrip("/")
+if "example.org" in VITRINE_PUBLIC_URL or "example.com" in VITRINE_PUBLIC_URL:
+    # The value from .env.example was never changed: ignore it.
+    VITRINE_PUBLIC_URL = ""
 # Where the Ed25519 key used to sign tablet pairing codes is kept.
 VITRINE_KEY_PATH = Path(os.environ.get("VITRINE_KEY_PATH", BASE_DIR / "data" / "keys" / "pairing_ed25519.pem"))
 # Days a deleted file stays in the trash before it is removed for good.

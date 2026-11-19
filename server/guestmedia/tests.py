@@ -198,3 +198,20 @@ class FlowTests(TestCase):
         self.assertEqual(self.maria.get_set().asset_ids(), [])
         self.client.post("/manage/library/?trash=1", {"action": "restore", "ids": [asset.pk]})
         self.assertIsNone(MediaAsset.all_objects.get(pk=asset.pk).deleted_at)
+
+
+@override_settings(VITRINE_PUBLIC_URL="")
+class GuestLinkTests(TestCase):
+    def test_link_follows_the_manage_address(self):
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        self.client.login(username="admin", password="pw")
+        service = Service.objects.create(name="Test")
+        guest = Guest.objects.create(service=service, name="Maria")
+        response = self.client.get(f"/manage/service/{service.pk}/", HTTP_HOST="vitrine.mychurch.ch", secure=True)
+        self.assertContains(response, f"https://vitrine.mychurch.ch/g/{guest.token}/")
+
+    @override_settings(VITRINE_PUBLIC_URL="https://guests.mychurch.ch")
+    def test_setting_wins(self):
+        service = Service.objects.create(name="Test")
+        guest = Guest.objects.create(service=service, name="Maria")
+        self.assertEqual(guest.link, f"https://guests.mychurch.ch/g/{guest.token}/")

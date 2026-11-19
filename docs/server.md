@@ -8,7 +8,7 @@ The server runs on your Linux box at home as one Portainer stack: Django (web), 
 2. Repository URL `https://github.com/silvansan/Vitrine`, reference `refs/heads/main`, compose path `deploy/docker-compose.yml`. (Pasting `deploy/docker-compose.yml` into the **Web editor** works too.)
 3. Under **Environment variables**, paste the contents of `deploy/.env.example` and change at least:
    - `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD`: long random strings.
-   - `VITRINE_PUBLIC_URL`: the public address guests use, e.g. `https://vitrine.example.org`.
+   - `VITRINE_PUBLIC_URL`: optional. Guest links are built from the address you open `/manage/` with; set this (e.g. `https://vitrine.yourdomain.org`) only if you manage Vitrine through another address, such as the Tailscale IP, than the one guests use.
    - `DJANGO_CSRF_TRUSTED_ORIGINS`: the same address.
    - `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD`: your first login.
    - `VITRINE_VIDEO_FPS`: your vMix project frame rate (25 or 50 in Europe).
@@ -61,7 +61,7 @@ Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the 
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VITRINE_PUBLIC_URL` | `http://localhost:8000` | Base of guest links |
+| `VITRINE_PUBLIC_URL` | empty | Base of guest links; empty = the address /manage/ was opened with |
 | `VITRINE_VIDEO_FPS` | `25` | Frame rate videos are converted to |
 | `VITRINE_FILMSTRIP_INTERVAL` | `5` | Seconds between cue-panel frames |
 | `VITRINE_MAX_UPLOAD_MB` | `4096` | Largest upload |

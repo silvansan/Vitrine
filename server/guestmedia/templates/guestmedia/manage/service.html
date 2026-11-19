@@ -29,13 +29,13 @@
   <h2>Guests and their links</h2>
   {% for g in guests %}
     <div class="guest-row">
-      <img class="qr" src="{% url 'manage-qr' %}?d={{ g.link|urlencode }}" alt="QR code for {{ g.name }}'s link" width="120" height="120">
+      <img class="qr" src="{% url 'manage-qr' %}?d={{ g.public_link|urlencode }}" alt="QR code for {{ g.name }}'s link" width="120" height="120">
       <div class="grow">
         <div class="guest-name">{{ g.name }}{% if g.is_expired %} <span class="pill warn">Expired</span>{% endif %}</div>
-        <code class="link">{{ g.link }}</code>
+        <code class="link">{{ g.public_link }}</code>
         <div class="actions">
-          <button class="btn small" type="button" data-copy="{{ g.link }}">Copy link</button>
-          <a class="btn small" href="{{ g.link }}" target="_blank" rel="noopener">Open as guest</a>
+          <button class="btn small" type="button" data-copy="{{ g.public_link }}">Copy link</button>
+          <a class="btn small" href="{{ g.public_link }}" target="_blank" rel="noopener">Open as guest</a>
           <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="new_link"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small" type="submit">New link</button></form>
           <form method="post" class="inline" onsubmit="return confirm('Remove {{ g.name|escapejs }}? Their uploads stay in the library.')">{% csrf_token %}<input type="hidden" name="action" value="delete_guest"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Remove</button></form>
         </div>
