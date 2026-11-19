@@ -69,6 +69,11 @@ Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the 
 | `VITRINE_TAILSCALE_PORT` / `VITRINE_BIND` | `8080` / `0.0.0.0` | Where the agent reaches the server |
 | `TZ` | `Europe/Zurich` | Time zone for dates |
 
+## Troubleshooting
+
+- **Files stay on "Processing"**: conversions run in the `worker` container. Its log should show `Task guestmedia.tasks.process_asset[…] received` and `succeeded` for each upload. Fix whatever the log shows, then select the files in `/manage/library/` and press **Process again**.
+- **Photos take a second or two; videos take about as long as the video** (one at a time).
+
 ## Updating
 
 Push to `main` and wait for the **build** workflow to finish, then Portainer → the stack → **Pull and redeploy** (tick *Re-pull image and redeploy*). Migrations run on start.

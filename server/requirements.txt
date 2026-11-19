@@ -3,6 +3,8 @@ channels==4.2.0
 channels-redis==4.2.1
 daphne==4.1.2
 celery==5.4.0
+# Pinned: newer kombu needs redis-py 6, which channels-redis doesn't support yet.
+kombu==5.4.2
 redis==5.2.1
 psycopg[binary]==3.2.3
 Pillow==11.0.0
