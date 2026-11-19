@@ -165,7 +165,9 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if in != nil {
 			in.Playing = false
 		}
-	case "Cut", "Fade", "Merge", "Wipe", "Zoom", "Slide", "Stinger1", "Stinger2":
+	case "Cut", "Fade", "Merge", "Wipe", "WipeReverse", "Zoom", "CrossZoom", "Slide", "SlideReverse", "Fly", "FlyRotate",
+		"Cube", "CubeZoom", "VerticalWipe", "VerticalWipeReverse", "VerticalSlide", "VerticalSlideReverse",
+		"Transition1", "Transition2", "Transition3", "Transition4", "Stinger1", "Stinger2", "Stinger3", "Stinger4":
 		if in != nil {
 			mix := 1
 			if m := q.Get("Mix"); m != "" {

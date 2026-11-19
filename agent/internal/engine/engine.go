@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,14 +77,26 @@ type Engine struct {
 	errorTill time.Time
 }
 
-var transitions = map[string]bool{"Cut": true, "Fade": true, "Merge": true, "Wipe": true, "Zoom": true,
-	"Slide": true, "Fly": true, "CrossZoom": true, "FlyRotate": true, "Cube": true, "CubeZoom": true,
-	"VerticalWipe": true, "VerticalSlide": true, "Stinger1": true, "Stinger2": true}
+// transitionList is what the companion offers, in vMix's function names.
+// Transition1-4 run whatever effect is set on vMix's four transition buttons,
+// so any effect (including ones that suit inputs with transparency) can be used.
+var transitionList = []string{
+	"Fade", "Cut", "Merge", "Wipe", "WipeReverse", "Zoom", "CrossZoom", "Slide", "SlideReverse",
+	"Fly", "FlyRotate", "Cube", "CubeZoom", "VerticalWipe", "VerticalWipeReverse", "VerticalSlide",
+	"VerticalSlideReverse", "Transition1", "Transition2", "Transition3", "Transition4",
+	"Stinger1", "Stinger2", "Stinger3", "Stinger4",
+}
+
+var transitions = func() map[string]bool {
+	out := map[string]bool{}
+	for _, name := range transitionList {
+		out[name] = true
+	}
+	return out
+}()
 
 // Transitions lists the transition names the companion offers.
-func Transitions() []string {
-	return []string{"Fade", "Cut", "Merge", "Wipe", "Zoom", "Slide", "Stinger1", "Stinger2"}
-}
+func Transitions() []string { return transitionList }
 
 func (e *Engine) Status() Status {
 	e.mu.Lock()
@@ -145,12 +158,17 @@ func (e *Engine) mixParams(s store.Settings, p map[string]string) map[string]str
 }
 
 func (e *Engine) transition(ctx context.Context, s store.Settings, input string, durationMs int) error {
-	fn := s.Transition
+	return e.transitionWith(ctx, s, s.Transition, input, durationMs)
+}
+
+// transitionWith runs a named vMix transition onto the projector mix.
+// Transition1-4 and stingers use the duration set in vMix.
+func (e *Engine) transitionWith(ctx context.Context, s store.Settings, fn, input string, durationMs int) error {
 	if !transitions[fn] {
 		fn = "Fade"
 	}
 	params := map[string]string{"Input": input}
-	if fn != "Cut" {
+	if fn != "Cut" && !strings.HasPrefix(fn, "Transition") && !strings.HasPrefix(fn, "Stinger") {
 		params["Duration"] = strconv.Itoa(durationMs)
 	}
 	return e.VMix.Call(ctx, fn, e.mixParams(s, params))
@@ -403,7 +421,14 @@ func (e *Engine) Clear() error {
 		e.setError(err)
 		return err
 	}
-	if err := e.transition(ctx, s, def.Key, s.TransitionMs); err != nil {
+	backFn, backMs := s.Transition, s.TransitionMs
+	if s.ClearTransition != "" {
+		backFn = s.ClearTransition
+		if s.ClearTransitionMs > 0 {
+			backMs = s.ClearTransitionMs
+		}
+	}
+	if err := e.transitionWith(ctx, s, backFn, def.Key, backMs); err != nil {
 		e.setError(err)
 		return err
 	}

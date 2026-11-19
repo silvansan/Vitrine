@@ -23,6 +23,9 @@ type Settings struct {
 	DefaultInputTitle string `json:"default_input_title"`
 	Transition        string `json:"transition"`
 	TransitionMs      int    `json:"transition_ms"`
+	// Transition used to go back to the default input; empty = same as Transition.
+	ClearTransition   string `json:"clear_transition"`
+	ClearTransitionMs int    `json:"clear_transition_ms"`
 	VideoEndReturn    bool   `json:"video_end_return"`
 	SeekMode          string `json:"seek_mode"`
 	InputA            string `json:"input_a"`

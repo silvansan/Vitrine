@@ -57,7 +57,8 @@ The companion is a page at `http://127.0.0.1:8090/companion`; the back tablet ca
 - **Session**: which active service the tablets show.
 - **Projector output**: the mix the tablets switch.
 - **Default input**: chosen by number and name from vMix's live input list. The agent stores vMix's input key, so the right input is found even if numbers shift; if the banner changes, pick the new one here.
-- **Transition** and duration, **go back to default when a video ends**, **jump mode** (crossfade between GM_A/GM_B, or jump in place), input names.
+- **Transition** and duration for taking media, and separately the **transition back to the default** (e.g. when the default input has transparency and Fade looks like a cut: set one of vMix's transition buttons, *Transition 1–4*, to an effect that works for it and choose it here; Transition 1–4 and stingers use the duration set in vMix).
+- **Go back to default when a video ends**, **jump mode** (crossfade between GM_A/GM_B, or jump in place), input names.
 - **Tablets**: the paired list, unpair, and **Show pairing QR** (signed by the server when online, by the agent itself when the server is unreachable).
 
 The tray icon turns red while guest media is live and grey when vMix or the agent isn't reachable. Only one tray icon runs per user; starting `vitrine-tray.exe` again does nothing. **Close tray icon** closes just the icon: the agent keeps running as a service.

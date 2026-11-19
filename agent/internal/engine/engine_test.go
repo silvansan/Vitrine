@@ -126,3 +126,18 @@ func TestMissingFile(t *testing.T) {
 		t.Fatal("expected an error for a file that is not downloaded")
 	}
 }
+
+func TestSeparateTransitionBack(t *testing.T) {
+	e, fake := setup(t)
+	_ = e.Store.Update(func(s *store.State) { s.Settings.ClearTransition = "Transition2" })
+	if err := e.Take(1, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	last := fake.Calls[len(fake.Calls)-1]
+	if fake.Active(2) != "Banner Sunday" || last[:12] != "Transition2 " {
+		t.Fatalf("back to default should use Transition2, last call %q", last)
+	}
+}

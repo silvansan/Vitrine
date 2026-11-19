@@ -67,6 +67,9 @@
     $('default').innerHTML = defaultHtml;
     $('transition').innerHTML = data.transitions.map(function (t) { return option(t, t, s.transition === t); }).join('');
     $('transition_ms').value = s.transition_ms;
+    $('clear_transition').innerHTML = option('', 'Same as above', !s.clear_transition) +
+      data.transitions.map(function (t) { return option(t, t, s.clear_transition === t); }).join('');
+    $('clear_transition_ms').value = s.clear_transition_ms || '';
     $('video_end_return').checked = !!s.video_end_return;
     $('seek_mode').value = s.seek_mode;
     $('input_a').value = s.input_a;
