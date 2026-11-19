@@ -12,6 +12,28 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
                └─ serves the tablet pages on the LAN ◀── back tablet + pulpit tablet (paired by QR)
 ```
 
+## Screenshots
+
+*All names and pictures are made up.*
+
+| Back tablet | Pulpit tablet |
+|---|---|
+| ![Back tablet: guest chips, six tiles, one live on Mix 2](docs/screenshots/back-tablet.png) | ![Pulpit tablet: a guest's set with a video playing](docs/screenshots/pulpit-tablet.png) |
+| Tap a tile to put it on the projector mix, tap again for the banner. | Only the guest's set, with the controls you allow. |
+
+| Cue panel | Pulpit settings (from the back) |
+|---|---|
+| ![Cue panel with filmstrip and markers](docs/screenshots/cue-panel.png) | ![Drawer to choose what the pulpit shows](docs/screenshots/pulpit-settings.png) |
+| Pick a start point off-air: filmstrip, markers, ±10/30 s. | Choose the pulpit's set, page, buttons and theme. |
+
+| Guest link: my set | Guest link: library |
+|---|---|
+| <img src="docs/screenshots/guest-set.png" alt="Guest page with the guest's ordered set" width="300"> | <img src="docs/screenshots/guest-library.png" alt="Guest page picking files from the library" width="300"> |
+
+| Backend: service and guest links | Settings on the vMix PC |
+|---|---|
+| ![Backend service page with guest links and QR codes](docs/screenshots/backend-service.png) | ![Agent settings page: connection, status, projector](docs/screenshots/companion.png) |
+
 ## What it does
 
 - **Guest link** per guest and service, with a QR code. Guests upload (resumable, so venue Wi-Fi dropouts don't matter), pick files from the shared library, put them in order, and add named start points (markers) to videos.

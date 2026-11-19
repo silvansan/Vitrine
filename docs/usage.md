@@ -7,7 +7,9 @@
 3. Guests open the link on their phone:
    - **Upload**: photos and videos from the gallery. Uploads resume after Wi-Fi dropouts while the page stays open.
    - **Library**: pick files others uploaded ("This service", "Earlier services", "My uploads") and **Add to my set**.
-   - **My set**: order with the arrows; **Options** to remove a file, mark own uploads private, and add markers to videos (name + time, e.g. "Baptism · 1:12").
+   - **My set**: order with the arrows; **Options** to remove a file, mark own uploads private, and add markers to videos (name + time, e.g. "Baptism · 1:12"). Markers show up as jump buttons on the tablets and in the cue panel.
+
+Tip: videos that are already H.264 1920×1080 at your project frame rate (`VITRINE_VIDEO_FPS`) are ready in seconds, because they are copied instead of converted.
 4. **Waiting for approval** on the service page: approve or reject. Rejected files never reach the vMix PC. Converted files appear on the tablets as soon as the agent has downloaded them.
 
 ## Library housekeeping (`/manage/library/`)
@@ -28,7 +30,7 @@ Unpair from the companion, or **Unpair** next to the code in the backend (takes 
 - **Tap a tile**: it turns amber (**SENDING…**) and then red (**LIVE · MIX 2**) once vMix confirms. **Tap again** or **Back to default** returns the projector to the default input.
 - **Videos**: a playback bar appears: **From start**, **−10 s**, pause/play, **+10 s**, marker buttons, time left. Jumps use the second input and a short crossfade, so the audience doesn't see the picture skip.
 - **Resume 0:47** appears on a video that was taken off mid-way. A normal tap always starts from 0:00.
-- **⋯** opens the **cue panel**: drag along the bar, tap a filmstrip frame or a marker, nudge ±10/30 s, then **Start here**. Nothing changes on the projector until you press it.
+- **⋯** (next to the name, under each video tile on the back tablet) opens the **cue panel**: drag along the bar, tap a filmstrip frame or a marker, nudge ±10/30 s, then **Start here**. Nothing changes on the projector until you press it.
 - **Send Maria to pulpit**: the pulpit switches to Maria's set immediately.
 - **Tablets** button (top right): for each pulpit tablet choose the set, **Jump to page 1**, **Mirror my page**, what is visible (Clear button, title, switching sets, connection status, basic video controls, free seeking) and its theme.
 - Sun/moon button: dark or light theme for this tablet.

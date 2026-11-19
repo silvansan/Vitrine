@@ -215,3 +215,36 @@ class GuestLinkTests(TestCase):
         service = Service.objects.create(name="Test")
         guest = Guest.objects.create(service=service, name="Maria")
         self.assertEqual(guest.link, f"https://guests.mychurch.ch/g/{guest.token}/")
+
+
+@override_settings(VITRINE_VIDEO_FPS=25, VITRINE_FILMSTRIP_INTERVAL=1)
+class PassThroughTests(TestCase):
+    def make(self, name, size, rate, extra=()):
+        out = TMP / name
+        TMP.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-f", "lavfi", "-i", f"testsrc=size={size}:rate={rate}:duration=4",
+             "-f", "lavfi", "-i", "sine=frequency=440:duration=4:sample_rate=44100",
+             "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", *extra, "-c:a", "aac", str(out)],
+            check=True,
+        )
+        return out
+
+    def test_ready_video_is_copied(self):
+        from .processing import process_file, probe
+
+        src = self.make("ready.mp4", "1920x1080", 25)
+        result = process_file(src, "ready.mp4")
+        self.assertTrue(result["passed_through"])
+        info = probe(result["processed"])
+        audio = [s for s in info["streams"] if s["codec_type"] == "audio"][0]
+        self.assertEqual(audio["sample_rate"], "48000")  # audio converted, picture copied
+        self.assertIn(result["filmstrip_count"], (4, 5))
+
+    def test_other_frame_rate_is_converted(self):
+        from .processing import process_file
+
+        src = self.make("ntsc.mp4", "1920x1080", 30)
+        result = process_file(src, "ntsc.mp4")
+        self.assertFalse(result["passed_through"])

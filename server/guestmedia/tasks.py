@@ -49,7 +49,7 @@ def process_asset(self, asset_id):
             _store(asset, "filmstrip", result["filmstrip"], f"{base}/filmstrip.jpg")
             asset.filmstrip_count = result["filmstrip_count"]
             asset.filmstrip_cols = result["filmstrip_cols"]
-            asset.filmstrip_interval_ms = settings.VITRINE_FILMSTRIP_INTERVAL * 1000
+            asset.filmstrip_interval_ms = result.get("filmstrip_interval_ms") or settings.VITRINE_FILMSTRIP_INTERVAL * 1000
         asset.processed_size = result["size"]
         asset.sha256 = result["sha256"]
         asset.width = result["width"]

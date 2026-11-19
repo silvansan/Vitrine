@@ -3,7 +3,9 @@
 Photos: HEIC/JPG/PNG -> 1920x1080 JPG, EXIF rotation applied, portrait shots
 on a blurred copy of themselves instead of black bars.
 Videos: anything ffmpeg reads -> H.264 High 1080p, constant frame rate, AAC
-48 kHz stereo, faststart; same blurred fill for vertical video.
+48 kHz stereo, faststart; same blurred fill for vertical video. Videos that are
+already H.264 1920x1080 at the project frame rate are copied without
+re-encoding (only the audio is converted if needed), which takes seconds.
 Both get a thumbnail; videos also get a filmstrip sprite for the cue panel.
 """
 import hashlib
@@ -34,6 +36,7 @@ THUMB_H = 270
 FRAME_W = 192
 FRAME_H = 108
 FILMSTRIP_COLS = 10
+MAX_FRAMES = 120
 
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
 
@@ -117,9 +120,81 @@ def process_photo(src, out_dir):
     return {"processed": processed, "thumb": thumb, "width": TARGET_W, "height": TARGET_H, "duration_ms": 0}
 
 
+def video_stream(info):
+    for stream in info.get("streams", []):
+        if stream.get("codec_type") == "video" and stream.get("disposition", {}).get("attached_pic") != 1:
+            return stream
+    return None
+
+
+def audio_stream(info):
+    for stream in info.get("streams", []):
+        if stream.get("codec_type") == "audio":
+            return stream
+    return None
+
+
+def frame_rate(text):
+    try:
+        num, den = (text or "0/1").split("/")
+        return float(num) / float(den) if float(den) else 0.0
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
+def rotation(stream):
+    tags = stream.get("tags", {}) or {}
+    if tags.get("rotate") not in (None, "0"):
+        return True
+    for side in stream.get("side_data_list", []) or []:
+        if side.get("rotation") not in (None, 0, "0"):
+            return True
+    return False
+
+
+def can_pass_through(info):
+    """True when the video is already what vMix needs: H.264 1920x1080, 4:2:0,
+    progressive, constant frame rate equal to the project's (or double it), not rotated.
+    Then the picture is copied as is; only the audio may be converted."""
+    video = video_stream(info)
+    if video is None:
+        return False
+    fps = settings.VITRINE_VIDEO_FPS
+    rate = frame_rate(video.get("r_frame_rate"))
+    avg = frame_rate(video.get("avg_frame_rate"))
+    checks = [
+        video.get("codec_name") == "h264",
+        int(video.get("width") or 0) == TARGET_W,
+        int(video.get("height") or 0) == TARGET_H,
+        video.get("pix_fmt") in ("yuv420p", "yuvj420p"),
+        video.get("field_order") in (None, "progressive", "unknown"),
+        not rotation(video),
+        any(abs(rate - target) < 0.01 for target in (fps, fps * 2)),
+        avg == 0 or abs(avg - rate) < 0.05,
+    ]
+    return all(checks)
+
+
+def pass_through(src, processed, info):
+    audio = audio_stream(info)
+    audio_ok = audio is not None and audio.get("codec_name") == "aac" and str(audio.get("sample_rate")) == "48000"
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy"]
+    if audio_ok:
+        cmd += ["-c:a", "copy"]
+    else:
+        cmd += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
+    cmd += ["-movflags", "+faststart", str(processed)]
+    run(cmd)
+
+
 def process_video(src, out_dir):
     fps = settings.VITRINE_VIDEO_FPS
     processed = out_dir / "video.mp4"
+    source_info = probe(src)
+    if can_pass_through(source_info):
+        logger.info("%s is already H.264 1080p at %s fps: copying without re-encoding", src, fps)
+        pass_through(src, processed, source_info)
+        return finish_video(processed, out_dir, passed_through=True)
     filter_graph = (
         f"[0:v]scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=increase,"
         f"crop={TARGET_W}:{TARGET_H},boxblur=40:4,eq=brightness=-0.12[bg];"
@@ -136,7 +211,10 @@ def process_video(src, out_dir):
             "-movflags", "+faststart", str(processed),
         ]
     )
+    return finish_video(processed, out_dir, passed_through=False)
 
+
+def finish_video(processed, out_dir, passed_through):
     info = probe(processed)
     duration_ms = int(float(info.get("format", {}).get("duration") or 0) * 1000)
 
@@ -149,8 +227,10 @@ def process_video(src, out_dir):
         ]
     )
 
-    filmstrip, count, cols = make_filmstrip(processed, out_dir, duration_ms)
+    filmstrip, count, cols, interval_ms = make_filmstrip(processed, out_dir, duration_ms)
     return {
+        "passed_through": passed_through,
+        "filmstrip_interval_ms": interval_ms,
         "processed": processed,
         "thumb": thumb,
         "filmstrip": filmstrip,
@@ -163,24 +243,38 @@ def process_video(src, out_dir):
 
 
 def make_filmstrip(video, out_dir, duration_ms):
-    """One frame every N seconds, tiled into a single JPG sprite."""
-    interval = settings.VITRINE_FILMSTRIP_INTERVAL
+    """Frames for the cue panel, tiled into one JPG sprite.
+
+    One frame every VITRINE_FILMSTRIP_INTERVAL seconds, but never more than
+    MAX_FRAMES: a 3-hour video gets a frame every 90 s instead. Each frame is
+    taken with a fast seek, so long videos don't have to be decoded in full.
+    Returns (path, count, columns, interval_ms).
+    """
+    duration_s = duration_ms / 1000
+    interval = max(settings.VITRINE_FILMSTRIP_INTERVAL, math.ceil(duration_s / MAX_FRAMES))
+    count = max(1, math.ceil(duration_s / interval))
     frames_dir = out_dir / "frames"
     frames_dir.mkdir(exist_ok=True)
-    run(
-        [
-            "ffmpeg", "-y", "-hide_banner", "-i", str(video),
-            "-vf", f"fps=1/{interval},scale={FRAME_W}:{FRAME_H}", "-q:v", "5",
-            str(frames_dir / "f_%05d.jpg"),
-        ]
-    )
-    frames = sorted(frames_dir.glob("f_*.jpg"))
-    # ffmpeg's fps filter samples the middle of each interval; keep the count
-    # consistent with the duration so the cue panel maps index -> time.
-    expected = max(1, math.ceil(duration_ms / 1000 / interval))
-    frames = frames[:expected]
-    if not frames:
-        return None, 0, 0
+    frames = []
+    for index in range(count):
+        at = min(index * interval + interval / 2, max(0.0, duration_s - 0.5))
+        target = frames_dir / f"f_{index:05d}.jpg"
+        try:
+            run(
+                [
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{at:.2f}", "-i", str(video),
+                    "-frames:v", "1", "-vf", f"scale={FRAME_W}:{FRAME_H}", "-q:v", "5", str(target),
+                ]
+            )
+        except ProcessingError:
+            pass
+        if not target.exists():
+            # Keep indexes aligned with time: reuse the previous frame (or black).
+            if frames:
+                target = frames[-1]
+            else:
+                Image.new("RGB", (FRAME_W, FRAME_H), (0, 0, 0)).save(target)
+        frames.append(target)
     cols = min(FILMSTRIP_COLS, len(frames))
     rows = math.ceil(len(frames) / cols)
     sprite = Image.new("RGB", (cols * FRAME_W, rows * FRAME_H), (0, 0, 0))
@@ -189,7 +283,7 @@ def make_filmstrip(video, out_dir, duration_ms):
             sprite.paste(frame.convert("RGB"), ((index % cols) * FRAME_W, (index // cols) * FRAME_H))
     sprite_path = out_dir / "filmstrip.jpg"
     sprite.save(sprite_path, "JPEG", quality=78)
-    return sprite_path, len(frames), cols
+    return sprite_path, len(frames), cols, interval * 1000
 
 
 def process_file(src, original_name):

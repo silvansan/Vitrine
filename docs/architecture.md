@@ -27,7 +27,8 @@ The agent connects **out** to the server over Tailscale (WebSocket + HTTP). The 
 The guest page uses tus-js-client against a small tus 1.0 server in Django (`tus.py`: creation, HEAD/PATCH, termination). Finished uploads move into `/data/media/originals/`, become a MediaAsset, are added to the guest's set, and a Celery task converts them (`processing.py`):
 
 - Photos: EXIF rotation, HEIC support, 1920×1080 JPG, contained over a blurred, darkened cover of itself.
-- Videos: one ffmpeg pass with the same blurred fill, `fps=VITRINE_VIDEO_FPS`, H.264 High CRF 20, GOP = 2 s, AAC 48 kHz stereo, `+faststart`; thumbnail; a sprite of frames every N seconds (10 per row) for the cue panel.
+- Videos: one ffmpeg pass with the same blurred fill, `fps=VITRINE_VIDEO_FPS`, H.264 High CRF 20, GOP = 2 s, AAC 48 kHz stereo, `+faststart`. **Pass-through**: a video that is already H.264 1920×1080, 4:2:0, progressive, not rotated, at the project frame rate (or double it) is copied without re-encoding; only the audio is converted to AAC 48 kHz if needed. This takes seconds even for long videos.
+- Every video gets a thumbnail and a sprite of up to 120 frames for the cue panel: one every `VITRINE_FILMSTRIP_INTERVAL` seconds, or further apart for long videos (a 3-hour video gets one every 90 s). Frames are taken with fast seeks, so long files aren't decoded in full.
 
 The SHA-256 of the converted file goes into the manifest; the agent checks it after downloading.
 
