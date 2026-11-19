@@ -12,6 +12,9 @@
 <section class="card">
   {% if asset.status == 'ready' and asset.kind == 'video' %}
     <video controls preload="metadata" src="{% url 'manage-asset-file' asset.pk 'processed' %}" class="preview"></video>
+  {% elif asset.status == 'ready' and asset.kind == 'audio' %}
+    {% if asset.thumb %}<img class="preview" src="{% url 'manage-asset-file' asset.pk 'thumb' %}" alt="">{% endif %}
+    <audio controls preload="metadata" src="{% url 'manage-asset-file' asset.pk 'processed' %}" style="width:100%;margin-top:8px"></audio>
   {% elif asset.status == 'ready' %}
     <img class="preview" src="{% url 'manage-asset-file' asset.pk 'processed' %}" alt="">
   {% elif asset.status == 'failed' %}
@@ -36,7 +39,7 @@
   <p class="muted">{{ asset.get_kind_display }} · {{ asset.processed_size|filesizeformat }} · uploaded {{ asset.created|date:"d M Y H:i" }}{% if asset.service %} for {{ asset.service.name }}{% endif %}</p>
   <p class="muted">In sets: {% for s in sets %}{{ s.title }} ({{ s.service.name }}){% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
 
-  {% if asset.kind == 'video' %}
+  {% if asset.is_timed %}
   <h2>Markers</h2>
   <ul class="markers">
     {% for m in asset.markers.all %}

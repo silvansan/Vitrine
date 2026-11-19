@@ -64,4 +64,5 @@ button,input{font:inherit}
 .foot{position:sticky;bottom:0;padding:14px 20px calc(18px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border)}
 .primary{width:100%;min-height:52px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer}
 .primary:disabled{background:#E3E6EB;color:#6B7280;cursor:default}
+.extras audio.preview{width:100%}
 .extras video.preview{width:100%;border-radius:10px;background:#000;max-height:260px}

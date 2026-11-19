@@ -92,7 +92,9 @@ def original_upload_path(instance, filename):
 class MediaAsset(models.Model):
     KIND_PHOTO = "photo"
     KIND_VIDEO = "video"
-    KIND_CHOICES = [(KIND_PHOTO, "Photo"), (KIND_VIDEO, "Video")]
+    KIND_AUDIO = "audio"
+    KIND_CHOICES = [(KIND_PHOTO, "Photo"), (KIND_VIDEO, "Video"), (KIND_AUDIO, "Audio")]
+    TIMED_KINDS = (KIND_VIDEO, KIND_AUDIO)
 
     STATUS_PROCESSING = "processing"
     STATUS_READY = "ready"
@@ -160,7 +162,12 @@ class MediaAsset(models.Model):
 
     @property
     def ext(self):
-        return ".mp4" if self.kind == self.KIND_VIDEO else ".jpg"
+        return {self.KIND_VIDEO: ".mp4", self.KIND_AUDIO: ".m4a"}.get(self.kind, ".jpg")
+
+    @property
+    def is_timed(self):
+        """Videos and audio play over time (progress, cue, markers)."""
+        return self.kind in self.TIMED_KINDS
 
     @property
     def local_name(self):

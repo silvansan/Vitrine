@@ -111,7 +111,7 @@ def markers(request):
         body = {}
     added = []
     for item in body.get("add", []):
-        asset = MediaAsset.objects.filter(pk=item.get("asset_id"), kind=MediaAsset.KIND_VIDEO).first()
+        asset = MediaAsset.objects.filter(pk=item.get("asset_id"), kind__in=MediaAsset.TIMED_KINDS).first()
         label = str(item.get("label", "")).strip()[:60]
         if asset is None or not label:
             continue

@@ -158,7 +158,7 @@ def api_marker_add(request, token):
     guest = load_guest(token)
     body = read_json(request)
     asset = get_object_or_404(MediaAsset, pk=body.get("asset_id"))
-    if not asset.visible_to(guest) or asset.kind != MediaAsset.KIND_VIDEO:
+    if not asset.visible_to(guest) or not asset.is_timed:
         raise Http404()
     label = str(body.get("label", "")).strip()[:60]
     try:

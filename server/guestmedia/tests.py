@@ -248,3 +248,21 @@ class PassThroughTests(TestCase):
         src = self.make("ntsc.mp4", "1920x1080", 30)
         result = process_file(src, "ntsc.mp4")
         self.assertFalse(result["passed_through"])
+
+
+class AudioTests(TestCase):
+    def test_mp3_becomes_audio_with_card(self):
+        from .processing import process_file
+
+        TMP.mkdir(parents=True, exist_ok=True)
+        src = TMP / "Glorious Day.mp3"
+        subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+             "-c:a", "libmp3lame", str(src)],
+            check=True,
+        )
+        result = process_file(src, "Glorious Day.mp3", "Maria")
+        self.assertEqual(result["kind"], "audio")
+        self.assertTrue(str(result["processed"]).endswith(".m4a"))
+        self.assertGreater(result["duration_ms"], 2500)
+        self.assertTrue(result["thumb"].exists())

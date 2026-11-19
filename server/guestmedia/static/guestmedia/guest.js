@@ -24,6 +24,7 @@
     (children || []).forEach(function (child) { if (child) node.appendChild(child); });
     return node;
   }
+  function timed(a) { return a.kind === 'video' || a.kind === 'audio'; }
   function fmt(ms) {
     var total = Math.floor((ms || 0) / 1000);
     var s = total % 60;
@@ -89,7 +90,7 @@
         onclick: function () { ui.openExtras[asset.id] = !ui.openExtras[asset.id]; render(); }
       }, [
         el('span', { class: 'name', text: asset.name }),
-        el('span', { class: 'owner', text: (asset.mine ? 'Your upload' : 'From ' + asset.owner) + (asset.kind === 'video' && asset.duration_ms ? ' · ' + fmt(asset.duration_ms) : '') + (asset.markers.length ? ' · ' + asset.markers.length + ' marker' + (asset.markers.length > 1 ? 's' : '') : '') }),
+        el('span', { class: 'owner', text: (asset.mine ? 'Your upload' : 'From ' + asset.owner) + (timed(asset) && asset.duration_ms ? ' · ' + fmt(asset.duration_ms) : '') + (asset.markers.length ? ' · ' + asset.markers.length + ' marker' + (asset.markers.length > 1 ? 's' : '') : '') }),
         statusBadge(asset),
         el('span', { class: 'more', text: open ? 'Less' : 'Options' })
       ]);
@@ -106,10 +107,10 @@
 
   function renderExtras(asset) {
     var box = el('div', { class: 'extras' });
-    if (asset.kind === 'video') {
+    if (timed(asset)) {
       var player = null;
       if (asset.file) {
-        player = el('video', { class: 'preview', src: asset.file, controls: '', preload: 'metadata', playsinline: '' });
+        player = el(asset.kind === 'audio' ? 'audio' : 'video', { class: 'preview', src: asset.file, controls: '', preload: 'metadata', playsinline: '' });
         box.appendChild(player);
       }
       box.appendChild(el('div', { text: 'Start points the operator can jump to:' }));
@@ -134,7 +135,7 @@
       box.appendChild(form);
       if (player) {
         box.appendChild(el('button', {
-          type: 'button', class: 'link-btn', text: 'Add marker here (at the video\u2019s current time)',
+          type: 'button', class: 'link-btn', text: 'Add marker here (at the player\u2019s current time)',
           onclick: function () {
             player.pause();
             var t = Math.round(player.currentTime * 1000);
@@ -180,7 +181,7 @@
       var selected = ui.selected.indexOf(asset.id) !== -1;
       var img = el('div', { class: 'img' }, [
         asset.thumb ? el('img', { src: asset.thumb, alt: '', loading: 'lazy' }) : null,
-        asset.kind === 'video' ? el('span', { class: 'dur', text: fmt(asset.duration_ms) }) : null,
+        timed(asset) ? el('span', { class: 'dur', text: (asset.kind === 'audio' ? '\u266A ' : '') + fmt(asset.duration_ms) }) : null,
         el('span', { class: 'check', html: selected ? ICON.check : '' })
       ]);
       var card = el('button', {

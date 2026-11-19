@@ -29,7 +29,7 @@ def process_asset(self, asset_id):
     asset.save(update_fields=["status", "error"])
 
     try:
-        result = process_file(asset.original.path, asset.original_name)
+        result = process_file(asset.original.path, asset.original_name, asset.owner_name)
     except Exception as exc:
         logger.exception("Processing failed for asset %s", asset_id)
         asset.status = MediaAsset.STATUS_FAILED

@@ -6,7 +6,10 @@ Videos: anything ffmpeg reads -> H.264 High 1080p, constant frame rate, AAC
 48 kHz stereo, faststart; same blurred fill for vertical video. Videos that are
 already H.264 1920x1080 at the project frame rate are copied without
 re-encoding (only the audio is converted if needed), which takes seconds.
-Both get a thumbnail; videos also get a filmstrip sprite for the cue panel.
+Audio (MP3, M4A, WAV…): AAC 48 kHz stereo in an .m4a; its cover art or a title
+card becomes the thumbnail. On the projector the default input shows as a layer
+while it plays (see the agent).
+Photos and videos get a thumbnail; videos also get a filmstrip for the cue panel.
 """
 import hashlib
 import json
@@ -18,7 +21,7 @@ import tempfile
 from pathlib import Path
 
 from django.conf import settings
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ FILMSTRIP_COLS = 10
 MAX_FRAMES = 120
 
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".oga", ".opus", ".wma", ".aif", ".aiff"}
 
 
 class ProcessingError(Exception):
@@ -74,7 +78,12 @@ def detect_kind(path, original_name):
         info = probe(path)
     except ProcessingError:
         return "photo"
+    has_audio = any(s.get("codec_type") == "audio" for s in info.get("streams", []))
+    if ext in AUDIO_EXTS and has_audio:
+        return "audio"
     for stream in info.get("streams", []):
+        if stream.get("codec_type") == "video" and stream.get("disposition", {}).get("attached_pic") == 1:
+            continue  # cover art inside an audio file
         if stream.get("codec_type") == "video":
             # A single-frame "video" (e.g. some PNGs) is a photo.
             frames = stream.get("nb_frames")
@@ -82,7 +91,9 @@ def detect_kind(path, original_name):
             if frames == "1" or duration == 0:
                 return "photo"
             return "video"
-    raise ProcessingError("No picture or video stream found")
+    if has_audio:
+        return "audio"
+    raise ProcessingError("No picture, video or audio found")
 
 
 def fit_on_blurred_canvas(image):
@@ -286,7 +297,61 @@ def make_filmstrip(video, out_dir, duration_ms):
     return sprite_path, len(frames), cols, interval * 1000
 
 
-def process_file(src, original_name):
+def audio_card(title, subtitle, cover=None):
+    """1920x1080 picture for an audio file: its cover art, or a title card."""
+    if cover is not None:
+        canvas = fit_on_blurred_canvas(cover)
+    else:
+        canvas = Image.new("RGB", (TARGET_W, TARGET_H), (24, 28, 38))
+        draw = ImageDraw.Draw(canvas)
+        for y in range(TARGET_H):
+            shade = int(24 + 26 * y / TARGET_H)
+            draw.line([(0, y), (TARGET_W, y)], fill=(shade, shade + 4, shade + 18))
+        # A simple note symbol.
+        cx, cy = TARGET_W // 2, 400
+        draw.ellipse((cx - 150, cy + 40, cx - 30, cy + 130), fill=(232, 234, 238))
+        draw.rectangle((cx - 44, cy - 160, cx - 30, cy + 90), fill=(232, 234, 238))
+        draw.polygon([(cx - 44, cy - 160), (cx + 90, cy - 110), (cx + 90, cy - 60), (cx - 30, cy - 105)], fill=(232, 234, 238))
+        try:
+            big = ImageFont.load_default(size=72)
+            small = ImageFont.load_default(size=44)
+        except TypeError:  # very old Pillow
+            big = small = ImageFont.load_default()
+        title = title if len(title) <= 48 else title[:47] + "…"
+        draw.text((TARGET_W // 2, 700), title, font=big, fill=(232, 234, 238), anchor="mm")
+        draw.text((TARGET_W // 2, 790), subtitle, font=small, fill=(154, 161, 173), anchor="mm")
+    return canvas
+
+
+def process_audio(src, out_dir, original_name, owner):
+    processed = out_dir / "audio.m4a"
+    run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-i", str(src), "-map", "0:a:0", "-vn",
+            "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(processed),
+        ]
+    )
+    info = probe(processed)
+    duration_ms = int(float(info.get("format", {}).get("duration") or 0) * 1000)
+
+    cover = None
+    cover_path = out_dir / "cover.jpg"
+    try:
+        run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src), "-an", "-map", "0:v:0",
+             "-frames:v", "1", str(cover_path)])
+        if cover_path.exists():
+            with Image.open(cover_path) as opened:
+                cover = opened.convert("RGB")
+    except ProcessingError:
+        cover = None
+    title = Path(original_name).stem.replace("_", " ")
+    card = audio_card(title, owner or "", cover)
+    thumb = out_dir / "thumb.jpg"
+    card.resize((THUMB_W, THUMB_H), Image.LANCZOS).save(thumb, "JPEG", quality=82)
+    return {"processed": processed, "thumb": thumb, "width": 0, "height": 0, "duration_ms": duration_ms}
+
+
+def process_file(src, original_name, owner=""):
     """Process one upload. Returns a dict with the produced files (in a temp dir)."""
     src = Path(src)
     kind = detect_kind(src, original_name)
@@ -294,6 +359,8 @@ def process_file(src, original_name):
     try:
         if kind == "photo":
             result = process_photo(src, out_dir)
+        elif kind == "audio":
+            result = process_audio(src, out_dir, original_name, owner)
         else:
             result = process_video(src, out_dir)
     except Exception:
