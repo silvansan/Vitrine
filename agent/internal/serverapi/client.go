@@ -68,7 +68,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return errors.New("server refused the agent token (check agent_token in config.json)")
+		return errors.New("the server refused the agent token; paste it again under Settings > Connection")
 	}
 	if resp.StatusCode/100 != 2 {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 500))

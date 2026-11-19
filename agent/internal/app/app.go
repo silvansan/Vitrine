@@ -31,6 +31,9 @@ type App struct {
 	Web    *web.Server
 
 	online   atomic.Bool
+	srvErr   atomic.Value
+	restart  atomic.Bool
+	cancel   context.CancelFunc
 	refresh  chan struct{}
 	ctx      context.Context
 	lanIP    atomic.Value
@@ -45,6 +48,7 @@ func New(cfg *config.Config) (*App, error) {
 	a := &App{Cfg: cfg, Store: st, refresh: make(chan struct{}, 1)}
 	a.API = serverapi.New(cfg.ServerURL, cfg.AgentToken)
 	a.lanIP.Store(a.detectIP())
+	a.srvErr.Store("")
 
 	a.Engine = &engine.Engine{VMix: vmix.New(cfg.VMixURL), Store: st, Cfg: cfg, Resolve: a.resolve}
 	a.Syncer = &syncer.Syncer{
@@ -65,6 +69,8 @@ func New(cfg *config.Config) (*App, error) {
 		ServerOnline: a.online.Load,
 		LANIP:        func() string { return a.lanIP.Load().(string) },
 		TriggerSync:  func() { a.Syncer.Trigger(a.ctx) },
+		ServerError:  func() string { return a.srvErr.Load().(string) },
+		Restart:      a.Restart,
 	}
 	var lastCatalog atomic.Int64
 	a.Syncer.OnChanged = func() {
@@ -103,19 +109,50 @@ func (a *App) resolve(id int64) (*engine.Media, bool) {
 	return media, media != nil
 }
 
-// Run starts everything and blocks until ctx ends.
-func (a *App) Run(ctx context.Context) error {
+// Restart stops the agent and makes Run report that it should be started again
+// (used after the settings page saves a new config).
+func (a *App) Restart() {
+	a.restart.Store(true)
+	if a.cancel != nil {
+		go func() {
+			time.Sleep(300 * time.Millisecond) // let the HTTP answer go out first
+			a.cancel()
+		}()
+	}
+}
+
+// RestartRequested reports whether Run ended because of Restart.
+func (a *App) RestartRequested() bool { return a.restart.Load() }
+
+func (a *App) setServerError(err error) {
+	if err == nil {
+		a.srvErr.Store("")
+		return
+	}
+	a.srvErr.Store(err.Error())
+}
+
+// Run starts everything and blocks until ctx ends or Restart is called.
+func (a *App) Run(parent context.Context) error {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	a.cancel = cancel
 	a.ctx = ctx
 	log.Printf("Vitrine agent %s, server %s, media %s", Version, a.Cfg.ServerURL, a.Cfg.MediaDir)
 	go a.Engine.Run(ctx)
-	go a.API.Listen(ctx, a.requestRefresh, func(connected bool) {
-		was := a.online.Swap(connected)
-		if was != connected {
-			a.Web.BroadcastState()
-		}
-	})
-	go a.manifestLoop(ctx)
-	go a.heartbeatLoop(ctx)
+	if a.Cfg.Configured() {
+		go a.API.Listen(ctx, a.requestRefresh, func(connected bool) {
+			was := a.online.Swap(connected)
+			if was != connected {
+				a.Web.BroadcastState()
+			}
+		})
+		go a.manifestLoop(ctx)
+		go a.heartbeatLoop(ctx)
+	} else {
+		a.srvErr.Store("Not connected yet: enter the server address and agent token under Connection.")
+		log.Printf("server address or token missing; open the settings page to enter them")
+	}
 	// Files already downloaded are usable right away, even offline.
 	a.Syncer.Trigger(ctx)
 	return a.Web.ListenAndServe(ctx)
@@ -147,6 +184,7 @@ func (a *App) fetchManifest(ctx context.Context) {
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	m, err := a.API.Manifest(reqCtx)
+	a.setServerError(err)
 	if err != nil {
 		log.Printf("manifest: %v", err)
 		return
@@ -196,6 +234,7 @@ func (a *App) heartbeatLoop(ctx context.Context) {
 		reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		version, err := a.API.Heartbeat(reqCtx, payload)
 		cancel()
+		a.setServerError(err)
 		if err != nil {
 			log.Printf("heartbeat: %v", err)
 		} else if version != a.lastVers {

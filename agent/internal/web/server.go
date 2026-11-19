@@ -14,6 +14,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +47,8 @@ type Server struct {
 	ServerOnline func() bool
 	LANIP        func() string
 	TriggerSync  func()
+	ServerError  func() string
+	Restart      func()
 	Version      string
 
 	hub      *Hub
@@ -91,6 +95,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/companion/pair", s.adminOnly(s.handleCompanionPair))
 	mux.HandleFunc("POST /api/companion/screens/{id}/delete", s.adminOnly(s.handleScreenDelete))
 	mux.HandleFunc("POST /api/companion/test-default", s.adminOnly(s.simple(s.Engine.ShowDefault)))
+	mux.HandleFunc("GET /api/companion/config", s.localOnly(s.handleConfigGet))
+	mux.HandleFunc("POST /api/companion/config", s.localOnly(s.handleConfigSave))
+	mux.HandleFunc("POST /api/companion/restart", s.localOnly(func(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
+		writeJSON(w, map[string]bool{"ok": true})
+		s.Restart()
+	}))
+	mux.HandleFunc("GET /api/companion/log", s.localOnly(s.handleLog))
 	mux.HandleFunc("POST /api/companion/sync", s.adminOnly(func(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
 		s.TriggerSync()
 		writeJSON(w, map[string]bool{"ok": true})
@@ -177,6 +188,17 @@ func (s *Server) adminOnly(h handler) http.HandlerFunc {
 			return
 		}
 		h(w, r, sc)
+	}
+}
+
+// localOnly is for things only the vMix PC itself may see (the agent token, the log).
+func (s *Server) localOnly(h handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopback(r) {
+			writeError(w, http.StatusForbidden, "Only on the vMix PC itself.")
+			return
+		}
+		h(w, r, nil)
 	}
 }
 
@@ -470,12 +492,18 @@ func (s *Server) statusMessage() map[string]any {
 	if s.ServerOnline != nil {
 		online = s.ServerOnline()
 	}
+	serverError := ""
+	if s.ServerError != nil && !online {
+		serverError = s.ServerError()
+	}
 	return map[string]any{
 		"type":          "state",
 		"engine":        s.Engine.Status(),
 		"positions":     positions,
 		"sync":          s.Syncer.Status(),
 		"server_online": online,
+		"server_error":  serverError,
+		"configured":    s.Cfg.Configured(),
 	}
 }
 
@@ -841,6 +869,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	srv := &http.Server{Addr: s.Cfg.Listen, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
+		s.hub.CloseAll()
 		shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
@@ -851,4 +880,95 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+// ---------- connection settings (config.json) ----------
+
+type configView struct {
+	ServerURL        string `json:"server_url"`
+	TokenSet         bool   `json:"token_set"`
+	TokenPrefix      string `json:"token_prefix"`
+	MediaDir         string `json:"media_dir"`
+	VMixURL          string `json:"vmix_url"`
+	Listen           string `json:"listen"`
+	AdvertiseIP      string `json:"advertise_ip"`
+	MixParamOffset   int    `json:"mix_param_offset"`
+	LiveThrottleKBps int    `json:"live_throttle_kbps"`
+	Path             string `json:"path"`
+	LogPath          string `json:"log_path"`
+}
+
+func (s *Server) handleConfigGet(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
+	c := s.Cfg
+	prefix := ""
+	if len(c.AgentToken) > 12 && strings.HasPrefix(c.AgentToken, "vta_") {
+		prefix = c.AgentToken[:12]
+	}
+	writeJSON(w, configView{ServerURL: c.ServerURL, TokenSet: c.Configured(), TokenPrefix: prefix, MediaDir: c.MediaDir,
+		VMixURL: c.VMixURL, Listen: c.Listen, AdvertiseIP: c.AdvertiseIP, MixParamOffset: c.MixParamOffset,
+		LiveThrottleKBps: c.LiveThrottleKBps, Path: c.Path, LogPath: filepath.Join(c.DataDir, "agent.log")})
+}
+
+func (s *Server) handleConfigSave(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
+	var body struct {
+		ServerURL        string `json:"server_url"`
+		AgentToken       string `json:"agent_token"`
+		MediaDir         string `json:"media_dir"`
+		VMixURL          string `json:"vmix_url"`
+		Listen           string `json:"listen"`
+		AdvertiseIP      string `json:"advertise_ip"`
+		MixParamOffset   int    `json:"mix_param_offset"`
+		LiveThrottleKBps int    `json:"live_throttle_kbps"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	next := *s.Cfg
+	next.ServerURL = strings.TrimRight(strings.TrimSpace(body.ServerURL), "/")
+	if token := strings.TrimSpace(body.AgentToken); token != "" {
+		next.AgentToken = token
+	}
+	next.MediaDir = strings.TrimSpace(body.MediaDir)
+	next.VMixURL = strings.TrimRight(strings.TrimSpace(body.VMixURL), "/")
+	next.Listen = strings.TrimSpace(body.Listen)
+	if next.Listen != "" && !strings.Contains(next.Listen, ":") {
+		next.Listen = ":" + next.Listen
+	}
+	next.AdvertiseIP = strings.TrimSpace(body.AdvertiseIP)
+	next.MixParamOffset = body.MixParamOffset
+	next.LiveThrottleKBps = body.LiveThrottleKBps
+	if err := next.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if next.ServerURL != "" && next.AgentToken != "" {
+		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		_, err := serverapi.New(next.ServerURL, next.AgentToken).Manifest(ctx)
+		cancel()
+		if err != nil && r.URL.Query().Get("force") != "1" {
+			writeError(w, http.StatusBadGateway, "Couldn't reach the server with these settings: "+err.Error())
+			return
+		}
+	}
+	if err := next.Save(); err != nil {
+		writeError(w, http.StatusInternalServerError, "Couldn't save "+next.Path+": "+err.Error())
+		return
+	}
+	log.Printf("connection settings saved to %s", next.Path)
+	writeJSON(w, map[string]any{"ok": true, "restart": true, "port": next.ListenPort()})
+	s.Restart()
+}
+
+func (s *Server) handleLog(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
+	path := filepath.Join(s.Cfg.DataDir, "agent.log")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		writeJSON(w, map[string]string{"log": "", "path": path})
+		return
+	}
+	if len(data) > 40000 {
+		data = data[len(data)-40000:]
+	}
+	writeJSON(w, map[string]string{"log": string(data), "path": path})
 }

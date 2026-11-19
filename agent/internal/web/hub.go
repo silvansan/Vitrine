@@ -75,6 +75,15 @@ func (h *Hub) SendTo(screenID string, msg any) {
 	}
 }
 
+// CloseAll ends every connection (agent restart); clients reconnect by themselves.
+func (h *Hub) CloseAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for c := range h.clients {
+		c.conn.Close(websocket.StatusGoingAway, "agent restarting")
+	}
+}
+
 // Disconnect closes the connections of a screen (after unpairing).
 func (h *Hub) Disconnect(screenID string) {
 	h.mu.Lock()

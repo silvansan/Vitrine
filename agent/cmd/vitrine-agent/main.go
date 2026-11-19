@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/silvansan/vitrine/agent/internal/app"
 	"github.com/silvansan/vitrine/agent/internal/config"
@@ -58,19 +59,29 @@ func setupLog(dataDir string, console bool) {
 
 func runAgent(configPath string, console bool) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
-		cfg, err := config.Load(configPath)
-		if err != nil {
-			setupLog(filepath.Dir(configPath), console)
-			log.Print(err)
-			return err
+		for {
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				setupLog(filepath.Dir(configPath), console)
+				log.Print(err)
+				return err
+			}
+			setupLog(cfg.DataDir, console)
+			a, err := app.New(cfg)
+			if err != nil {
+				log.Print(err)
+				return err
+			}
+			err = a.Run(ctx)
+			if ctx.Err() != nil {
+				return nil
+			}
+			if !a.RestartRequested() {
+				return err
+			}
+			log.Printf("restarting with the new settings")
+			time.Sleep(500 * time.Millisecond)
 		}
-		setupLog(cfg.DataDir, console)
-		a, err := app.New(cfg)
-		if err != nil {
-			log.Print(err)
-			return err
-		}
-		return a.Run(ctx)
 	}
 }
 
@@ -105,11 +116,13 @@ func main() {
 		if cfg, cerr := config.Load(abs); cerr == nil {
 			port = cfg.ListenPort()
 		} else {
-			fmt.Println(cerr)
+			err = cerr
+			break
 		}
 		err = service.Install(abs, port)
 		if err == nil {
-			fmt.Println("Installed and started. Tray companion starts at the next logon (or run vitrine-tray.exe now).")
+			fmt.Println("Installed and started.")
+			fmt.Println("Next: start vitrine-tray.exe, then right-click its icon > Open settings, and fill in Connection.")
 		}
 	case "uninstall":
 		err = service.Uninstall()

@@ -70,14 +70,13 @@ func Load(path string) (*Config, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, err
 		}
-		template := cfg
-		template.ServerURL = "http://100.x.y.z:8080"
-		template.AgentToken = "vta_paste_the_token_from_the_backend"
-		out, _ := json.MarshalIndent(template, "", "  ")
-		if err := os.WriteFile(path, out, 0o600); err != nil {
+		// First start: write the defaults. The server address and token are
+		// filled in from the settings page (tray icon > Open settings).
+		cfg.Path = path
+		if err := cfg.Save(); err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("created %s; fill in server_url and agent_token, then start the agent again", path)
+		data, err = os.ReadFile(path)
 	}
 	if err != nil {
 		return nil, err
@@ -109,4 +108,50 @@ func (c *Config) ListenPort() int {
 		fmt.Sscanf(c.Listen[i+1:], "%d", &port)
 	}
 	return port
+}
+
+// Save writes the config file.
+func (c *Config) Save() error {
+	out, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := c.Path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, c.Path)
+}
+
+// Configured reports whether the server address and token are filled in.
+func (c *Config) Configured() bool {
+	return strings.HasPrefix(c.ServerURL, "http") && !strings.Contains(c.ServerURL, "x.y.z") &&
+		strings.HasPrefix(c.AgentToken, "vta_") && !strings.Contains(c.AgentToken, "paste")
+}
+
+// Validate checks values entered in the settings page.
+func (c *Config) Validate() error {
+	if c.ServerURL != "" && !strings.HasPrefix(c.ServerURL, "http://") && !strings.HasPrefix(c.ServerURL, "https://") {
+		return errors.New("the server address must start with http:// or https://")
+	}
+	if c.AgentToken != "" && !strings.HasPrefix(c.AgentToken, "vta_") {
+		return errors.New("the agent token starts with vta_; copy it again from the backend")
+	}
+	if !strings.HasPrefix(c.VMixURL, "http://") && !strings.HasPrefix(c.VMixURL, "https://") {
+		return errors.New("the vMix address must start with http://")
+	}
+	if strings.TrimSpace(c.MediaDir) == "" {
+		return errors.New("choose a media folder")
+	}
+	if err := os.MkdirAll(c.MediaDir, 0o755); err != nil {
+		return fmt.Errorf("can't use the media folder: %w", err)
+	}
+	port := c.ListenPort()
+	if port < 1 || port > 65535 {
+		return errors.New("the tablet port must be between 1 and 65535")
+	}
+	if c.LiveThrottleKBps < 0 {
+		c.LiveThrottleKBps = 0
+	}
+	return nil
 }

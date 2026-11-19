@@ -10,46 +10,49 @@ The agent is one Windows service (`vitrine-agent.exe`) plus a tray icon (`vitrin
 
 ## 2. Install
 
-1. Download `vitrine-agent.exe` and `vitrine-tray.exe` from the latest GitHub release (or the build artifacts) into e.g. `C:\Program Files\Vitrine\`.
-2. Open an **administrator** command prompt in that folder and run:
+1. Download `vitrine-agent.exe` and `vitrine-tray.exe` from the latest GitHub release (or the build artifacts) and put them together in a folder on a **local disk**, e.g. `C:\Program Files\Vitrine\`.
+2. Open a Command Prompt **as administrator** and run (use `cd /d` to change drive):
    ```
+   cd /d "C:\Program Files\Vitrine"
    vitrine-agent install
    ```
-   The first time, this creates `C:\ProgramData\Vitrine\config.json` and stops. Edit it (see below), then run `vitrine-agent install` again.
-3. Install registers the `VitrineAgent` service (starts at boot, restarts itself after a crash), opens TCP port 8090 in the Windows firewall for private networks, and starts the tray icon at every logon.
+   This registers the `VitrineAgent` service (starts at boot, restarts itself after a crash), opens TCP port 8090 in the Windows firewall for private networks, and starts the tray icon at every logon.
+3. Double-click `vitrine-tray.exe` once (later it starts by itself), right-click its icon near the clock → **Open settings…**.
+4. Under **Connection**, paste the **server address** (e.g. `https://vitrine.yourdomain.ch`, or the Tailscale address `http://100.x.y.z:8080`) and the **agent token** from the backend (Agents & tablets), then **Save and restart agent**. The agent checks the connection before saving.
 
-### config.json
+That's the only time you need the command prompt.
 
-```json
-{
-  "server_url": "http://100.101.102.103:8080",
-  "agent_token": "vta_…",
-  "media_dir": "D:\\Vitrine\\media",
-  "vmix_url": "http://127.0.0.1:8088",
-  "listen": ":8090",
-  "advertise_ip": "",
-  "mix_param_offset": -1,
-  "live_throttle_kbps": 4096
-}
-```
+### Tray menu
 
-| Key | Meaning |
+| Item | Does |
 |---|---|
-| `server_url` | The server over Tailscale |
-| `agent_token` | From the backend (Agents & tablets) |
-| `media_dir` | Where files are kept; vMix plays them from here. Use a local disk |
-| `listen` | Port for the tablets |
-| `advertise_ip` | LAN address put in pairing QR codes; empty = detect (Tailscale addresses are skipped) |
-| `mix_param_offset` | vMix's API `Mix` parameter = mix number + this. With `-1`, Mix 2 is sent as `Mix=1` (vMix numbers mixes from 0 = main). Check with the companion's **Show default on the projector** button; if the wrong mix switches, change this to `0` |
-| `live_throttle_kbps` | Download limit while something is live; `0` = no limit |
+| Open settings… | Connection, projector mix, default input, tablets, status, log |
+| Pair a tablet… | Shows a pairing QR code |
+| Open media folder / Open log | Opens them in Explorer / Notepad |
+| Restart agent | Restarts the agent (no admin rights needed); tablets reconnect by themselves |
+| Start agent / Stop agent | Starts or stops the Windows service; Windows asks for permission |
+| Close tray icon | Closes only the icon; the agent keeps running |
 
-After changing the config: `vitrine-agent stop` and `vitrine-agent start` (or restart the service).
+### Connection settings
 
-Commands: `install`, `uninstall`, `start`, `stop`, `run` (in the console, for testing), `version`. Log file: `C:\ProgramData\Vitrine\agent.log`.
+All of these are in **Open settings… → Connection** (the first two) and **More connection settings**. They are saved in `C:\ProgramData\Vitrine\config.json`, which you can still edit by hand if you prefer (then use **Restart agent**). They can only be changed on the vMix PC itself, not from the back tablet.
+
+| Setting | config.json key | Meaning |
+|---|---|---|
+| Server address | `server_url` | The Vitrine server: your public domain, or `http://<tailscale-ip>:8080` |
+| Agent token | `agent_token` | From the backend (Agents & tablets); shown only as its first characters |
+| Media folder | `media_dir` | Where files are kept; vMix plays them from here. Use a local disk |
+| vMix address | `vmix_url` | Keep `http://127.0.0.1:8088` when the agent runs on the vMix PC |
+| Tablet port | `listen` | Port for the tablets (default 8090) |
+| Address in pairing QR codes | `advertise_ip` | Empty = detect (Tailscale addresses are skipped) |
+| vMix Mix parameter offset | `mix_param_offset` | vMix's API `Mix` parameter = mix number + this. With `-1`, Mix 2 is sent as `Mix=1`. Check with **Show default on the projector**; if the wrong mix switches, try `0` |
+| Download limit while live | `live_throttle_kbps` | KB/s while something is on the projector; `0` = no limit |
+
+Command line, if you ever need it (as administrator): `vitrine-agent install`, `uninstall`, `start`, `stop`, `run` (in the console, for testing), `version`. Log file: `C:\ProgramData\Vitrine\agent.log` (also under **Agent log** in the settings page).
 
 ## 3. Companion (tray icon → Open settings)
 
-The companion is a page at `http://127.0.0.1:8090/companion` (also reachable from the back tablet). It sets, for this PC:
+The companion is a page at `http://127.0.0.1:8090/companion`; the back tablet can open it too, without the Connection section and the log. It sets, for this PC:
 
 - **Session**: which active service the tablets show.
 - **Projector output**: the mix the tablets switch.

@@ -20,12 +20,12 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
 - **Agent** on the vMix PC: downloads only what the active service needs, checks every file, slows down downloads while something is live, and keeps working when the internet is down.
 - **Back tablet** (`/screen`, role back): all guests, 6 tiles per page, tap = live on your mix, tap again = default input. Sending/live states confirmed by vMix, video progress, From start, ±10 s, pause, markers, Resume where you stopped, a cue panel with filmstrip to pick a start point off-air, and seamless jumps (A/B crossfade). Sends a guest's set to the pulpit and sets what the pulpit shows.
 - **Pulpit tablet** (role pulpit): only the guest's tiles and pages, with the options you allow from the back. Dark or light theme.
-- **Tray companion** on the vMix PC: projector mix, default input by vMix name (pick again when the banner changes), transition, video-end behaviour, tablets and pairing.
+- **Tray companion** on the vMix PC: connection (server address, token, folders), restart/start/stop of the agent, projector mix, default input by vMix name (pick again when the banner changes), transition, video-end behaviour, tablets and pairing, the log.
 
 ## Quick start
 
 1. **Server**: deploy `deploy/docker-compose.yml` as a Portainer stack, point a Nginx Proxy Manager host at `vitrine-nginx:80`. See [docs/server.md](docs/server.md).
-2. **Agent**: in `/manage/agents/` create an agent token, then install `vitrine-agent.exe` on the vMix PC. See [docs/agent.md](docs/agent.md).
+2. **Agent**: in `/manage/agents/` create an agent token. On the vMix PC run `vitrine-agent install` once as administrator, start `vitrine-tray.exe`, and paste the server address and token under **Open settings… → Connection**. See [docs/agent.md](docs/agent.md).
 3. **Tablets**: pair each tablet by scanning a QR code from the backend or the tray companion.
 4. **Use it**: create a service, add guests, send them their links. See [docs/usage.md](docs/usage.md).
 

@@ -12,13 +12,70 @@
   <h1>Vitrine agent</h1>
   <div class="muted" id="agent-line">Loading…</div>
 
+  <section aria-labelledby="h-conn" id="connection">
+    <h2 id="h-conn">Connection</h2>
+    <p class="hint" id="conn-hint">Where the Vitrine server is and how this PC signs in. Saving restarts the agent (a few seconds).</p>
+    <div class="field">
+      <label class="label" for="c-server">Server address</label>
+      <input type="text" id="c-server" placeholder="https://vitrine.yourdomain.ch" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label class="label" for="c-token">Agent token</label>
+      <input type="password" id="c-token" placeholder="vta_… (from the backend: Agents &amp; tablets)" autocomplete="off" spellcheck="false">
+      <span class="hint" id="c-token-hint"></span>
+    </div>
+    <details>
+      <summary class="label" style="cursor:pointer;padding:6px 0">More connection settings</summary>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
+        <div class="field">
+          <label class="label" for="c-media">Media folder (vMix plays the files from here; use a local disk)</label>
+          <input type="text" id="c-media" spellcheck="false">
+        </div>
+        <div class="inline">
+          <div class="field">
+            <label class="label" for="c-vmix">vMix address</label>
+            <input type="text" id="c-vmix" spellcheck="false">
+          </div>
+          <div class="field">
+            <label class="label" for="c-listen">Tablet port</label>
+            <input type="text" id="c-listen" spellcheck="false">
+          </div>
+        </div>
+        <div class="inline">
+          <div class="field">
+            <label class="label" for="c-ip">Address in pairing QR codes (empty = detect)</label>
+            <input type="text" id="c-ip" spellcheck="false">
+          </div>
+          <div class="field">
+            <label class="label" for="c-offset">vMix Mix parameter offset</label>
+            <input type="number" id="c-offset" step="1">
+          </div>
+          <div class="field">
+            <label class="label" for="c-throttle">Download limit while live (KB/s, 0 = none)</label>
+            <input type="number" id="c-throttle" min="0" step="256">
+          </div>
+        </div>
+        <p class="hint" id="c-path"></p>
+      </div>
+    </details>
+    <div class="inline">
+      <button type="button" class="btn primary" id="btn-save-conn">Save and restart agent</button>
+      <span class="error-text" id="conn-error" role="alert"></span>
+    </div>
+  </section>
+
   <section aria-labelledby="h-status">
     <h2 id="h-status">Status</h2>
     <div class="status-list" id="status"></div>
     <div class="inline">
       <button type="button" class="btn" id="btn-sync">Sync now</button>
       <button type="button" class="btn" id="btn-test">Show default on the projector</button>
+      <button type="button" class="btn" id="btn-restart">Restart agent</button>
     </div>
+    <details id="log-box">
+      <summary class="label" style="cursor:pointer;padding:6px 0">Agent log</summary>
+      <pre id="log" style="max-height:320px;overflow:auto;font-size:12px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin:8px 0 0"></pre>
+    </details>
   </section>
 
   <section aria-labelledby="h-session">

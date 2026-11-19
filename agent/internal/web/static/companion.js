@@ -38,7 +38,7 @@
     $('agent-line').textContent = 'Version ' + data.agent.version + ' · tablets connect to http://' + data.agent.lan_ip + ':' + data.agent.port + ' · media in ' + data.agent.media_dir;
 
     var rows = [
-      [st.server_online ? 'ok' : 'warn', 'Server', st.server_online ? 'Connected (' + data.agent.server_url + ')' : 'Not reachable — tablets keep working with the files already here'],
+      [st.server_online ? 'ok' : (st.configured ? 'warn' : 'bad'), 'Server', st.server_online ? 'Connected (' + data.agent.server_url + ')' : (st.server_error || 'Not reachable') + (st.configured ? ' — tablets keep working with the files already here' : '')],
       [e.vmix_ok ? 'ok' : 'bad', 'vMix', e.vmix_ok ? 'Connected' + (e.vmix_version ? ' (v' + e.vmix_version + ')' : '') : 'Not reachable at ' + data.agent.vmix_url + ' — is vMix running with the Web Controller enabled?'],
       [e.default_ok ? 'ok' : 'warn', 'Default input', e.default_ok ? s.default_input_title : 'Not chosen yet'],
       [e.inputs_ok ? 'ok' : 'warn', 'Guest inputs', e.inputs_ok ? s.input_a + ' and ' + s.input_b + ' found' : (e.inputs_error || 'missing')],
@@ -106,6 +106,77 @@
     }
   });
 
+  /* Connection settings (config.json) */
+  function loadConfig() {
+    return fetch('/api/companion/config', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) {
+        // Opened from the back tablet: connection settings and the log stay on the vMix PC.
+        $('connection').hidden = true;
+        $('log-box').hidden = true;
+        $('btn-restart').hidden = true;
+        return null;
+      }
+      return r.json();
+    }).then(function (c) {
+      if (!c) return;
+      $('c-server').value = c.server_url || '';
+      $('c-token').value = '';
+      $('c-token-hint').textContent = c.token_set ? 'Saved (' + c.token_prefix + '…). Leave empty to keep it, or paste a new one.' : 'Not set yet.';
+      $('c-media').value = c.media_dir || '';
+      $('c-vmix').value = c.vmix_url || '';
+      $('c-listen').value = c.listen || '';
+      $('c-ip').value = c.advertise_ip || '';
+      $('c-offset').value = c.mix_param_offset;
+      $('c-throttle').value = c.live_throttle_kbps;
+      $('c-path').textContent = 'Saved in ' + c.path + ' · log: ' + c.log_path;
+      if (!c.token_set) {
+        $('conn-hint').textContent = 'First step: paste the server address and the agent token from the backend (Agents & tablets), then save.';
+        $('connection').scrollIntoView();
+      }
+    });
+  }
+
+  function waitForRestart(port) {
+    var target = location.protocol + '//' + location.hostname + ':' + port + '/companion';
+    $('conn-error').textContent = 'Restarting the agent…';
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries++;
+      fetch(target.replace('/companion', '/api/companion/state'), { cache: 'no-store' }).then(function (r) {
+        if (r.ok) { clearInterval(timer); location.href = target; }
+      }).catch(function () {
+        if (tries > 30) { clearInterval(timer); $('conn-error').textContent = 'The agent did not come back; check the log or restart it from the tray icon.'; }
+      });
+    }, 1000);
+  }
+
+  function saveConfig(force) {
+    $('conn-error').textContent = force ? 'Saving…' : 'Checking the connection…';
+    var body = {
+      server_url: $('c-server').value, agent_token: $('c-token').value, media_dir: $('c-media').value,
+      vmix_url: $('c-vmix').value, listen: $('c-listen').value, advertise_ip: $('c-ip').value,
+      mix_param_offset: parseInt($('c-offset').value, 10) || 0, live_throttle_kbps: parseInt($('c-throttle').value, 10) || 0
+    };
+    fetch('/api/companion/config' + (force ? '?force=1' : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) { waitForRestart(res.data.port); return; }
+        $('conn-error').textContent = res.data.error || 'Failed';
+        if (res.status === 502 && confirm(res.data.error + '\n\nSave anyway?')) saveConfig(true);
+      });
+  }
+  $('btn-save-conn').addEventListener('click', function () { saveConfig(false); });
+  $('btn-restart').addEventListener('click', function () {
+    post('/api/companion/restart').then(function () { waitForRestart(location.port || 80); });
+  });
+  $('log-box').addEventListener('toggle', function () {
+    if (!$('log-box').open) return;
+    fetch('/api/companion/log', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      $('log').textContent = d.log || '(empty)';
+      $('log').scrollTop = $('log').scrollHeight;
+    });
+  });
+
   $('btn-sync').addEventListener('click', function () { post('/api/companion/sync').then(load); });
   $('btn-test').addEventListener('click', function () { post('/api/companion/test-default').then(load); });
   $('btn-pair').addEventListener('click', function () {
@@ -134,6 +205,7 @@
     ws.onclose = function () { setTimeout(connect, 2000); };
   }
 
+  loadConfig();
   load().then(function () {
     connect();
     if (location.hash === '#pair') $('pair').scrollIntoView();
