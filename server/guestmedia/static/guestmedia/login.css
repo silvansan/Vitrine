@@ -57,3 +57,4 @@ code{font-size:12px;padding:1px 5px;border-radius:5px;background:color-mix(in sr
   .panel{justify-content:flex-start;padding-top:32px}
   .mark.small{display:none}
 }
+.foot a{color:inherit;font-weight:600}

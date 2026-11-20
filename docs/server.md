@@ -81,3 +81,9 @@ Push to `main` and wait for the **build** workflow to finish, then Portainer →
 To pin a release instead of following `main`, tag it (`v1.2.0`); the workflow publishes both images with that tag, and you change `:latest` to `:v1.2.0` in the stack.
 
 For local development, build the images yourself: `docker build -t ghcr.io/silvansan/vitrine-server:latest server` and `docker build -t ghcr.io/silvansan/vitrine-nginx:latest deploy/nginx`.
+
+## Documentation on the server (`/docs/`)
+
+Every deployment serves this documentation at `https://<your-vitrine>/docs/`: the README and every page of the repo's `docs/` folder, with a search box (press `/`). It needs no login, so new team members can read the setup before they have an account. The sign-in page and the manage pages link to it.
+
+The GitHub build copies `docs/` and `README.md` into the server image. To add a page, put a new `.md` file in `docs/`; it appears in the sidebar after the built-in pages. If you build the image yourself, copy them first: `cp -r docs server/docs && cp README.md server/docs/`.

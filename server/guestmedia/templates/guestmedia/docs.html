@@ -1,0 +1,109 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ doc.title }} · Vitrine docs</title>
+<link rel="stylesheet" href="{% static 'guestmedia/docs.css' %}">
+</head>
+<body>
+<header class="bar">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false" aria-controls="nav">☰</button>
+  <a class="brand" href="{% url 'docs-home' %}"><span class="dot"></span>Vitrine <span class="muted">docs</span></a>
+  <div class="search">
+    <input type="search" id="q" placeholder="Search the docs…  ( / )" autocomplete="off" aria-label="Search the docs" aria-controls="results">
+    <div class="results" id="results" role="listbox" hidden></div>
+  </div>
+  <nav class="links">
+    {% if user.is_staff %}<a href="{% url 'manage-dashboard' %}">Manage</a>{% else %}<a href="{% url 'login' %}">Sign in</a>{% endif %}
+    <a href="https://github.com/silvansan/Vitrine">GitHub</a>
+  </nav>
+</header>
+<div class="layout">
+  <nav class="side" id="nav" aria-label="Pages">
+    <ul>
+      {% for p in pages %}<li><a href="{% if p.slug == 'overview' %}{% url 'docs-home' %}{% else %}{% url 'docs-page' p.slug %}{% endif %}"{% if p.current %} aria-current="page"{% endif %}>{{ p.title }}</a></li>{% endfor %}
+    </ul>
+  </nav>
+  <main class="doc">
+    <article class="md">{{ body|safe }}</article>
+  </main>
+  {% if doc.toc %}
+  <aside class="toc" aria-label="On this page">
+    <div class="toc-title">On this page</div>
+    <ul>{% for t in doc.toc %}<li class="l{{ t.level }}"><a href="#{{ t.id }}">{{ t.name }}</a></li>{% endfor %}</ul>
+  </aside>
+  {% endif %}
+</div>
+{{ search_index|json_script:"search-index" }}
+<script>
+(function () {
+  var index = JSON.parse(document.getElementById('search-index').textContent);
+  var base = '{% url "docs-home" %}';
+  var q = document.getElementById('q'), box = document.getElementById('results');
+  var active = -1;
+
+  function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  function url(e) { return (e.slug === 'overview' ? base : base + e.slug + '/') + (e.anchor ? '#' + e.anchor : ''); }
+  function snippet(text, words) {
+    var lower = text.toLowerCase(), at = -1;
+    words.forEach(function (w) { var i = lower.indexOf(w); if (i >= 0 && (at < 0 || i < at)) at = i; });
+    var start = Math.max(0, at - 60), s = (start ? '…' : '') + text.slice(start, start + 170) + (text.length > start + 170 ? '…' : '');
+    var out = esc(s);
+    words.forEach(function (w) {
+      if (w.length < 2) return;
+      out = out.replace(new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark>$1</mark>');
+    });
+    return out;
+  }
+  function search() {
+    var words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    active = -1;
+    if (!words.length) { box.hidden = true; box.innerHTML = ''; return; }
+    var hits = index.map(function (e) {
+      var title = e.title.toLowerCase(), text = e.text.toLowerCase(), score = 0;
+      for (var i = 0; i < words.length; i++) {
+        var w = words[i], inTitle = title.indexOf(w) >= 0, inText = text.indexOf(w) >= 0;
+        if (!inTitle && !inText) return null;
+        score += (inTitle ? 10 : 0) + (inText ? 1 + Math.min(4, text.split(w).length - 1) : 0);
+      }
+      return { e: e, score: score };
+    }).filter(Boolean).sort(function (a, b) { return b.score - a.score; }).slice(0, 12);
+    box.innerHTML = hits.length ? hits.map(function (h) {
+      return '<a role="option" href="' + url(h.e) + '"><span class="r-title">' + esc(h.e.title) +
+        (h.e.title !== h.e.page ? ' <span class="r-page">' + esc(h.e.page) + '</span>' : '') + '</span>' +
+        '<span class="r-text">' + snippet(h.e.text, words) + '</span></a>';
+    }).join('') : '<div class="none">Nothing found for “' + esc(q.value) + '”.</div>';
+    box.hidden = false;
+  }
+  function move(step) {
+    var items = box.querySelectorAll('a');
+    if (!items.length) return;
+    active = (active + step + items.length) % items.length;
+    items.forEach(function (a, i) { a.classList.toggle('active', i === active); });
+    items[active].scrollIntoView({ block: 'nearest' });
+  }
+  q.addEventListener('input', search);
+  q.addEventListener('focus', function () { if (q.value) search(); });
+  q.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (e.key === 'Enter') {
+      var a = box.querySelectorAll('a')[active < 0 ? 0 : active];
+      if (a) location.href = a.href;
+    } else if (e.key === 'Escape') { q.value = ''; search(); q.blur(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); }
+  });
+  document.addEventListener('click', function (e) { if (!e.target.closest('.search')) box.hidden = true; });
+
+  var menu = document.querySelector('.menu'), nav = document.getElementById('nav');
+  menu.addEventListener('click', function () {
+    var open = nav.classList.toggle('open');
+    menu.setAttribute('aria-expanded', open);
+  });
+})();
+</script>
+</body>
+</html>

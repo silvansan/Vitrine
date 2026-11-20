@@ -14,6 +14,7 @@
     <a href="{% url 'manage-library' %}">Library</a>
     <a href="{% url 'manage-agents' %}">Agents &amp; tablets</a>
     <a href="/admin/">Admin</a>
+    <a href="{% url 'docs-home' %}">Docs</a>
   </nav>
   <form method="post" action="{% url 'logout' %}" class="logout">{% csrf_token %}<button type="submit" class="btn small">Sign out {{ user.get_username }}</button></form>
 </header>

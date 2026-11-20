@@ -17,7 +17,8 @@ RUN chmod +x /app/entrypoint.sh
 
 ENV MEDIA_ROOT=/data/media \
     STATIC_ROOT=/data/static \
-    VITRINE_KEY_PATH=/data/keys/pairing_ed25519.pem
+    VITRINE_KEY_PATH=/data/keys/pairing_ed25519.pem \
+    VITRINE_DOCS_DIR=/app/docs
 
 EXPOSE 8000
 ENTRYPOINT ["/app/entrypoint.sh"]

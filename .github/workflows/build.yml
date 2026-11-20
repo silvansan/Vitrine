@@ -29,6 +29,8 @@ jobs:
           REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}
           TAG=latest
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG=${GITHUB_REF#refs/tags/}; fi
+          # The knowledge base at /docs/ is the repo's docs/ folder plus the README.
+          rm -rf server/docs && cp -r docs server/docs && cp README.md server/docs/README.md
           docker build -t $REGISTRY/vitrine-server:$TAG server
           docker push $REGISTRY/vitrine-server:$TAG
           docker build -t $REGISTRY/vitrine-nginx:$TAG deploy/nginx

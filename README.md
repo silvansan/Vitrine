@@ -54,6 +54,8 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
 3. **Tablets**: pair each tablet by scanning a QR code from the backend or the tray companion.
 4. **Use it**: create a service, add guests, send them their links. See [docs/usage.md](docs/usage.md).
 
+All of this is also on the server itself at **`/docs/`**: a searchable knowledge base built from this README and the `docs/` folder (press `/` to search). Planned next: [organizations, locations and roaming people](docs/organizations.md).
+
 How it works inside (data model, vMix control, pairing, offline behaviour, APIs): [docs/architecture.md](docs/architecture.md). Moving it into Integr8 later: [docs/integr8.md](docs/integr8.md).
 
 ## Repository

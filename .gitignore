@@ -6,3 +6,4 @@ agent/dist/
 agent/go.local.mod
 agent/go.local.sum
 .DS_Store
+server/docs/

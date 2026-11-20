@@ -281,3 +281,17 @@ class LoginPageTests(TestCase):
         self.assertContains(self.client.get("/manage/"), "Sign out admin")
         self.client.post("/logout/")
         self.assertEqual(self.client.get("/manage/").status_code, 302)
+
+
+class DocsTests(TestCase):
+    def test_docs_render_and_search_index(self):
+        home = self.client.get("/docs/")
+        self.assertContains(home, "Vitrine")
+        self.assertContains(home, 'id="search-index"')
+        page = self.client.get("/docs/agent/")
+        self.assertContains(page, "Bitfocus Companion")
+        self.assertContains(page, 'href="/docs/usage/')  # links between docs are rewritten
+        self.assertContains(self.client.get("/docs/organizations/"), "Organizations, locations and people")
+        self.assertEqual(self.client.get("/docs/nope/").status_code, 404)
+        self.assertEqual(self.client.get("/docs/_media/back-tablet.png").status_code, 200)
+        self.assertEqual(self.client.get("/docs/_media/../../server/manage.py").status_code, 404)

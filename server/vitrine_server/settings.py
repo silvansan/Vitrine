@@ -9,6 +9,9 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Markdown knowledge base shown at /docs/ (the image copies the repo's docs/ here).
+VITRINE_DOCS_DIR = os.environ.get("VITRINE_DOCS_DIR", "")
+
 
 def env_bool(name, default=False):
     value = os.environ.get(name)
