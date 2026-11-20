@@ -1,0 +1,150 @@
+/* Vitrine look for the Django admin: same palette as /manage/ and the sign-in page. */
+:root, html[data-theme="light"] {
+  --primary: #15181E;
+  --secondary: #15181E;
+  --accent: #ECEEF2;
+  --primary-fg: #fff;
+  --body-fg: #15181E;
+  --body-bg: #F3F4F7;
+  --body-quiet-color: #565D69;
+  --body-medium-color: #3A404A;
+  --body-loud-color: #000;
+  --header-color: #fff;
+  --header-branding-color: #fff;
+  --header-bg: #0F1115;
+  --header-link-color: #fff;
+  --breadcrumbs-fg: #565D69;
+  --breadcrumbs-link-fg: #3557C7;
+  --breadcrumbs-bg: #fff;
+  --link-fg: #3557C7;
+  --link-hover-color: #22398A;
+  --link-selected-fg: #15181E;
+  --hairline-color: #E6E8EC;
+  --border-color: #DADDE3;
+  --darkened-bg: #F8F9FB;
+  --selected-bg: #EEF0F4;
+  --selected-row: #FFF6D6;
+  --button-fg: #fff;
+  --button-bg: #15181E;
+  --button-hover-bg: #2C313B;
+  --default-button-bg: #15181E;
+  --default-button-hover-bg: #2C313B;
+  --close-button-bg: #6B7280;
+  --close-button-hover-bg: #4B5563;
+  --delete-button-bg: #B4232A;
+  --delete-button-hover-bg: #941C22;
+  --object-tools-bg: #15181E;
+  --object-tools-hover-bg: #2C313B;
+  --vt-surface: #fff;
+  --vt-live: #D92D20;
+  --font-family-primary: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #ECEEF2;
+    --primary-fg: #0F1115;
+    --body-fg: #E6E8EC;
+    --body-bg: #0F1115;
+    --body-quiet-color: #9AA1AD;
+    --body-medium-color: #C9CED8;
+    --body-loud-color: #fff;
+    --breadcrumbs-fg: #9AA1AD;
+    --breadcrumbs-link-fg: #8EA8FF;
+    --breadcrumbs-bg: #171A20;
+    --link-fg: #8EA8FF;
+    --link-hover-color: #B6C6FF;
+    --link-selected-fg: #fff;
+    --hairline-color: #232832;
+    --border-color: #2A2F38;
+    --darkened-bg: #14171C;
+    --selected-bg: #1E222A;
+    --selected-row: #2A2410;
+    --button-fg: #0F1115;
+    --button-bg: #ECEEF2;
+    --button-hover-bg: #fff;
+    --default-button-bg: #ECEEF2;
+    --default-button-hover-bg: #fff;
+    --object-tools-fg: #0F1115;
+    --object-tools-bg: #ECEEF2;
+    --object-tools-hover-bg: #fff;
+    --vt-surface: #171A20;
+  }
+}
+html[data-theme="dark"] {
+  --primary: #ECEEF2;
+  --primary-fg: #0F1115;
+  --body-fg: #E6E8EC;
+  --body-bg: #0F1115;
+  --body-quiet-color: #9AA1AD;
+  --body-medium-color: #C9CED8;
+  --body-loud-color: #fff;
+  --breadcrumbs-fg: #9AA1AD;
+  --breadcrumbs-link-fg: #8EA8FF;
+  --breadcrumbs-bg: #171A20;
+  --link-fg: #8EA8FF;
+  --link-hover-color: #B6C6FF;
+  --link-selected-fg: #fff;
+  --hairline-color: #232832;
+  --border-color: #2A2F38;
+  --darkened-bg: #14171C;
+  --selected-bg: #1E222A;
+  --selected-row: #2A2410;
+  --button-fg: #0F1115;
+  --button-bg: #ECEEF2;
+  --button-hover-bg: #fff;
+  --default-button-bg: #ECEEF2;
+  --default-button-hover-bg: #fff;
+  --object-tools-fg: #0F1115;
+  --object-tools-bg: #ECEEF2;
+  --object-tools-hover-bg: #fff;
+  --vt-surface: #171A20;
+}
+
+body { font-size: 15px; }
+#header { height: auto; min-height: 60px; padding: 10px 28px; border-bottom: 1px solid #000; }
+#site-name a.vt-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.02em; color: #fff; }
+.vt-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--vt-live); box-shadow: 0 0 0 4px rgba(217,45,32,.25); }
+.vt-sub { font-weight: 500; color: #9AA1AD; }
+#user-tools { font-size: 13px; text-transform: none; letter-spacing: 0; display: flex; align-items: center; gap: 14px; }
+#user-tools a, #logout-form button { border-bottom: 0; text-decoration: none; color: #C9CED8; font-weight: 600; }
+#user-tools a:hover, #logout-form button:hover { color: #fff; text-decoration: none; }
+#user-tools a.vt-back { color: #fff; padding: 6px 12px; border: 1px solid #353A45; border-radius: 8px; }
+#user-tools a.vt-back:hover { background: #1E222A; }
+#logout-form button { font-size: 13px; padding: 6px 12px; border: 1px solid #353A45; border-radius: 8px; }
+#user-tools .theme-toggle svg { fill: #C9CED8; }
+
+div.breadcrumbs { padding: 12px 28px; border-bottom: 1px solid var(--hairline-color); font-size: 13px; }
+#content { padding: 24px 28px; }
+#content h1 { font-weight: 700; letter-spacing: -.02em; font-size: 26px; }
+
+/* Dashboard and changelists as cards */
+.module, #changelist .changelist-form-container, .inline-group { background: var(--vt-surface); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+.module h2, .module caption, .inline-group h2 { background: transparent; color: var(--body-quiet-color); font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 14px 16px 8px; }
+.module caption a { color: var(--body-quiet-color); }
+#content-main .module table { width: 100%; }
+.module th, .module td { padding: 10px 16px; }
+.dashboard .module table th { font-weight: 600; font-size: 14px; }
+#recent-actions-module { border-radius: 12px; }
+thead th, tfoot td { background: var(--darkened-bg); color: var(--body-quiet-color); }
+tr:nth-child(odd), .row-form-errors { background: transparent; }
+tr:hover td, tr:hover th { background: var(--darkened-bg); }
+
+/* Buttons */
+.button, input[type=submit], input[type=button], .submit-row input, a.button { border-radius: 8px; padding: 9px 14px; font-weight: 600; }
+.submit-row { background: var(--vt-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; }
+.object-tools a:link, .object-tools a:visited { border-radius: 999px; padding: 6px 14px; font-weight: 600; }
+input[type=text], input[type=password], input[type=email], input[type=url], input[type=number], input[type=tel], textarea, select, .vTextField {
+  border-radius: 8px; border: 1px solid var(--border-color); padding: 8px 10px; background: var(--vt-surface); color: var(--body-fg);
+}
+fieldset.module { padding: 0; }
+.form-row { padding: 12px 16px; }
+#changelist-filter { border-radius: 12px; border: 1px solid var(--border-color); background: var(--vt-surface); }
+#changelist-filter h2 { background: transparent; color: var(--body-fg); }
+#toolbar { background: transparent; border: 0; padding: 0 0 12px; }
+#nav-sidebar { background: var(--body-bg); border-right: 1px solid var(--hairline-color); }
+#nav-sidebar .module { border: 0; background: transparent; }
+.toggle-nav-sidebar { background: var(--body-bg); border-color: var(--hairline-color); }
+ul.messagelist li { border-radius: 10px; margin: 0 0 8px; }
+.module caption a.section:link, .module caption a.section:visited, #nav-sidebar .module caption a.section:link, #nav-sidebar .module caption a.section:visited { color: var(--body-quiet-color); }
+#logout-form button { text-transform: none; letter-spacing: 0; background: transparent; cursor: pointer; }
+#user-tools .vt-who { color: #9AA1AD; font-weight: 500; }

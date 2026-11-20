@@ -9,7 +9,8 @@ from guestmedia import docs_views
 admin.site.login_template = "guestmedia/login.html"
 admin.site.site_header = "Vitrine administration"
 admin.site.site_title = "Vitrine"
-admin.site.index_title = "Data"
+admin.site.index_title = "Raw data"
+admin.site.site_url = "/manage/"
 
 urlpatterns = [
     path("", RedirectView.as_view(url="/manage/", permanent=False)),

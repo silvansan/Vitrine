@@ -43,7 +43,7 @@ curl http://100.101.102.103:8080/api/agent/manifest
 
 ## 4. First login
 
-Open `https://vitrine.example.org/manage/` (or `http://<tailscale-ip>:8080/manage/`) and sign in with the superuser (the Vitrine sign-in page at `/login/` is also used by `/admin/`; **Sign out** is at the top right of `/manage/`). Then:
+Open `https://vitrine.example.org/manage/` (or `http://<tailscale-ip>:8080/manage/`) and sign in with the superuser (the Vitrine sign-in page at `/login/` is also used by `/admin/`; **Sign out** is at the top right of `/manage/` and of `/admin/`). `/admin/` is styled like the rest of Vitrine (light and dark) and has **← Back to Vitrine**; it is only for raw data, day-to-day work happens in `/manage/`. Then:
 
 1. **Locations & tablets → Add a location** (e.g. "Main hall"), then **Create agent token** for its vMix PC. Copy the token (shown once) into the agent's settings page. An organization "Main" is created for you on first login.
 2. **Events → New event** at that location, then add people and send them their links or QR codes.

@@ -1,0 +1,30 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | Vitrine admin{% endblock %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'guestmedia/admin.css' %}">{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}" class="vt-brand"><span class="vt-dot"></span>Vitrine <span class="vt-sub">admin</span></a>
+</div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block welcome-msg %}<span class="vt-who">Signed in as <strong>{% firstof user.get_short_name user.get_username %}</strong></span>{% endblock %}
+
+{% block userlinks %}
+  <a href="{% url 'manage-dashboard' %}" class="vt-back">← Back to Vitrine</a>
+  <a href="{% url 'docs-home' %}">Docs</a>
+  {% if user.has_usable_password %}<a href="{% url 'admin:password_change' %}">Change password</a>{% endif %}
+  <form id="logout-form" method="post" action="{% url 'admin:logout' %}">
+    {% csrf_token %}
+    <button type="submit">Sign out</button>
+  </form>
+  {% include "admin/color_theme_toggle.html" %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
