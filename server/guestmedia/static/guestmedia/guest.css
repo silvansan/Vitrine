@@ -66,3 +66,26 @@ button,input{font:inherit}
 .primary:disabled{background:#E3E6EB;color:#6B7280;cursor:default}
 .extras audio.preview{width:100%}
 .extras video.preview{width:100%;border-radius:10px;background:#000;max-height:260px}
+/* "How the pulpit tablet works" page */
+.head a{color:var(--accent);text-decoration:none;font-weight:600}
+.help-link{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:14px;font-weight:600;color:var(--accent);text-decoration:none}
+.help-toc{display:flex;gap:8px;overflow-x:auto;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
+.help-toc a{flex-shrink:0;padding:7px 12px;border-radius:999px;border:1px solid var(--border);color:var(--text);font-size:13px;font-weight:600;text-decoration:none;background:var(--bg)}
+.help-body{font-size:15px;line-height:1.55}
+.help-body section{padding-top:8px;scroll-margin-top:64px}
+.help-body h2{font-size:18px;margin:22px 0 6px}
+.help-body h3{font-size:15px;margin:14px 0 4px}
+.help-body p{margin:0 0 10px}
+.help-body ul,.help-body ol{margin:0 0 10px;padding-left:22px}
+.help-body li{margin-bottom:6px}
+.help-body a{color:var(--accent)}
+.help-body figure{margin:12px 0 14px}
+.help-body figure img{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--border);background:#fff}
+.help-body figcaption{font-size:12px;color:var(--subtle);margin-top:6px}
+.help-body .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#6B7280;margin-right:6px;vertical-align:1px}
+.help-body .dot.pend{background:#C98A00}
+.help-body .dot.live{background:#D92D20}
+.help-body .dot.ok{background:#1E9E4A}
+.foot a.primary{display:flex;align-items:center;justify-content:center;text-decoration:none}
+.help .foot{position:static}
+.help-body figure.narrow{max-width:280px}

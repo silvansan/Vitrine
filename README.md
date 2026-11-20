@@ -43,6 +43,7 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
 - **Agent** on the vMix PC: downloads only what the active service needs, checks every file, slows down downloads while something is live, and keeps working when the internet is down.
 - **Back tablet** (`/screen`, role back): all guests, 6 tiles per page, tap = live on your mix, tap again = default input. Sending/live states confirmed by vMix, video progress, From start, ±10 s, pause, markers, Resume where you stopped, a cue panel with filmstrip to pick a start point off-air, and seamless jumps (A/B crossfade). Sends a guest's set to the pulpit and sets what the pulpit shows.
 - **Pulpit tablet** (role pulpit): only the guest's tiles and pages, with the options you allow from the back. Dark or light theme.
+- **Pulpit tablet tips for guests**: the guest link has an illustrated "how the pulpit tablet works" page (pages, what's live, vMix status, photos, videos and songs, Resume, markers).
 - **Bitfocus Companion module** ([companion-module-vitrine](https://github.com/silvansan/companion-module-vitrine)): guest and file buttons, Clear screen, transport, markers, and a `live_kind` variable to drive lights and mics with triggers.
 - **Tray companion** on the vMix PC: connection (server address, token, folders), restart/start/stop of the agent, projector mix, default input by vMix name (pick again when the banner changes), transition, video-end behaviour, tablets and pairing, the log.
 

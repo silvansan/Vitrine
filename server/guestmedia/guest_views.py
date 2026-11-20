@@ -72,6 +72,13 @@ def page(request, token):
 
 
 @require_GET
+def tablet_help(request, token):
+    """How the pulpit tablet works, with screenshots, so guests can prepare."""
+    guest = load_guest(token)
+    return render(request, "guestmedia/tablet_help.html", {"guest": guest, "service": guest.service})
+
+
+@require_GET
 def api_state(request, token):
     guest = load_guest(token)
     media_set = guest.get_set()

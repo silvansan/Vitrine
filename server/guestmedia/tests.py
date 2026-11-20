@@ -188,7 +188,7 @@ class FlowTests(TestCase):
         self.client.login(username="admin", password="pw")
         asset = self.tus_upload(self.maria, "IMG_2.jpg", jpeg_bytes())
         for url in ["/manage/", f"/manage/service/{self.service.pk}/", "/manage/library/", "/manage/library/?trash=1",
-                    f"/manage/asset/{asset.pk}/", "/manage/agents/", f"/g/{self.maria.token}/"]:
+                    f"/manage/asset/{asset.pk}/", "/manage/agents/", f"/g/{self.maria.token}/", f"/g/{self.maria.token}/tablet/"]:
             self.assertEqual(self.client.get(url).status_code, 200, url)
         response = self.client.post("/manage/agents/", {"action": "pair", "agent_id": self.agent.pk, "role": "back", "name": "Back"})
         self.assertContains(response, "/pair?t=s1.")

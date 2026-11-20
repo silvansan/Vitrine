@@ -8,6 +8,7 @@
    - **Upload**: photos and videos from the gallery. Uploads resume after Wi-Fi dropouts while the page stays open.
    - **Library**: pick files others uploaded ("This service", "Earlier services", "My uploads") and **Add to my set**.
    - **My set**: order with the arrows; **Options** to remove a file, mark own uploads private, and add markers to videos (name + time, e.g. "Baptism · 1:12"). For a video, **Options** also shows a player: pause where you want a start point and press **Add marker here**. Markers show up as jump buttons on the tablets and in the cue panel.
+   - **Tips: learn how to use the tablet at the pulpit** (link under the greeting, `/g/<token>/tablet/`): a short illustrated guide to the pulpit tablet: the name at the top, changing pages, how to tell what is live, the vMix indicator, tapping a photo, video and song controls, Resume / From start, and markers. Worth sending to speakers who haven't used it before.
 
 Tip: videos that are already H.264 1920×1080 at your project frame rate (`VITRINE_VIDEO_FPS`) are ready in seconds, because they are copied instead of converted.
 4. **Waiting for approval** on the service page: approve or reject. Rejected files never reach the vMix PC. Converted files appear on the tablets as soon as the agent has downloaded them.

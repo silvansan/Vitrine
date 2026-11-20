@@ -18,6 +18,7 @@
     <div class="sub">{{ service.name }} · {{ service.date|date:"d M" }}</div>
     <h1>Hi {{ guest.name }}</h1>
     <p>Pick the pictures and videos for your part.</p>
+    <a class="help-link" href="{% url 'guest-tablet-help' guest.token %}">Tips: learn how to use the tablet at the pulpit →</a>
   </header>
 
   <nav class="tabs-wrap" aria-label="Sections">

@@ -1,0 +1,126 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>The pulpit tablet · {{ service.name }}</title>
+<link rel="stylesheet" href="{% static 'guestmedia/guest.css' %}">
+</head>
+<body>
+<div class="app help">
+  <header class="head">
+    <div class="sub"><a href="{% url 'guest-page' guest.token %}">← Back to my set</a></div>
+    <h1>How the pulpit tablet works</h1>
+    <p>A tablet on the pulpit shows your set. You tap a picture, video or song and it appears on the screen. Two minutes of reading, and nothing will surprise you on the day.</p>
+  </header>
+
+  <nav class="help-toc" aria-label="On this page">
+    <a href="#name">Your name</a>
+    <a href="#pages">Changing pages</a>
+    <a href="#status">Is it live?</a>
+    <a href="#vmix">Is vMix connected?</a>
+    <a href="#photo">Showing a photo</a>
+    <a href="#video">Videos and songs</a>
+    <a href="#restart">Restart or resume</a>
+    <a href="#markers">Markers (cue points)</a>
+  </nav>
+
+  <main class="panel help-body">
+    <figure>
+      <a href="{% static 'guestmedia/help/tablet.webp' %}"><img src="{% static 'guestmedia/help/tablet.webp' %}" alt="The pulpit tablet showing a guest's set: six numbered tiles, page arrows at the bottom left and a Clear screen button at the bottom right."></a>
+      <figcaption>The pulpit tablet (example pictures).</figcaption>
+    </figure>
+
+    <section id="name">
+      <h2>1. Your name at the top</h2>
+      <p>The name in the top-left corner is the set the tablet is showing. The production team sends your set to the pulpit before you speak.</p>
+      <p>If you see someone else's name, don't tap anything: give a sign to the production desk and they will switch it to yours.</p>
+    </section>
+
+    <section id="pages">
+      <h2>2. Changing pages</h2>
+      <p>The tablet shows six files at a time, numbered in the order of <a href="{% url 'guest-page' guest.token %}">your set</a>. If you have more than six, use the arrows in the bottom-left corner; <strong>1 / 2</strong> means page one of two.</p>
+      <figure><a href="{% static 'guestmedia/help/pages.webp' %}"><img src="{% static 'guestmedia/help/pages.webp' %}" alt="Page arrows with the text 1 / 1 and a Clear screen button."></a></figure>
+      <p>Changing pages never changes what is on the screen. Files picked from someone else's uploads show a small <em>from …</em> label.</p>
+    </section>
+
+    <section id="status">
+      <h2>3. Is it live?</h2>
+      <p>The top-right corner always tells you what the room sees:</p>
+      <ul>
+        <li><span class="dot"></span><strong>Screen shows the banner</strong>: nothing of yours is on screen.</li>
+        <li><span class="dot pend"></span><strong>Sending to the screen…</strong>: wait a moment (videos can take a few seconds).</li>
+        <li><span class="dot live"></span><strong>A picture / A video is on screen</strong> or <strong>Audio is playing</strong>: it's live.</li>
+      </ul>
+      <figure><a href="{% static 'guestmedia/help/top.webp' %}"><img src="{% static 'guestmedia/help/top.webp' %}" alt="Top of the tablet: the name Maria, a green vMix pill and the red text A video is on screen."></a></figure>
+      <p>The tile that is live has a red frame and an <strong>ON SCREEN</strong> label.</p>
+    </section>
+
+    <section id="vmix">
+      <h2>4. Is vMix connected?</h2>
+      <p>vMix is the program that puts your files on the screen. When the team turns the indicator on, you see a small <strong>vMix</strong> pill next to the status: a <span class="dot ok"></span>green dot means everything works, <strong>vMix offline</strong> with a red dot means taps won't reach the screen. Tell the desk.</p>
+      <p>If the tablet shows <strong>Reconnecting to the vMix PC…</strong>, it lost the Wi-Fi for a moment. The desk can always show your files from their own tablet, so just carry on speaking.</p>
+    </section>
+
+    <section id="photo">
+      <h2>5. When you tap a photo</h2>
+      <ol>
+        <li>Tap once. The tile turns orange: <strong>SENDING…</strong></li>
+        <li>A moment later it turns red: <strong>ON SCREEN</strong>. The room sees it.</li>
+        <li>Tap the same photo again, or <strong>Clear screen</strong>, to go back to the banner. Tapping a different photo replaces it directly.</li>
+      </ol>
+      <figure><a href="{% static 'guestmedia/help/tap.webp' %}"><img src="{% static 'guestmedia/help/tap.webp' %}" alt="The same tile twice: first orange with SENDING…, then red with ON SCREEN."></a></figure>
+      <p>Tap once and wait for the colour: a second tap, even while it says SENDING…, takes it off again. A tile that says <strong>Downloading…</strong> is still being copied to the vMix PC and can't be shown yet.</p>
+    </section>
+
+    <section id="video">
+      <h2>6. Videos and songs</h2>
+      <p>Video tiles show their length (<strong>Video · 0:24</strong>), songs say <strong>Audio</strong>. Tap to start. While it plays, a bar appears above the page arrows:</p>
+      <figure><a href="{% static 'guestmedia/help/video.webp' %}"><img src="{% static 'guestmedia/help/video.webp' %}" alt="Playback bar: From start, minus 10 seconds, Pause, plus 10 seconds, Marker, a marker button Village 0:10, and a progress bar with 0:16 left."></a></figure>
+      <ul>
+        <li><strong>Pause</strong> / <strong>Play</strong>: the picture stays on screen while paused.</li>
+        <li><strong>−10s</strong> / <strong>+10s</strong>: skip back or forward.</li>
+        <li>The time on the right counts down (<strong>0:16 left</strong>). At the end, the screen normally goes back to the banner by itself.</li>
+        <li>Songs usually play with the banner staying on screen; the tile says <strong>PLAYING</strong> and tapping it again stops the sound.</li>
+      </ul>
+    </section>
+
+    <section id="restart">
+      <h2>7. Restart a video or play from the start</h2>
+      <ul>
+        <li><strong>From start</strong> in the playback bar jumps back to 0:00 while it is on screen.</li>
+        <li>If you stopped a video halfway (tap again or Clear screen), its tile shows <strong>Resume 1:23</strong>: tap that to continue where you left off. Tapping the picture itself starts again from the beginning.</li>
+      </ul>
+      <figure class="narrow"><a href="{% static 'guestmedia/help/resume.webp' %}"><img src="{% static 'guestmedia/help/resume.webp' %}" alt="A video tile with a Resume 0:04 button and a … button."></a></figure>
+    </section>
+
+    <section id="markers">
+      <h2>8. Markers: start exactly where you want</h2>
+      <p>A marker is a named point in a video or song, like <em>Baptism · 1:12</em>. Prepare them before the service so you can jump there live.</p>
+      <h3>Add markers now, on this page</h3>
+      <ol>
+        <li>Go to <a href="{% url 'guest-page' guest.token %}">My set</a> and tap <strong>Options</strong> under a video or song.</li>
+        <li>Play it to the moment you want, then tap <strong>Add marker here</strong>, or type a name and a time (e.g. <em>Baptism</em>, <em>1:12</em>) and tap <strong>Add</strong>.</li>
+      </ol>
+      <h3>Use them on the tablet</h3>
+      <ul>
+        <li>While the video plays, the marker buttons sit in the playback bar (<strong>Village · 0:10</strong> in the picture above): tap one to jump there.</li>
+        <li>To <strong>start</strong> at a marker, tap the <strong>…</strong> button on the tile first. The <strong>Cue video</strong> window opens: the room doesn't see anything yet. Pick a marker (or slide along the pictures), then tap <strong>Start here</strong>.</li>
+        <li>In the cue window and in the playback bar, <strong>Marker</strong> / <strong>Add marker here</strong> saves the current point for next time.</li>
+      </ul>
+      <figure><a href="{% static 'guestmedia/help/cue.webp' %}"><img src="{% static 'guestmedia/help/cue.webp' %}" alt="The Cue video window: a preview marked Off-air, a timeline with small pictures, skip buttons, the marker Village 0:10, Add marker here, Cancel and Start here."></a></figure>
+    </section>
+
+    <section>
+      <h2>If something goes wrong</h2>
+      <p><strong>Clear screen</strong> always brings the banner back. The production desk sees the same thing you see and can take over at any moment, so you can't break anything.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <a class="primary" href="{% url 'guest-page' guest.token %}">Back to my set</a>
+  </footer>
+</div>
+</body>
+</html>
