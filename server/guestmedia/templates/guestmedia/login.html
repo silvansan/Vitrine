@@ -1,0 +1,70 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sign in · Vitrine</title>
+<link rel="stylesheet" href="{% static 'guestmedia/login.css' %}">
+</head>
+<body>
+<div class="login">
+  <aside class="stage" aria-hidden="true">
+    <div class="wall">
+      <span class="t t1"></span><span class="t t2"></span><span class="t t3"></span>
+      <span class="t t4"></span><span class="t t5 live"><b>ON SCREEN</b></span><span class="t t6"></span>
+    </div>
+    <div class="stage-text">
+      <div class="mark">Vitrine</div>
+      <p>Guest photos, videos and songs, from their phone to your vMix mix.</p>
+    </div>
+  </aside>
+
+  <main class="panel">
+    <form method="post" class="card" novalidate>
+      {% csrf_token %}
+      <div class="mark small">Vitrine</div>
+      <h1>Sign in</h1>
+      <p class="sub">Production team only. Guests don't need an account: they use their link.</p>
+
+      {% if form.non_field_errors %}
+        <div class="alert" role="alert">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>
+      {% elif form.errors %}
+        <div class="alert" role="alert">Please check the fields below.</div>
+      {% endif %}
+      {% if user.is_authenticated and next and not form.errors %}
+        <div class="alert soft">You're signed in as {{ user.get_username }}, but this page needs another account.</div>
+      {% endif %}
+
+      <label for="id_username">Username</label>
+      <input type="text" name="username" id="id_username" autocomplete="username" autocapitalize="none" autofocus required
+             value="{{ form.username.value|default:'' }}">
+
+      <label for="id_password">Password</label>
+      <div class="pw">
+        <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+        <button type="button" class="show" aria-label="Show password" aria-pressed="false">Show</button>
+      </div>
+
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="go">Sign in</button>
+    </form>
+    <p class="foot">Forgot the password? Ask your admin, or run <code>manage.py changepassword</code> on the server.</p>
+  </main>
+</div>
+<script>
+document.querySelector('.show').addEventListener('click', function () {
+  var input = document.getElementById('id_password');
+  var show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  this.textContent = show ? 'Hide' : 'Show';
+  this.setAttribute('aria-pressed', show);
+  this.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  input.focus();
+});
+document.querySelector('form').addEventListener('submit', function () {
+  var b = this.querySelector('.go'); b.disabled = true; b.textContent = 'Signing in…';
+});
+</script>
+</body>
+</html>

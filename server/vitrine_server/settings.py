@@ -148,7 +148,8 @@ UPLOAD_TMP_ROOT = Path(os.environ.get("UPLOAD_TMP_ROOT", MEDIA_ROOT / "incoming"
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 64 * 1024 * 1024
 
-LOGIN_URL = "/admin/login/"
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/manage/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGGING = {

@@ -1,0 +1,59 @@
+:root{--bg:#F3F4F7;--surface:#fff;--border:#DADDE3;--text:#15181E;--muted:#565D69;--accent:#15181E;--live:#D92D20;--focus:#3557C7;
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0F1115;--surface:#171A20;--border:#2A2F38;--text:#ECEEF2;--muted:#9AA1AD;--accent:#ECEEF2;--focus:#7C9BFF;color-scheme:dark}
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-size:15px;line-height:1.45}
+.login{min-height:100%;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+
+/* left: a tablet-like wall of tiles */
+.stage{position:relative;overflow:hidden;background:#0B0D11;color:#fff;display:flex;flex-direction:column;justify-content:flex-end;padding:48px}
+.wall{position:absolute;inset:-6% -10% 30% -6%;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;transform:rotate(-6deg);opacity:.9}
+.t{border-radius:14px;position:relative;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.t1{background:linear-gradient(135deg,#2F6B4F,#7FB38F)}
+.t2{background:linear-gradient(160deg,#1F3B73,#5B86C9)}
+.t3{background:linear-gradient(140deg,#B4531F,#E8A15B)}
+.t.live{outline:4px solid var(--live);outline-offset:-4px}
+.t4{background:linear-gradient(120deg,#3B2E5A,#8C6CC4)}
+.t5{background:linear-gradient(150deg,#1D5C63,#5FB3B3);z-index:1}
+.t6{background:linear-gradient(130deg,#5A4A2E,#C7A86B)}
+.t.live b{position:absolute;top:12px;right:12px;background:var(--live);color:#fff;font-size:11px;letter-spacing:.06em;padding:4px 8px;border-radius:999px}
+.stage::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,13,17,0) 45%,rgba(11,13,17,.92) 78%)}
+.stage-text{position:relative;z-index:1;max-width:420px}
+.stage-text p{margin:10px 0 0;font-size:17px;color:#C9CED8}
+.mark{font-weight:800;font-size:40px;letter-spacing:-.03em;display:flex;align-items:center;gap:10px}
+.mark::before{content:"";width:14px;height:14px;border-radius:50%;background:var(--live);box-shadow:0 0 0 5px rgba(217,45,32,.25)}
+.mark.small{font-size:20px;margin-bottom:28px}
+.mark.small::before{width:10px;height:10px;box-shadow:0 0 0 4px rgba(217,45,32,.2)}
+
+/* right: the form */
+.panel{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px}
+.card{width:100%;max-width:380px}
+h1{font-size:28px;letter-spacing:-.02em;margin:0 0 6px}
+.sub{margin:0 0 24px;color:var(--muted)}
+label{display:block;font-weight:600;font-size:14px;margin:16px 0 6px}
+input[type=text],input[type=password]{width:100%;height:46px;padding:0 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font:inherit}
+input:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 25%,transparent)}
+.pw{position:relative}
+.pw input{padding-right:70px}
+.show{position:absolute;right:6px;top:6px;height:34px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.show:hover{background:color-mix(in srgb,var(--text) 8%,transparent);color:var(--text)}
+.go{width:100%;height:48px;margin-top:26px;border:0;border-radius:10px;background:var(--accent);color:var(--bg);font:inherit;font-weight:700;font-size:16px;cursor:pointer}
+.go:hover{opacity:.9}.go:disabled{opacity:.6;cursor:default}
+.go:focus-visible,.show:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.alert{margin:0 0 8px;padding:11px 14px;border-radius:10px;background:color-mix(in srgb,var(--live) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--live) 40%,transparent);color:var(--text);font-size:14px}
+.alert.soft{background:var(--surface);border-color:var(--border);color:var(--muted)}
+.foot{max-width:380px;width:100%;margin:28px 0 0;font-size:13px;color:var(--muted)}
+code{font-size:12px;padding:1px 5px;border-radius:5px;background:color-mix(in srgb,var(--text) 8%,transparent)}
+
+@media (max-width:860px){
+  .login{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .stage{min-height:200px;padding:28px 24px}
+  .wall{inset:-60% -10% 0 -10%;gap:10px}
+  .mark{font-size:30px}
+  .stage-text p{font-size:15px}
+  .panel{justify-content:flex-start;padding-top:32px}
+  .mark.small{display:none}
+}

@@ -266,3 +266,18 @@ class AudioTests(TestCase):
         self.assertTrue(str(result["processed"]).endswith(".mp4"))
         self.assertGreater(result["duration_ms"], 2500)
         self.assertTrue(result["thumb"].exists())
+
+
+class LoginPageTests(TestCase):
+    def test_login_pages_are_vitrine_styled(self):
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        for url in ["/login/", "/admin/login/"]:
+            self.assertContains(self.client.get(url), "login.css")
+        self.assertRedirects(self.client.get("/manage/"), "/admin/login/?next=/manage/", fetch_redirect_response=False)
+        response = self.client.post("/admin/login/?next=/manage/", {"username": "admin", "password": "nope", "next": "/manage/"})
+        self.assertContains(response, 'class="alert"')
+        response = self.client.post("/login/", {"username": "admin", "password": "pw", "next": "/manage/"})
+        self.assertRedirects(response, "/manage/", fetch_redirect_response=False)
+        self.assertContains(self.client.get("/manage/"), "Sign out admin")
+        self.client.post("/logout/")
+        self.assertEqual(self.client.get("/manage/").status_code, 302)

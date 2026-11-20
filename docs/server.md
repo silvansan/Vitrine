@@ -29,7 +29,7 @@ Add a proxy host:
 - SSL: request a Let's Encrypt certificate, force SSL
 - Advanced → custom config: `client_max_body_size 64m;` (uploads arrive in 8 MB pieces)
 
-Only `/g/…` (guest links) needs to be public. If you prefer, add NPM access rules so `/manage/` and `/admin/` are only reachable from your own addresses; the agent uses the Tailscale port, not this address.
+Only `/g/…` (guest links) needs to be public. If you prefer, add NPM access rules so `/login/`, `/manage/` and `/admin/` are only reachable from your own addresses; the agent uses the Tailscale port, not this address.
 
 ## 3. Agent access over Tailscale
 
@@ -43,7 +43,7 @@ curl http://100.101.102.103:8080/api/agent/manifest
 
 ## 4. First login
 
-Open `https://vitrine.example.org/manage/` (or `http://<tailscale-ip>:8080/manage/`) and log in with the superuser. Then:
+Open `https://vitrine.example.org/manage/` (or `http://<tailscale-ip>:8080/manage/`) and sign in with the superuser (the Vitrine sign-in page at `/login/` is also used by `/admin/`; **Sign out** is at the top right of `/manage/`). Then:
 
 1. **Agents & tablets → Create agent token** for the vMix PC. Copy the token (shown once) into the agent's config.
 2. **Services → New service**, then add guests and send them their links or QR codes.

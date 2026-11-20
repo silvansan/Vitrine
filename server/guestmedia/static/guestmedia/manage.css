@@ -50,3 +50,4 @@ code.link{display:block;word-break:break-all;background:#F3F4F7;padding:6px 8px;
 .preview{width:100%;border-radius:8px;background:#000}
 .log{white-space:pre-wrap;font-size:12px;background:#F3F4F7;padding:8px;border-radius:6px;max-height:240px;overflow:auto}
 .markers{padding-left:18px}
+.top .logout{margin-left:auto}
