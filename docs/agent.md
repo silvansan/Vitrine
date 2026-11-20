@@ -58,6 +58,7 @@ The companion is a page at `http://127.0.0.1:8090/companion`; the back tablet ca
 - **Projector output**: the mix the tablets switch.
 - **Default input**: chosen by number and name from vMix's live input list. The agent stores vMix's input key, so the right input is found even if numbers shift; if the banner changes, pick the new one here.
 - **Transition** and duration for taking media, and separately the **transition back to the default** (choose **AlphaFade** when the default input has transparency and Fade looks like a cut). Only transitions that can target the projector mix are listed; vMix's Transition 1–4 buttons and stingers act on the main output, so they aren't offered.
+- **Audio files: keep the default input on the projector** (on by default): only the sound plays, through a third List input (`GM_AUDIO`, created if missing; make sure its audio goes to your Master bus in vMix). Untick it to show the audio's cover/title card on the projector like a video.
 - **Go back to default when a video ends**, **jump mode** (crossfade between GM_A/GM_B, or jump in place), input names.
 - **Tablets**: the paired list, unpair, and **Show pairing QR** (signed by the server when online, by the agent itself when the server is unreachable).
 

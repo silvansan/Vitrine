@@ -36,6 +36,7 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
 
 ## What it does
 
+- **Photos, videos and audio** (MP3, M4A, WAV…). Audio plays with the default input staying on the projector, or shows its cover/title card, as you choose.
 - **Guest link** per guest and service, with a QR code. Guests upload (resumable, so venue Wi-Fi dropouts don't matter), pick files from the shared library, put them in order, and add named start points (markers) to videos.
 - **Approval queue** before anything can be shown, plus a library with filters ("not used for 90 days"), bulk delete, a 30-day trash and private files.
 - **Conversion** on the server: photos to 1920×1080 with EXIF rotation and a blurred fill for portrait shots; videos to H.264 1080p at your project's frame rate, AAC 48 kHz; thumbnails and a filmstrip for cueing.

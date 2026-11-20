@@ -74,6 +74,8 @@
     $('seek_mode').value = s.seek_mode;
     $('input_a').value = s.input_a;
     $('input_b').value = s.input_b;
+    $('input_audio').value = s.input_audio || 'GM_AUDIO';
+    $('audio_keep_default').checked = !!s.audio_keep_default;
 
     var screens = data.screens || [];
     $('tablets').innerHTML = screens.length ? screens.map(function (sc) {

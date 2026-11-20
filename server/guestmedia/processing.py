@@ -6,9 +6,9 @@ Videos: anything ffmpeg reads -> H.264 High 1080p, constant frame rate, AAC
 48 kHz stereo, faststart; same blurred fill for vertical video. Videos that are
 already H.264 1920x1080 at the project frame rate are copied without
 re-encoding (only the audio is converted if needed), which takes seconds.
-Audio (MP3, M4A, WAV…): AAC 48 kHz stereo in an .m4a; its cover art or a title
-card becomes the thumbnail. On the projector the default input shows as a layer
-while it plays (see the agent).
+Audio (MP3, M4A, WAV…): an MP4 with the sound (AAC 48 kHz) and a still card
+(cover art or title) as picture; the card is also the thumbnail. The agent can
+keep the default input on the projector while it plays, or show the card.
 Photos and videos get a thumbnail; videos also get a filmstrip for the cue panel.
 """
 import hashlib
@@ -324,16 +324,9 @@ def audio_card(title, subtitle, cover=None):
 
 
 def process_audio(src, out_dir, original_name, owner):
-    processed = out_dir / "audio.m4a"
-    run(
-        [
-            "ffmpeg", "-y", "-hide_banner", "-i", str(src), "-map", "0:a:0", "-vn",
-            "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(processed),
-        ]
-    )
-    info = probe(processed)
-    duration_ms = int(float(info.get("format", {}).get("duration") or 0) * 1000)
-
+    """Audio becomes an MP4: the sound (AAC 48 kHz) plus a still card (cover art
+    or title) as picture. The agent either plays only the sound and keeps the
+    default input on the projector, or shows the card, as set in its settings."""
     cover = None
     cover_path = out_dir / "cover.jpg"
     try:
@@ -346,9 +339,25 @@ def process_audio(src, out_dir, original_name, owner):
         cover = None
     title = Path(original_name).stem.replace("_", " ")
     card = audio_card(title, owner or "", cover)
+    card_path = out_dir / "card.png"
+    card.save(card_path)
+
+    fps = settings.VITRINE_VIDEO_FPS
+    processed = out_dir / "audio.mp4"
+    run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loop", "1", "-framerate", str(fps), "-i", str(card_path),
+            "-i", str(src), "-map", "0:v", "-map", "1:a:0", "-shortest",
+            "-c:v", "libx264", "-tune", "stillimage", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p",
+            "-r", str(fps), "-g", str(fps * 10),
+            "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(processed),
+        ]
+    )
+    info = probe(processed)
+    duration_ms = int(float(info.get("format", {}).get("duration") or 0) * 1000)
     thumb = out_dir / "thumb.jpg"
     card.resize((THUMB_W, THUMB_H), Image.LANCZOS).save(thumb, "JPEG", quality=82)
-    return {"processed": processed, "thumb": thumb, "width": 0, "height": 0, "duration_ms": duration_ms}
+    return {"processed": processed, "thumb": thumb, "width": TARGET_W, "height": TARGET_H, "duration_ms": duration_ms}
 
 
 def process_file(src, original_name, owner=""):

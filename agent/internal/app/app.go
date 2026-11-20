@@ -269,7 +269,7 @@ func (a *App) addMarker(assetID int64, tMs int, label, by string) error {
 	var found bool
 	err := a.Store.Update(func(st *store.State) {
 		asset := st.Manifest.Asset(assetID)
-		if asset == nil || !asset.IsVideo() {
+		if asset == nil || !asset.IsTimed() {
 			return
 		}
 		found = true
@@ -287,7 +287,7 @@ func (a *App) addMarker(assetID int64, tMs int, label, by string) error {
 		return err
 	}
 	if !found {
-		return errors.New("markers can only be added to videos")
+		return errors.New("markers can only be added to videos and audio")
 	}
 	a.Web.BroadcastCatalog()
 	go a.flushMarkers(a.ctx)

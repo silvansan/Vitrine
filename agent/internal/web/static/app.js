@@ -29,6 +29,8 @@
     sun: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     moon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>',
     close: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    note: '<svg class="ph-icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+    stop: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>',
     flag: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>',
     tablets: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="13" height="18" rx="2"/><path d="M20 7v13a1 1 0 01-1 1h-1"/></svg>'
   };
@@ -158,9 +160,27 @@
     };
   }
 
+  function audioState() { return eng().audio || {}; }
+  function isTimedKind(kind) { return kind === 'video' || kind === 'audio'; }
+
+  /* What the playback bar controls: the live video (or audio shown as its card),
+     otherwise an audio file playing behind the default input. */
+  function playing() {
+    var e = eng();
+    var au = audioState();
+    if (e.asset_id && isTimedKind(e.kind)) {
+      return { id: e.asset_id, position_ms: e.position_ms, duration_ms: e.duration_ms, paused: e.paused, jumping: e.jumping, audioOnly: false };
+    }
+    if (au.asset_id) {
+      return { id: au.asset_id, position_ms: au.position_ms, duration_ms: au.duration_ms, paused: au.paused, jumping: false, audioOnly: true };
+    }
+    return null;
+  }
+
   function liveKey() {
     var e = eng();
-    return [e.asset_id, e.pending_id, e.paused, e.jumping, e.error, e.vmix_ok, e.default_ok, e.mix, S.status && S.status.server_online].join('|');
+    var au = audioState();
+    return [e.asset_id, e.pending_id, e.paused, e.jumping, e.error, e.vmix_ok, e.default_ok, e.mix, au.asset_id, au.pending_id, au.paused, S.status && S.status.server_online].join('|');
   }
 
   function onStatus(msg) {
@@ -198,35 +218,39 @@
 
   function tileState(id) {
     var e = eng();
-    if (e.pending_id === id) return 'pending';
-    if (e.asset_id === id) return 'live';
+    var au = audioState();
+    if (e.pending_id === id || au.pending_id === id) return 'pending';
+    if (e.asset_id === id || au.asset_id === id) return 'live';
     return '';
   }
 
   function progressPct() {
-    var e = eng();
-    if (!e.duration_ms) return 0;
-    return Math.min(100, Math.round((e.position_ms / e.duration_ms) * 100));
+    var p = playing();
+    if (!p || !p.duration_ms) return 0;
+    return Math.min(100, Math.round((p.position_ms / p.duration_ms) * 100));
   }
 
   function renderTile(entry, index) {
     var a = asset(entry.id);
     var state = tileState(entry.id);
-    var video = a.kind === 'video';
+    var video = isTimedKind(a.kind);
+    var sound = a.kind === 'audio';
+    var audioOnly = sound && audioState().asset_id === entry.id;
     var back = isBack();
     var saved = positions()[String(entry.id)];
     var classes = 'tile' + (state ? ' ' + state : '') + (a.ready ? '' : ' notready');
     var label = (state === 'live' ? 'Take off ' : 'Show ') + a.name;
     var html = '<div class="' + classes + '">';
     html += '<button type="button" class="thumb" data-act="tap" data-id="' + entry.id + '" aria-pressed="' + (state === 'live') + '" aria-label="' + h(label) + '">';
-    html += a.thumb ? '<img src="' + h(a.thumb) + '" alt="" draggable="false">' : (video ? ICON.video : ICON.photo);
+    html += a.thumb ? '<img src="' + h(a.thumb) + '" alt="" draggable="false">' : (sound ? ICON.note : video ? ICON.video : ICON.photo);
     if (!back) html += '<span class="ov ov-num">' + (ui.page * PER_PAGE + index + 1) + '</span>';
     if (!a.ready) html += '<span class="ov ov-wait">Downloading…</span>';
     if (video && state !== 'live') html += '<span class="ov ov-dur">' + fmt(a.duration_ms) + '</span>';
     if (state === 'pending') html += '<span class="ov ov-tag pend"><span class="d"></span>SENDING…</span>';
     if (state === 'live') {
-      html += '<span class="ov ov-tag live"><span class="d"></span>' + (back ? 'LIVE · MIX ' + h(eng().mix) : 'ON SCREEN') + '</span>';
-      if (back) html += '<span class="ov ov-hint">Tap again to return to default</span>';
+      if (audioOnly) html += '<span class="ov ov-tag live"><span class="d"></span>' + (back ? 'PLAYING · AUDIO' : 'PLAYING') + '</span>';
+      else html += '<span class="ov ov-tag live"><span class="d"></span>' + (back ? 'LIVE · MIX ' + h(eng().mix) : 'ON SCREEN') + '</span>';
+      if (back) html += '<span class="ov ov-hint">' + (audioOnly ? 'Tap again to stop' : 'Tap again to return to default') + '</span>';
       if (video) html += '<span class="ov ov-bar"><span id="tile-bar" style="width:' + progressPct() + '%"></span></span>';
     }
     if (!back && a.owner && entry.set && a.owner !== entry.set.guest && !(state === 'live' && video)) {
@@ -250,7 +274,7 @@
     } else if (!video) {
       html += '<div class="strip"><span class="t">Photo</span></div>';
     } else {
-      html += '<div class="strip"><span class="t">Video · ' + fmt(a.duration_ms) + '</span>';
+      html += '<div class="strip"><span class="t">' + (sound ? 'Audio' : 'Video') + ' · ' + fmt(a.duration_ms) + '</span>';
       html += '<span class="row" style="gap:6px">';
       if (saved && state !== 'live') html += '<button type="button" class="small-btn" data-act="resume" data-id="' + entry.id + '">' + ICON.play + ' Resume ' + fmt(saved) + '</button>';
       if (opts().video_seek) html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '" aria-label="Cue ' + h(a.name) + '">' + ICON.more + '</button>';
@@ -271,13 +295,15 @@
 
   function renderTransport() {
     var e = eng();
-    var a = asset(e.asset_id);
-    if (!a || a.kind !== 'video' || !opts().video_basic) return '';
+    var p = playing();
+    var a = p ? asset(p.id) : null;
+    if (!a || !opts().video_basic) return '';
     var seek = opts().video_seek;
     var html = '<div class="transport">';
+    if (p.audioOnly) html += '<button type="button" class="t-btn" data-act="audio-stop">' + ICON.stop + ' Stop audio</button>';
     html += '<button type="button" class="t-btn" data-act="seek" data-t="0">' + ICON.restart + ' From start</button>';
     if (seek) html += '<button type="button" class="t-btn" data-act="nudge" data-d="-10000" aria-label="Back 10 seconds">−10s</button>';
-    if (e.paused) html += '<button type="button" class="t-btn' + (isBack() ? ' inv' : '') + '" data-act="play" aria-label="Play">' + ICON.play + (isBack() ? '' : ' Play') + '</button>';
+    if (p.paused) html += '<button type="button" class="t-btn' + (isBack() ? ' inv' : '') + '" data-act="play" aria-label="Play">' + ICON.play + (isBack() ? '' : ' Play') + '</button>';
     else html += '<button type="button" class="t-btn' + (isBack() ? ' inv' : '') + '" data-act="pause" aria-label="Pause">' + ICON.pause + (isBack() ? '' : ' Pause') + '</button>';
     if (seek) html += '<button type="button" class="t-btn" data-act="nudge" data-d="10000" aria-label="Forward 10 seconds">+10s</button>';
     if (seek) html += '<button type="button" class="t-btn" data-act="marker-live" aria-label="Add marker here">' + ICON.flag + ' Marker</button>';
@@ -287,17 +313,18 @@
         html += '<button type="button" class="mk-btn" data-act="seek" data-t="' + m.t_ms + '">' + h(m.label) + ' · ' + fmt(m.t_ms) + '</button>';
       });
     }
-    html += '<div class="progress"><div class="time-row"><span id="prog-time">' + fmt(e.position_ms) + ' / ' + fmt(e.duration_ms || a.duration_ms) + '</span><span id="prog-note">' + h(progressNote()) + '</span></div>';
+    html += '<div class="progress"><div class="time-row"><span id="prog-time">' + fmt(p.position_ms) + ' / ' + fmt(p.duration_ms || a.duration_ms) + '</span><span id="prog-note">' + h(progressNote()) + '</span></div>';
     html += '<div class="track"><span id="prog-bar" style="width:' + progressPct() + '%"></span></div></div>';
     html += '</div>';
     return html;
   }
 
   function progressNote() {
-    var e = eng();
-    if (e.jumping) return 'Crossfading…';
-    if (e.paused) return 'Paused';
-    return fmt(Math.max(0, (e.duration_ms || 0) - (e.position_ms || 0))) + ' left';
+    var p = playing();
+    if (!p) return '';
+    if (p.jumping) return 'Crossfading…';
+    if (p.paused) return 'Paused';
+    return fmt(Math.max(0, (p.duration_ms || 0) - (p.position_ms || 0))) + ' left';
   }
 
   function nowLabel() {
@@ -305,8 +332,11 @@
     var p = asset(e.pending_id);
     if (p) return { cls: 'pend', text: 'Sending ' + p.name + '…' };
     var a = asset(e.asset_id);
-    if (a) return { cls: 'live', text: a.name + ' · ' + (a.kind === 'video' ? progressNote() : a.owner) };
-    if (e.asset_id) return { cls: 'live', text: 'A file from another service' };
+    var au = asset(audioState().asset_id);
+    var sound = au ? ' · \u266A ' + au.name : '';
+    if (a) return { cls: 'live', text: a.name + ' · ' + (isTimedKind(a.kind) ? progressNote() : a.owner) + sound };
+    if (e.asset_id) return { cls: 'live', text: 'A file from another service' + sound };
+    if (au) return { cls: 'live', text: '\u266A ' + au.name + ' · ' + progressNote() + ' (default stays on screen)' };
     return { cls: '', text: 'Default · ' + (settings().default_input_title || e.mix_active || 'not set') };
   }
 
@@ -377,8 +407,9 @@
     var set = pulpitSet();
     var html = '';
     var status = { cls: '', text: 'Screen shows the banner' };
-    if (e.asset_id) status = { cls: 'live', text: e.kind === 'video' ? 'A video is on screen' : 'A picture is on screen' };
-    if (e.pending_id) status = { cls: 'pend', text: 'Sending to the screen…' };
+    if (audioState().asset_id) status = { cls: 'live', text: 'Audio is playing' };
+    if (e.asset_id) status = { cls: 'live', text: e.kind === 'video' ? 'A video is on screen' : e.kind === 'audio' ? 'Audio is playing' : 'A picture is on screen' };
+    if (e.pending_id || audioState().pending_id) status = { cls: 'pend', text: 'Sending to the screen…' };
     html += '<header class="p-head"><div class="title">' + (o.show_title !== false && set ? h(set.title) : '') + '</div>';
     html += '<div class="row">';
     if (o.show_status) {
@@ -406,7 +437,9 @@
   /* cue panel */
 
   function spriteStyle(a, t) {
-    if (!a.filmstrip || !a.filmstrip_count) return '';
+    if (!a.filmstrip || !a.filmstrip_count) {
+      return a.thumb ? 'background-image:url(' + a.thumb + ');background-size:cover;background-position:center;' : '';
+    }
     var interval = a.filmstrip_interval_ms || 5000;
     var idx = Math.min(a.filmstrip_count - 1, Math.floor(t / interval));
     var cols = a.filmstrip_cols || a.filmstrip_count;
@@ -571,9 +604,10 @@
     var pct = progressPct();
     var bar = document.getElementById('prog-bar'); if (bar) bar.style.width = pct + '%';
     var tbar = document.getElementById('tile-bar'); if (tbar) tbar.style.width = pct + '%';
-    var a = asset(e.asset_id);
+    var p = playing();
+    var a = p ? asset(p.id) : null;
     var time = document.getElementById('prog-time');
-    if (time && a) time.textContent = fmt(e.position_ms) + ' / ' + fmt(e.duration_ms || a.duration_ms);
+    if (time && a) time.textContent = fmt(p.position_ms) + ' / ' + fmt(p.duration_ms || a.duration_ms);
     var note = document.getElementById('prog-note'); if (note) note.textContent = progressNote();
     var now = document.getElementById('now-label'); if (now) now.textContent = nowLabel().text;
   }
@@ -584,6 +618,8 @@
     var e = eng();
     var a = asset(id);
     if (!a) return;
+    var au = audioState();
+    if (au.asset_id === id || au.pending_id === id) { post('/api/audio/stop'); return; }
     if (e.asset_id === id || e.pending_id === id) { post('/api/clear'); return; }
     if (!a.ready) { showToast('Still downloading to the vMix PC'); return; }
     post('/api/take', { asset_id: id, start_ms: 0 });
@@ -607,7 +643,12 @@
       }
       case 'cue-start': post('/api/take', { asset_id: ui.cue.id, start_ms: ui.cue.pos }); ui.cue = null; render(); break;
       case 'marker-cue': ui.marker = { id: ui.cue.id, t: ui.cue.pos }; render(); break;
-      case 'marker-live': ui.marker = { id: e.asset_id, t: e.position_ms || 0 }; render(); break;
+      case 'marker-live': {
+        var pl = playing();
+        if (pl) { ui.marker = { id: pl.id, t: pl.position_ms || 0 }; render(); }
+        break;
+      }
+      case 'audio-stop': post('/api/audio/stop'); break;
       case 'marker-cancel': ui.marker = null; render(); break;
       case 'marker-del':
         if (confirm('Remove this marker?')) post('/api/markers/delete', { id: parseInt(data.mid, 10) });
@@ -616,7 +657,11 @@
       case 'pause': post('/api/pause'); break;
       case 'play': post('/api/play'); break;
       case 'seek': post('/api/seek', { position_ms: parseInt(data.t, 10) }); break;
-      case 'nudge': post('/api/seek', { position_ms: Math.max(0, (e.position_ms || 0) + parseInt(data.d, 10)) }); break;
+      case 'nudge': {
+        var cur = playing();
+        post('/api/seek', { position_ms: Math.max(0, ((cur && cur.position_ms) || 0) + parseInt(data.d, 10)) });
+        break;
+      }
       case 'page': ui.page += parseInt(data.d, 10); render(); break;
       case 'chip': ui.set = data.set === 'all' ? 'all' : parseInt(data.set, 10); ui.page = 0; render(); break;
       case 'local-set': ui.localSet = parseInt(data.set, 10); ui.page = 0; render(); break;

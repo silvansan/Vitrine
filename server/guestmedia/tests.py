@@ -263,6 +263,6 @@ class AudioTests(TestCase):
         )
         result = process_file(src, "Glorious Day.mp3", "Maria")
         self.assertEqual(result["kind"], "audio")
-        self.assertTrue(str(result["processed"]).endswith(".m4a"))
+        self.assertTrue(str(result["processed"]).endswith(".mp4"))
         self.assertGreater(result["duration_ms"], 2500)
         self.assertTrue(result["thumb"].exists())

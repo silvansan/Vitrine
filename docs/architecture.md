@@ -32,6 +32,8 @@ The guest page uses tus-js-client against a small tus 1.0 server in Django (`tus
 
 The SHA-256 of the converted file goes into the manifest; the agent checks it after downloading.
 
+Audio (MP3, M4A, WAV, FLAC…) becomes an MP4 too: the sound as AAC 48 kHz plus a still card (cover art, or a title card with the guest's name) at the project frame rate. The card is the thumbnail.
+
 ## Agent sync
 
 `GET /api/agent/manifest` returns the active services, their sets (only approved, ready, not deleted files) and the files with markers, plus the server's Ed25519 public key and revoked pairing codes. Any change bumps every agent's `manifest_version` and pings them over the WebSocket (`/ws/agent/`); agents also poll every 60 s and heartbeat every 20 s (`POST /api/agent/heartbeat`: LAN IP, vMix state, sync progress, settings, tablets, assets shown since the last heartbeat).
@@ -47,6 +49,8 @@ Two List inputs, A and B, take turns:
 3. **Jump** (crossfade mode): load the same video into the other input at the new position and fade over 400 ms; in direct mode `SetPosition` on the live input.
 4. **Pause / Play** on the live input.
 5. The poller reads `/api` every 300 ms while a video is live (1 s otherwise): position and duration for the progress bars, end of video (→ back to default if enabled), and changes made directly in vMix (→ tablets clear the live frame). Positions of videos taken off mid-way are remembered for **Resume**.
+
+6. **Audio with the default kept on screen**: the file is loaded into a third List input (`GM_AUDIO`), its automatic audio is turned off and audio on (so it is heard although it isn't on an output), and it plays; the projector mix isn't touched. Stop pauses it and turns its audio off. Pause, seek and markers apply to it when no video is live. With the option off, audio is taken like a video and its card shows on the projector.
 
 The `Mix` parameter is `mix number + mix_param_offset` (default −1: Mix 2 → `Mix=1`); for the main output it is left out.
 

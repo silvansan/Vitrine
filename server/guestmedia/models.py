@@ -162,7 +162,7 @@ class MediaAsset(models.Model):
 
     @property
     def ext(self):
-        return {self.KIND_VIDEO: ".mp4", self.KIND_AUDIO: ".m4a"}.get(self.kind, ".jpg")
+        return ".mp4" if self.is_timed else ".jpg"
 
     @property
     def is_timed(self):

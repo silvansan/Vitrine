@@ -120,6 +120,8 @@
       </div>
     </div>
     <p class="hint">If your default input has transparency and Fade looks like a cut, choose AlphaFade.</p>
+    <label class="check">Audio files: keep the default input on the projector (only the sound plays)<input type="checkbox" id="audio_keep_default" data-setting="audio_keep_default" data-type="bool"></label>
+    <p class="hint">Untick to show the audio's cover or title card on the projector instead, like a video. Sound-only playback uses the vMix input named below (created if missing); make sure its audio goes to your Master bus.</p>
     <label class="check">When a video ends, go back to the default input<input type="checkbox" id="video_end_return" data-setting="video_end_return" data-type="bool"></label>
     <div class="field">
       <label class="label" for="seek_mode">Jumping inside a live video</label>
@@ -136,6 +138,10 @@
       <div class="field">
         <label class="label" for="input_b">vMix input B</label>
         <input type="text" id="input_b" data-setting="input_b">
+      </div>
+      <div class="field">
+        <label class="label" for="input_audio">vMix input for sound only</label>
+        <input type="text" id="input_audio" data-setting="input_audio">
       </div>
     </div>
     <p class="hint">Two List inputs take turns showing guest media. The agent creates them on the first take if they are missing; you can also add them yourself in vMix and save them in your preset.</p>

@@ -31,6 +31,19 @@ type Media struct {
 	Name       string
 }
 
+// timed reports whether a kind plays over time (video, or audio shown as its card).
+func timed(kind string) bool { return kind == "video" || kind == "audio" }
+
+// AudioLive describes an audio file playing while the projector keeps showing
+// whatever it shows (normally the default input).
+type AudioLive struct {
+	AssetID    int64 `json:"asset_id"`
+	PendingID  int64 `json:"pending_id"`
+	PositionMs int   `json:"position_ms"`
+	DurationMs int   `json:"duration_ms"`
+	Paused     bool  `json:"paused"`
+}
+
 // Live describes what is on the projector mix right now.
 type Live struct {
 	AssetID    int64  `json:"asset_id"`
@@ -46,15 +59,16 @@ type Live struct {
 
 type Status struct {
 	Live
-	VMixOK       bool   `json:"vmix_ok"`
-	VMixVersion  string `json:"vmix_version"`
-	VMixError    string `json:"vmix_error"`
-	InputsOK     bool   `json:"inputs_ok"`
-	InputsError  string `json:"inputs_error"`
-	DefaultOK    bool   `json:"default_ok"`
-	DefaultTitle string `json:"default_title"`
-	Mix          int    `json:"mix"`
-	MixActive    string `json:"mix_active"`
+	Audio        AudioLive `json:"audio"`
+	VMixOK       bool      `json:"vmix_ok"`
+	VMixVersion  string    `json:"vmix_version"`
+	VMixError    string    `json:"vmix_error"`
+	InputsOK     bool      `json:"inputs_ok"`
+	InputsError  string    `json:"inputs_error"`
+	DefaultOK    bool      `json:"default_ok"`
+	DefaultTitle string    `json:"default_title"`
+	Mix          int       `json:"mix"`
+	MixActive    string    `json:"mix_active"`
 }
 
 type Engine struct {
@@ -123,14 +137,14 @@ func (e *Engine) TakeUsed() []int64 {
 func (e *Engine) IsLive() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.status.AssetID != 0 || e.status.PendingID != 0
+	return e.status.AssetID != 0 || e.status.PendingID != 0 || e.status.Audio.AssetID != 0
 }
 
 // InUse returns assets currently loaded or live, which must not be deleted.
 func (e *Engine) InUse() map[int64]bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return map[int64]bool{e.status.AssetID: true, e.status.PendingID: true}
+	return map[int64]bool{e.status.AssetID: true, e.status.PendingID: true, e.status.Audio.AssetID: true}
 }
 
 func (e *Engine) changed() {
@@ -255,7 +269,7 @@ func (e *Engine) waitActive(ctx context.Context, mix, number int) bool {
 }
 
 func (e *Engine) rememberPosition(live Live) {
-	if live.AssetID == 0 || live.Kind != "video" {
+	if live.AssetID == 0 || !timed(live.Kind) {
 		return
 	}
 	_ = e.Store.Update(func(st *store.State) {
@@ -310,7 +324,7 @@ func (e *Engine) load(ctx context.Context, st *vmix.State, s store.Settings, slo
 	}
 	// vMix opens the file asynchronously.
 	time.Sleep(250 * time.Millisecond)
-	if media.Kind == "video" {
+	if timed(media.Kind) {
 		if err := e.VMix.Call(ctx, "SetPosition", map[string]string{"Input": input.Key, "Value": strconv.Itoa(startMs)}); err != nil {
 			return nil, err
 		}
@@ -349,6 +363,9 @@ func (e *Engine) Take(assetID int64, startMs int) error {
 		err := errors.New("this file is not on the vMix PC yet; it is still downloading")
 		e.setError(err)
 		return err
+	}
+	if media.Kind == "audio" && e.Store.Settings().AudioKeepDefault {
+		return e.PlayAudio(media, startMs)
 	}
 	prev, s := e.begin()
 	defer e.end()
@@ -395,7 +412,7 @@ func (e *Engine) Take(assetID int64, startMs int) error {
 	e.status.Live = Live{AssetID: assetID, Slot: target, Kind: media.Kind, PositionMs: startMs, DurationMs: media.DurationMs}
 	e.used = append(e.used, assetID)
 	e.mu.Unlock()
-	if prev.AssetID != 0 && prev.Kind == "video" {
+	if prev.AssetID != 0 && timed(prev.Kind) {
 		e.pauseLater(s, prev.Slot, s.TransitionMs)
 	}
 	e.changed()
@@ -435,7 +452,7 @@ func (e *Engine) Clear() error {
 	e.mu.Lock()
 	e.status.Live = Live{}
 	e.mu.Unlock()
-	if prev.Kind == "video" {
+	if timed(prev.Kind) {
 		e.pauseLater(s, prev.Slot, s.TransitionMs)
 	}
 	e.changed()
@@ -449,8 +466,8 @@ func (e *Engine) Play() error  { return e.playPause("Play", false) }
 func (e *Engine) playPause(fn string, paused bool) error {
 	live, s := e.begin()
 	defer e.end()
-	if live.AssetID == 0 || live.Kind != "video" {
-		return errors.New("no video is live")
+	if live.AssetID == 0 || !timed(live.Kind) {
+		return e.audioPlayPause(s, fn, paused)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
@@ -470,8 +487,8 @@ func (e *Engine) playPause(fn string, paused bool) error {
 func (e *Engine) Seek(positionMs int) error {
 	live, s := e.begin()
 	defer e.end()
-	if live.AssetID == 0 || live.Kind != "video" {
-		return errors.New("no video is live")
+	if live.AssetID == 0 || !timed(live.Kind) {
+		return e.audioSeek(s, positionMs)
 	}
 	media, ok := e.Resolve(live.AssetID)
 	if !ok {
@@ -554,7 +571,7 @@ func (e *Engine) Run(ctx context.Context) {
 	for ctx.Err() == nil {
 		interval := time.Second
 		e.mu.Lock()
-		if e.status.AssetID != 0 && e.status.Kind == "video" {
+		if (e.status.AssetID != 0 && timed(e.status.Kind)) || e.status.Audio.AssetID != 0 {
 			interval = 300 * time.Millisecond
 		}
 		e.mu.Unlock()
@@ -575,7 +592,10 @@ func (e *Engine) Run(ctx context.Context) {
 func (e *Engine) IsVideoPlaying() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.status.AssetID != 0 && e.status.Kind == "video" && !e.status.Paused
+	if e.status.Audio.AssetID != 0 && !e.status.Audio.Paused {
+		return true
+	}
+	return e.status.AssetID != 0 && timed(e.status.Kind) && !e.status.Paused
 }
 
 func (e *Engine) poll(ctx context.Context) bool {
@@ -622,7 +642,7 @@ func (e *Engine) poll(ctx context.Context) bool {
 		slot := st.InputByName(slotName(s, live.Slot))
 		if slot == nil || st.Active[s.Mix] != slot.Number {
 			external = true
-		} else if live.Kind == "video" {
+		} else if timed(live.Kind) {
 			e.status.PositionMs = slot.Position
 			if slot.Duration > 0 {
 				e.status.DurationMs = slot.Duration
@@ -637,8 +657,28 @@ func (e *Engine) poll(ctx context.Context) bool {
 		// Someone switched the mix in vMix itself: follow it.
 		e.status.Live = Live{}
 	}
+	audioEnded := false
+	audio := e.status.Audio
+	if audio.AssetID != 0 && !e.busy {
+		if in := st.InputByName(s.InputAudio); in != nil {
+			e.status.Audio.PositionMs = in.Position
+			if in.Duration > 0 {
+				e.status.Audio.DurationMs = in.Duration
+			}
+			e.status.Audio.Paused = in.State == "Paused"
+			if e.status.Audio.DurationMs > 0 && in.Position >= e.status.Audio.DurationMs-350 {
+				audioEnded = true
+			}
+		} else {
+			e.status.Audio = AudioLive{}
+		}
+	}
 	after := e.status
 	e.mu.Unlock()
+	if audioEnded {
+		_ = e.Store.Update(func(st *store.State) { delete(st.Positions, audio.AssetID) })
+		go func() { _ = e.StopAudio() }()
+	}
 
 	if external {
 		e.rememberPosition(live)
@@ -661,6 +701,173 @@ func (e *Engine) poll(ctx context.Context) bool {
 		}
 	}
 	return before.VMixOK != after.VMixOK || before.AssetID != after.AssetID || before.Paused != after.Paused ||
+		before.Audio.AssetID != after.Audio.AssetID || before.Audio.Paused != after.Audio.Paused ||
 		before.InputsOK != after.InputsOK || before.DefaultOK != after.DefaultOK || before.MixActive != after.MixActive ||
 		before.Error != after.Error
+}
+
+// ---------- audio that plays while the projector keeps the default input ----------
+
+// audioInput finds the audio List input, creating it if needed.
+func (e *Engine) audioInput(ctx context.Context, s store.Settings) (*vmix.Input, error) {
+	st, err := e.VMix.State(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("vMix is not reachable: %w", err)
+	}
+	if in := st.InputByName(s.InputAudio); in != nil {
+		return in, nil
+	}
+	if err := e.createListInput(ctx, st, s.InputAudio); err != nil {
+		return nil, err
+	}
+	st, err = e.VMix.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if in := st.InputByName(s.InputAudio); in != nil {
+		return in, nil
+	}
+	return nil, fmt.Errorf("vMix input %s is missing", s.InputAudio)
+}
+
+// PlayAudio plays an audio file in its own input without touching the projector mix.
+func (e *Engine) PlayAudio(media *Media, startMs int) error {
+	_, s := e.begin()
+	defer e.end()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	e.mu.Lock()
+	prevAudio := e.status.Audio
+	e.status.Audio.PendingID = media.ID
+	e.status.Error = ""
+	e.mu.Unlock()
+	e.changed()
+
+	in, err := e.audioInput(ctx, s)
+	if err != nil {
+		e.audioFailed(err)
+		return err
+	}
+	e.rememberAudio(prevAudio)
+	if startMs < 0 || (media.DurationMs > 0 && startMs >= media.DurationMs) {
+		startMs = 0
+	}
+	steps := []struct {
+		fn     string
+		params map[string]string
+	}{
+		{"ListRemoveAll", map[string]string{"Input": in.Key}},
+		{"ListAdd", map[string]string{"Input": in.Key, "Value": media.Path}},
+		{"SelectIndex", map[string]string{"Input": in.Key, "Value": "1"}},
+	}
+	for _, step := range steps {
+		if err := e.VMix.Call(ctx, step.fn, step.params); err != nil {
+			e.audioFailed(err)
+			return err
+		}
+	}
+	time.Sleep(250 * time.Millisecond)
+	// Heard although the input isn't on the output: automatic audio off, audio on.
+	for _, step := range []struct {
+		fn     string
+		params map[string]string
+	}{
+		{"SetPosition", map[string]string{"Input": in.Key, "Value": strconv.Itoa(startMs)}},
+		{"AudioAutoOff", map[string]string{"Input": in.Key}},
+		{"AudioOn", map[string]string{"Input": in.Key}},
+		{"Play", map[string]string{"Input": in.Key}},
+	} {
+		if err := e.VMix.Call(ctx, step.fn, step.params); err != nil {
+			e.audioFailed(err)
+			return err
+		}
+	}
+	e.mu.Lock()
+	e.status.Audio = AudioLive{AssetID: media.ID, PositionMs: startMs, DurationMs: media.DurationMs}
+	e.used = append(e.used, media.ID)
+	e.mu.Unlock()
+	e.changed()
+	return nil
+}
+
+func (e *Engine) audioFailed(err error) {
+	e.mu.Lock()
+	e.status.Audio.PendingID = 0
+	e.mu.Unlock()
+	e.setError(err)
+}
+
+func (e *Engine) rememberAudio(a AudioLive) {
+	if a.AssetID == 0 {
+		return
+	}
+	e.rememberPosition(Live{AssetID: a.AssetID, Kind: "audio", PositionMs: a.PositionMs, DurationMs: a.DurationMs})
+}
+
+// StopAudio stops the audio file (fades nothing on the projector).
+func (e *Engine) StopAudio() error {
+	_, s := e.begin()
+	defer e.end()
+	e.mu.Lock()
+	audio := e.status.Audio
+	e.mu.Unlock()
+	if audio.AssetID == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = e.VMix.Call(ctx, "Pause", map[string]string{"Input": s.InputAudio})
+	_ = e.VMix.Call(ctx, "AudioOff", map[string]string{"Input": s.InputAudio})
+	e.rememberAudio(audio)
+	e.mu.Lock()
+	e.status.Audio = AudioLive{}
+	e.mu.Unlock()
+	e.changed()
+	return nil
+}
+
+func (e *Engine) audioPlayPause(s store.Settings, fn string, paused bool) error {
+	e.mu.Lock()
+	audio := e.status.Audio
+	e.mu.Unlock()
+	if audio.AssetID == 0 {
+		return errors.New("nothing is playing")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	if err := e.VMix.Call(ctx, fn, map[string]string{"Input": s.InputAudio}); err != nil {
+		e.setError(err)
+		return err
+	}
+	e.mu.Lock()
+	e.status.Audio.Paused = paused
+	e.mu.Unlock()
+	e.changed()
+	return nil
+}
+
+func (e *Engine) audioSeek(s store.Settings, positionMs int) error {
+	e.mu.Lock()
+	audio := e.status.Audio
+	e.mu.Unlock()
+	if audio.AssetID == 0 {
+		return errors.New("nothing is playing")
+	}
+	if positionMs < 0 {
+		positionMs = 0
+	}
+	if audio.DurationMs > 0 && positionMs > audio.DurationMs-500 {
+		positionMs = audio.DurationMs - 500
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	if err := e.VMix.Call(ctx, "SetPosition", map[string]string{"Input": s.InputAudio, "Value": strconv.Itoa(positionMs)}); err != nil {
+		e.setError(err)
+		return err
+	}
+	e.mu.Lock()
+	e.status.Audio.PositionMs = positionMs
+	e.mu.Unlock()
+	e.changed()
+	return nil
 }

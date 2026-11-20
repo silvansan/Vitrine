@@ -87,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/clear", s.screenOnly(s.simple(s.Engine.Clear)))
 	mux.HandleFunc("POST /api/pause", s.screenOnly(s.simple(s.Engine.Pause)))
 	mux.HandleFunc("POST /api/play", s.screenOnly(s.simple(s.Engine.Play)))
+	mux.HandleFunc("POST /api/audio/stop", s.screenOnly(s.simple(s.Engine.StopAudio)))
 	mux.HandleFunc("POST /api/seek", s.screenOnly(s.handleSeek))
 	mux.HandleFunc("POST /api/screens/{id}", s.screenOnly(s.handleScreenUpdate))
 	mux.HandleFunc("POST /api/screens/{id}/command", s.screenOnly(s.handleScreenCommand))
@@ -774,6 +775,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request, _ *store
 		}
 		if strings.TrimSpace(next.InputB) == "" {
 			next.InputB = "GM_B"
+		}
+		if strings.TrimSpace(next.InputAudio) == "" {
+			next.InputAudio = "GM_AUDIO"
 		}
 		serviceChanged = next.ServiceID != cur.ServiceID
 		st.Settings = next

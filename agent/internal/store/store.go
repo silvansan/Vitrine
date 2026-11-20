@@ -30,6 +30,9 @@ type Settings struct {
 	SeekMode          string `json:"seek_mode"`
 	InputA            string `json:"input_a"`
 	InputB            string `json:"input_b"`
+	// Audio files: keep the default input on the projector (true) or show their card.
+	AudioKeepDefault bool   `json:"audio_keep_default"`
+	InputAudio       string `json:"input_audio"`
 }
 
 // ScreenOptions decide what a tablet shows. The back tablet sets them for the pulpit.
@@ -157,13 +160,21 @@ func Open(dataDir string) (*Store, error) {
 	if len(data) == 0 {
 		st.Settings.VideoEndReturn = true
 	}
+	if st.Settings.InputAudio == "" {
+		st.Settings.InputAudio = "GM_AUDIO"
+	}
+	if st.Version < 3 {
+		st.Settings.AudioKeepDefault = true
+	}
 	if st.Version < 2 {
 		// 0.1.5: free seeking (cue panel, ±10 s, Add marker here) is on for every tablet.
 		for _, sc := range st.Screens {
 			sc.Options.VideoBasic = true
 			sc.Options.VideoSeek = true
 		}
-		st.Version = 2
+	}
+	if st.Version < 3 {
+		st.Version = 3
 	}
 	return s, s.saveLocked()
 }

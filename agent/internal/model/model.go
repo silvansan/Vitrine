@@ -64,6 +64,9 @@ type Asset struct {
 // IsVideo reports whether the asset is a video.
 func (a Asset) IsVideo() bool { return a.Kind == "video" }
 
+// IsTimed reports whether the asset plays over time (video or audio).
+func (a Asset) IsTimed() bool { return a.Kind == "video" || a.Kind == "audio" }
+
 // Service returns the service with the given id, or nil.
 func (m *Manifest) Service(id int64) *Service {
 	if m == nil {
