@@ -77,10 +77,23 @@ type State struct {
 	Files       map[int64]*LocalFile `json:"files"`
 	AgentSecret string               `json:"agent_secret"`
 	UsedNonces  map[string]time.Time `json:"used_nonces"`
+	// API keys for integrations such as Bitfocus Companion.
+	IntegrationKeys []*IntegrationKey `json:"integration_keys"`
 	// Markers added on tablets that still have to reach the server.
 	PendingMarkers []PendingMarker `json:"pending_markers"`
 	// Version of the state layout, for one-time upgrades.
 	Version int `json:"version"`
+}
+
+// IntegrationKey lets another system (e.g. Bitfocus Companion) control the
+// agent like the back tablet. Only its hash is stored.
+type IntegrationKey struct {
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Hash     string    `json:"hash"`
+	Prefix   string    `json:"prefix"`
+	Created  time.Time `json:"created"`
+	LastUsed time.Time `json:"last_used"`
 }
 
 // PendingMarker is a marker added on a tablet while the server was unreachable.

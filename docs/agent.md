@@ -61,8 +61,19 @@ The companion is a page at `http://127.0.0.1:8090/companion`; the back tablet ca
 - **Audio files: keep the default input on the projector** (on by default): only the sound plays, through a third List input (`GM_AUDIO`, created if missing; make sure its audio goes to your Master bus in vMix). Untick it to show the audio's cover/title card on the projector like a video.
 - **Go back to default when a video ends**, **jump mode** (crossfade between GM_A/GM_B, or jump in place), input names.
 - **Tablets**: the paired list, unpair, and **Show pairing QR** (signed by the server when online, by the agent itself when the server is unreachable).
+- **Integrations (Bitfocus Companion)**: API keys for controllers (only on the vMix PC itself). See below.
 
 The tray icon turns red while guest media is live and grey when vMix or the agent isn't reachable. Only one tray icon runs per user; starting `vitrine-tray.exe` again does nothing. **Close tray icon** closes just the icon: the agent keeps running as a service.
+
+## 4. Bitfocus Companion (Stream Deck)
+
+The module lives in its own repo, [silvansan/companion-module-vitrine](https://github.com/silvansan/companion-module-vitrine): guest buttons, file buttons for the selected guest, Clear screen, play/pause/seek, markers, pulpit page, and variables like `live_kind` for triggers (dim the lights and open the Wing playback channel while a video plays).
+
+1. On the settings page, under **Integrations**, click **Create API key** and copy it (it is shown once; only its hash is stored). **Revoke** stops it at once.
+2. In Companion, import the module's `.tgz` (**Modules → Import module package**), add a **Vitrine** connection with the agent address, port 8090 and the key.
+3. If Companion runs on another PC, the agent must listen on the LAN (`"listen": "0.0.0.0:8090"` under Connection settings; the installer's firewall rule already allows port 8090).
+
+A key acts like a back tablet. It is sent as `Authorization: Bearer vik_…` or, for the WebSocket, as `/ws?key=vik_…`. Besides the tablet endpoints, integrations can address files by number: `POST /api/take {"guest": 2, "file": 3, "from": "start"|"resume"}` (1-based, in tablet order, counting only files on this PC) and `POST /api/pulpit {"guest": 2}`.
 
 ## Files on disk
 

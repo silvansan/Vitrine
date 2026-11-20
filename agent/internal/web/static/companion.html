@@ -173,6 +173,25 @@
       </div>
     </div>
   </section>
+
+  <section aria-labelledby="h-keys" id="keys">
+    <h2 id="h-keys">Integrations (Bitfocus Companion)</h2>
+    <p class="hint">An API key lets Bitfocus Companion (or another controller) work like the back tablet: take guest/file, clear, seek, markers. Use this PC's address and port in the module settings.</p>
+    <table class="tablets" id="key-list"></table>
+    <div class="inline">
+      <div class="field">
+        <label class="label" for="key-name">Key name</label>
+        <input type="text" id="key-name" placeholder="Bitfocus Companion">
+      </div>
+      <button type="button" class="btn primary" id="btn-key" style="align-self:flex-end">Create API key</button>
+    </div>
+    <div class="qr-box" id="key-box" hidden>
+      <div>
+        <p>Copy this key into the Vitrine module settings now. It is shown only once.</p>
+        <code id="key-value"></code>
+      </div>
+    </div>
+  </section>
 </div>
 <script src="/static/qrcode.js"></script>
 <script src="/static/companion.js"></script>

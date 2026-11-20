@@ -62,6 +62,8 @@ Roles: **back** can control everything, edit pulpit screens and open the compani
 
 Tablet ↔ agent: `GET /api/bootstrap`, WebSocket `/ws` (messages `state`, `catalog`, `screens`, `settings`, `command`), and `POST /api/take|clear|pause|play|seek|pulpit|screens/{id}|screens/{id}/command`. Companion: `GET /api/companion/state`, `POST /api/companion/settings|pair|sync|test-default|screens/{id}/delete` (loopback or back tablet only).
 
+Integrations (Bitfocus Companion module): API keys `vik_…` created at `GET|POST /api/companion/keys` and revoked at `POST /api/companion/keys/{id}/delete` (loopback only; the hash is kept in `state.json`). A key is accepted as `Authorization: Bearer` or `?key=` and acts as a back screen. `/api/take` also takes `{guest, file, from}` and `/api/pulpit` takes `{guest}`, both 1-based in the order the tablets show.
+
 ## Running the agent elsewhere
 
 Everything vMix-related goes through `vmix_url`, so the agent can run on a second PC. vMix then plays files from a path it must be able to read (a share mapped to the same path as `media_dir`). Local disk on the vMix PC is safer for video, which is why the default is to run the agent on the vMix PC.

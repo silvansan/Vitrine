@@ -199,6 +199,33 @@
     });
   });
 
+  /* Integration API keys */
+  function loadKeys() {
+    return fetch('/api/companion/keys', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (keys) {
+      $('key-list').innerHTML = keys.length ? keys.map(function (k) {
+        var used = k.last_used && k.last_used.indexOf('0001') !== 0 ? new Date(k.last_used).toLocaleString() : 'never';
+        return '<tr><td>' + h(k.name) + '</td><td><code>' + h(k.prefix) + '…</code></td><td>last used: ' + h(used) +
+          '</td><td><button type="button" class="btn" data-revoke="' + h(k.id) + '">Revoke</button></td></tr>';
+      }).join('') : '<tr><td class="hint">No API keys yet.</td></tr>';
+    });
+  }
+  $('btn-key').addEventListener('click', function () {
+    post('/api/companion/keys', { name: $('key-name').value }).then(function (res) {
+      if (!res.key) return;
+      $('key-value').textContent = res.key;
+      $('key-box').hidden = false;
+      $('key-name').value = '';
+      loadKeys();
+    });
+  });
+  document.addEventListener('click', function (e) {
+    var revoke = e.target.closest('[data-revoke]');
+    if (revoke && confirm('Revoke this key? Anything using it stops working.')) {
+      post('/api/companion/keys/' + revoke.dataset.revoke + '/delete').then(loadKeys);
+    }
+  });
+  loadKeys();
+
   var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
   function connect() {
     var ws = new WebSocket(proto + location.host + '/ws');

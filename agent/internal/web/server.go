@@ -107,6 +107,9 @@ func (s *Server) Handler() http.Handler {
 		s.Restart()
 	}))
 	mux.HandleFunc("GET /api/companion/log", s.localOnly(s.handleLog))
+	mux.HandleFunc("GET /api/companion/keys", s.localOnly(s.handleKeysList))
+	mux.HandleFunc("POST /api/companion/keys", s.localOnly(s.handleKeyCreate))
+	mux.HandleFunc("POST /api/companion/keys/{id}/delete", s.localOnly(s.handleKeyDelete))
 	mux.HandleFunc("POST /api/companion/sync", s.adminOnly(func(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
 		s.TriggerSync()
 		writeJSON(w, map[string]bool{"ok": true})
@@ -134,7 +137,35 @@ func isLoopback(r *http.Request) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// integrationKey returns the key sent as "Authorization: Bearer vik_…" or ?key=.
+func integrationKey(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer vik_") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	if k := r.URL.Query().Get("key"); strings.HasPrefix(k, "vik_") {
+		return k
+	}
+	return ""
+}
+
 func (s *Server) screenFor(r *http.Request) *store.Screen {
+	if key := integrationKey(r); key != "" {
+		// An integration acts like a back tablet.
+		hash := pairing.HashToken(key)
+		var found *store.Screen
+		s.Store.Read(func(st *store.State) {
+			for _, k := range st.IntegrationKeys {
+				if k.Hash == hash {
+					found = &store.Screen{ID: "int-" + k.ID, Name: k.Name, Role: "back", Options: store.DefaultBackOptions(), Theme: "dark"}
+					return
+				}
+			}
+		})
+		if found != nil {
+			s.touchKey(strings.TrimPrefix(found.ID, "int-"))
+		}
+		return found
+	}
 	cookie, err := r.Cookie(cookieName)
 	if err != nil || cookie.Value == "" {
 		return nil
@@ -154,6 +185,24 @@ func (s *Server) screenFor(r *http.Request) *store.Screen {
 		s.touch(found.ID)
 	}
 	return found
+}
+
+func (s *Server) touchKey(id string) {
+	s.seenMu.Lock()
+	last := s.lastSeen["int-"+id]
+	if time.Since(last) < time.Minute {
+		s.seenMu.Unlock()
+		return
+	}
+	s.lastSeen["int-"+id] = time.Now()
+	s.seenMu.Unlock()
+	_ = s.Store.Update(func(st *store.State) {
+		for _, k := range st.IntegrationKeys {
+			if k.ID == id {
+				k.LastUsed = time.Now()
+			}
+		}
+	})
 }
 
 func (s *Server) touch(id string) {
@@ -594,10 +643,26 @@ func (s *Server) handleTake(w http.ResponseWriter, r *http.Request, _ *store.Scr
 	var body struct {
 		AssetID int64 `json:"asset_id"`
 		StartMs int   `json:"start_ms"`
+		// Alternative to asset_id, for integrations: guest number and file number (1-based).
+		Guest int `json:"guest"`
+		File  int `json:"file"`
+		// "resume" starts where it was stopped last time.
+		From string `json:"from"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad request")
 		return
+	}
+	if body.AssetID == 0 && body.Guest > 0 && body.File > 0 {
+		id, ok := s.fileAt(body.Guest, body.File)
+		if !ok {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("guest %d has no file %d", body.Guest, body.File))
+			return
+		}
+		body.AssetID = id
+	}
+	if body.From == "resume" {
+		s.Store.Read(func(st *store.State) { body.StartMs = st.Positions[body.AssetID] })
 	}
 	// Answer right away; the tablets follow progress (Sending… / live) over the WebSocket.
 	go func() { _ = s.Engine.Take(body.AssetID, body.StartMs) }()
@@ -676,10 +741,19 @@ func (s *Server) handlePulpitSet(w http.ResponseWriter, r *http.Request, sc *sto
 	}
 	var body struct {
 		CurrentSetID int64 `json:"current_set_id"`
+		Guest        int   `json:"guest"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad request")
 		return
+	}
+	if body.CurrentSetID == 0 && body.Guest > 0 {
+		set, ok := s.setAt(body.Guest)
+		if !ok {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("there is no guest %d", body.Guest))
+			return
+		}
+		body.CurrentSetID = set.ID
 	}
 	_ = s.Store.Update(func(st *store.State) {
 		for _, screen := range st.Screens {
@@ -1024,5 +1098,96 @@ func (s *Server) handleMarkerDelete(w http.ResponseWriter, r *http.Request, sc *
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// ---------- guests and files by number (for integrations) ----------
+
+// setAt returns the n-th guest set (1-based) of the active service, in tablet order.
+func (s *Server) setAt(n int) (model.Set, bool) {
+	var out model.Set
+	ok := false
+	s.Store.Read(func(st *store.State) {
+		sets := st.Manifest.SetsFor(store.ActiveService(st))
+		if n >= 1 && n <= len(sets) {
+			out = sets[n-1]
+			ok = true
+		}
+	})
+	return out, ok
+}
+
+// fileAt returns the asset id of file f (1-based) of guest g, counting only files on this PC.
+func (s *Server) fileAt(g, f int) (int64, bool) {
+	set, ok := s.setAt(g)
+	if !ok {
+		return 0, false
+	}
+	n := 0
+	var id int64
+	s.Store.Read(func(st *store.State) {
+		for _, assetID := range set.Items {
+			if st.Manifest.Asset(assetID) == nil {
+				continue
+			}
+			n++
+			if n == f {
+				id = assetID
+				return
+			}
+		}
+	})
+	return id, id != 0
+}
+
+// ---------- integration keys ----------
+
+type keyView struct {
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Prefix   string    `json:"prefix"`
+	Created  time.Time `json:"created"`
+	LastUsed time.Time `json:"last_used"`
+}
+
+func (s *Server) handleKeysList(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
+	out := []keyView{}
+	s.Store.Read(func(st *store.State) {
+		for _, k := range st.IntegrationKeys {
+			out = append(out, keyView{ID: k.ID, Name: k.Name, Prefix: k.Prefix, Created: k.Created, LastUsed: k.LastUsed})
+		}
+	})
+	writeJSON(w, out)
+}
+
+func (s *Server) handleKeyCreate(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	_ = readJSON(r, &body)
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		name = "Bitfocus Companion"
+	}
+	raw, _ := pairing.NewSessionToken()
+	key := "vik_" + raw
+	k := &store.IntegrationKey{ID: randomID(), Name: name, Hash: pairing.HashToken(key), Prefix: key[:10], Created: time.Now()}
+	_ = s.Store.Update(func(st *store.State) { st.IntegrationKeys = append(st.IntegrationKeys, k) })
+	log.Printf("integration key %q created", name)
+	writeJSON(w, map[string]string{"id": k.ID, "key": key, "name": name})
+}
+
+func (s *Server) handleKeyDelete(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
+	id := r.PathValue("id")
+	_ = s.Store.Update(func(st *store.State) {
+		kept := st.IntegrationKeys[:0]
+		for _, k := range st.IntegrationKeys {
+			if k.ID != id {
+				kept = append(kept, k)
+			}
+		}
+		st.IntegrationKeys = kept
+	})
+	s.hub.Disconnect("int-" + id)
 	writeJSON(w, map[string]bool{"ok": true})
 }
