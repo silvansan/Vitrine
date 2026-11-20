@@ -7,6 +7,8 @@
   var tusEndpoint = root.dataset.tus;
   var maxBytes = parseInt(root.dataset.maxMb, 10) * 1024 * 1024;
   var api = '/g/' + token + '/api/';
+  // Every call is about the event this page shows (a person can be in several).
+  var eventQuery = '?e=' + encodeURIComponent(root.dataset.event || '');
 
   var state = { set: [], library: [] };
   var ui = { tab: 'mine', filter: 'all', selected: [], openExtras: {} };
@@ -49,14 +51,14 @@
   };
 
   function post(path, body) {
-    return fetch(api + path, {
+    return fetch(api + path + eventQuery, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {})
     }).then(function (r) { return r.json(); }).then(setState);
   }
   function load() {
-    return fetch(api + 'state').then(function (r) { return r.json(); }).then(setState);
+    return fetch(api + 'state' + eventQuery).then(function (r) { return r.json(); }).then(setState);
   }
   function setState(data) {
     state = data;
@@ -221,11 +223,28 @@
     }
   }
 
+  function renderPrevious() {
+    var box = document.getElementById('copy-prev');
+    var prev = state.previous_set;
+    box.hidden = !prev || state.set.length > 0;
+    if (prev) {
+      document.getElementById('copy-prev-text').textContent =
+        'Start from your set of ' + prev.label + ' (' + prev.count + ' file' + (prev.count === 1 ? '' : 's') + ')?';
+    }
+    var shared = document.getElementById('filter-shared');
+    if (shared) shared.hidden = !state.library.some(function (a) { return a.group === 'shared'; });
+  }
+
   function render() {
     renderTabs();
     renderSet();
     renderLibrary();
+    renderPrevious();
   }
+
+  document.getElementById('copy-prev-btn').addEventListener('click', function () {
+    if (state.previous_set) post('set/copy', { set_id: state.previous_set.id });
+  });
 
   document.querySelectorAll('[data-tab]').forEach(function (btn) {
     btn.addEventListener('click', function () { ui.tab = btn.dataset.tab; render(); });

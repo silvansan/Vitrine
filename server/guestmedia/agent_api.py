@@ -65,7 +65,7 @@ def heartbeat(request):
         for asset in MediaAsset.objects.filter(pk__in=used):
             asset.last_used = timezone.now()
             asset.save(update_fields=["last_used"])
-    return JsonResponse({"manifest_version": agent.manifest_version})
+    return JsonResponse({"manifest_version": agent.current_manifest_version})
 
 
 @require_GET

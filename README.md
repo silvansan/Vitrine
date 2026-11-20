@@ -37,7 +37,8 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
 ## What it does
 
 - **Photos, videos and audio** (MP3, M4A, WAV…). Audio plays with the default input staying on the projector, or shows its cover/title card, as you choose.
-- **Guest link** per guest and service, with a QR code. Guests upload (resumable, so venue Wi-Fi dropouts don't matter), pick files from the shared library, put them in order, and add named start points (markers) to videos.
+- **Organizations, locations and roaming people**: each venue's vMix PC (location) gets only its own events and downloads their files before the day. A person keeps **one link** for every event and location; organizations can share media with each other.
+- **Personal link** with a QR code. Guests upload (resumable, so venue Wi-Fi dropouts don't matter), pick files from the shared library, put them in order, and add named start points (markers) to videos.
 - **Approval queue** before anything can be shown, plus a library with filters ("not used for 90 days"), bulk delete, a 30-day trash and private files.
 - **Conversion** on the server: photos to 1920×1080 with EXIF rotation and a blurred fill for portrait shots; videos to H.264 1080p at your project's frame rate, AAC 48 kHz; thumbnails and a filmstrip for cueing.
 - **Agent** on the vMix PC: downloads only what the active service needs, checks every file, slows down downloads while something is live, and keeps working when the internet is down.
@@ -50,11 +51,11 @@ Guests ──upload link──▶ Vitrine server (Portainer: Django + worker + f
 ## Quick start
 
 1. **Server**: deploy `deploy/docker-compose.yml` as a Portainer stack, point a Nginx Proxy Manager host at `vitrine-nginx:80`. See [docs/server.md](docs/server.md).
-2. **Agent**: in `/manage/agents/` create an agent token. On the vMix PC double-click `vitrine-agent.exe` (it installs or updates itself and opens its settings page), then paste the server address and token under **Connection**. See [docs/agent.md](docs/agent.md).
+2. **Agent**: in **Locations & tablets** (`/manage/agents/`) add a location and create its agent token. On the vMix PC double-click `vitrine-agent.exe` (it installs or updates itself and opens its settings page), then paste the server address and token under **Connection**. See [docs/agent.md](docs/agent.md).
 3. **Tablets**: pair each tablet by scanning a QR code from the backend or the tray companion.
-4. **Use it**: create a service, add guests, send them their links. See [docs/usage.md](docs/usage.md).
+4. **Use it**: create an event at that location, add people, send them their links. See [docs/usage.md](docs/usage.md).
 
-All of this is also on the server itself at **`/docs/`**: a searchable knowledge base built from this README and the `docs/` folder (press `/` to search). Planned next: [organizations, locations and roaming people](docs/organizations.md).
+All of this is also on the server itself at **`/docs/`**: a searchable knowledge base built from this README and the `docs/` folder (press `/` to search). How organizations, locations and roaming people fit together: [docs/organizations.md](docs/organizations.md).
 
 How it works inside (data model, vMix control, pairing, offline behaviour, APIs): [docs/architecture.md](docs/architecture.md). Moving it into Integr8 later: [docs/integr8.md](docs/integr8.md).
 

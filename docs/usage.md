@@ -1,17 +1,32 @@
 # Using Vitrine
 
-## Before the service (backend, `/manage/`)
+## Organizations, locations, events and people
 
-1. **Services → New service** (name, date). Keep it **active** so the agent receives it. Tick **auto-approve** only for services where you trust every guest.
-2. **Add a guest** for each speaker or group. Each gets a link and a QR code: **Copy link**, or print/show the QR. **New link** makes the old one stop working. **Open as guest** lets you fill a set for someone.
-3. Guests open the link on their phone:
-   - **Upload**: photos and videos from the gallery. Uploads resume after Wi-Fi dropouts while the page stays open.
-   - **Library**: pick files others uploaded ("This service", "Earlier services", "My uploads") and **Add to my set**.
+- An **organization** has its staff, people, locations and library. With more than one, pick the one you work in at the top left of `/manage/`.
+- A **location** is a venue or hall with one vMix PC (its agent): **Locations & tablets**.
+- An **event** is a date at a location (it used to be called "service").
+- A **person** has **one permanent link** for every event. Their uploads, markers and library follow them to any location you add them to. Their link opens their next event; if they are in several, they switch at the top of the page.
+
+The agent of a location receives its active events from yesterday up to two weeks ahead (`VITRINE_PRESYNC_DAYS`) and downloads their files **before the day**. Add someone to next month's event in Geneva and their files are on the Geneva vMix PC as soon as that event is within the window.
+
+## Before an event (backend, `/manage/`)
+
+1. **Locations & tablets → Add a location**, then **Create agent token** for its vMix PC (once per venue).
+2. **Events → New event** (name, date, location). Keep it **active** so the location's agent receives it. Tick **auto-approve** only for events where you trust every person.
+3. **Add people** on the event page: pick someone you already know or create a new person. **Copy link**, or print/show the QR. **Open their set here** lets you fill a set for someone. **People** lists everyone with their upcoming events; a person's page has **New link** (the old one stops working), **Add to** another event, and their uploads.
+4. People open their link on their phone:
+   - **Use it**: when their set for this event is empty, they can start from their set of an earlier event.
+   - **Upload**: photos, videos and audio from the gallery. Uploads resume after Wi-Fi dropouts while the page stays open.
+   - **Library**: pick files others uploaded ("This event", "Earlier events", "My uploads", and "Shared" from other organizations) and **Add to my set**.
    - **My set**: order with the arrows; **Options** to remove a file, mark own uploads private, and add markers to videos (name + time, e.g. "Baptism · 1:12"). For a video, **Options** also shows a player: pause where you want a start point and press **Add marker here**. Markers show up as jump buttons on the tablets and in the cue panel.
    - **Tips: learn how to use the tablet at the pulpit** (link under the greeting, `/g/<token>/tablet/`): a short illustrated guide to the pulpit tablet: the name at the top, changing pages, how to tell what is live, the vMix indicator, tapping a photo, video and song controls, Resume / From start, and markers. Worth sending to speakers who haven't used it before.
 
 Tip: videos that are already H.264 1920×1080 at your project frame rate (`VITRINE_VIDEO_FPS`) are ready in seconds, because they are copied instead of converted.
-4. **Waiting for approval** on the service page: approve or reject. Rejected files never reach the vMix PC. Converted files appear on the tablets as soon as the agent has downloaded them.
+5. **Waiting for approval** on the event page: approve or reject. Rejected files never reach the vMix PC. Converted files appear on the tablets as soon as the agent has downloaded them.
+
+## Sharing between organizations
+
+On **Organization**, tick the organizations that may use your shared files, and either share every approved, non-private file or only those you mark **Shared** (library: select files → **Share with other organizations**, or on a file's page). Their staff see them under **Library → Shared with us**, their people under **Shared** in the guest library. Their agents download a shared file only when one of their events uses it. Superusers create organizations and choose each organization's staff accounts there.
 
 ## Library housekeeping (`/manage/library/`)
 
@@ -21,7 +36,7 @@ Each file's page has a preview, the original download, the sets it is in, and ma
 
 ## Pairing tablets
 
-Either in the backend (**Agents & tablets → Show pairing QR**, choose Pulpit or Back) or in the tray companion (**Pair a tablet…**). Scan the QR with the tablet's camera while it is on the venue network. A code works once, for 15 minutes. Add the page to the home screen; on iPad use **Guided Access**, on Android **screen pinning**, so the pulpit can't leave the page.
+Either in the backend (**Locations & tablets → Show pairing QR** on the location, choose Pulpit or Back) or in the tray companion (**Pair a tablet…**). Scan the QR with the tablet's camera while it is on the venue network. A code works once, for 15 minutes. Add the page to the home screen; on iPad use **Guided Access**, on Android **screen pinning**, so the pulpit can't leave the page.
 
 Unpair from the companion, or **Unpair** next to the code in the backend (takes effect at the agent's next sync).
 

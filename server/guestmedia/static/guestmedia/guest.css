@@ -89,3 +89,10 @@ button,input{font:inherit}
 .foot a.primary{display:flex;align-items:center;justify-content:center;text-decoration:none}
 .help .foot{position:static}
 .help-body figure.narrow{max-width:280px}
+/* Event switcher and "start from your last set" */
+.event-switch select{max-width:100%;font:inherit;font-size:14px;font-weight:600;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.copy-prev{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px dashed var(--border);border-radius:12px;font-size:14px}
+.copy-prev span{flex:1;min-width:180px}
+.copy-prev .secondary{min-height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
+.copy-prev[hidden]{display:none}

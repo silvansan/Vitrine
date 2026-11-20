@@ -1,13 +1,20 @@
 """Data model.
 
-Files live once in the library (MediaAsset). A guest's set (MediaSet) is an
-ordered list that points at library files, so the same file can be in several
-guests' sets without being copied. The agent on the vMix PC only downloads the
-files that are in sets of the service it follows.
+Organization → Locations (one agent = one vMix PC each) → Events.
+People belong to an organization and roam: one permanent link, used at any
+event of any location. Being in an event (Guest) gives the person a set there.
+
+Files live once in the library (MediaAsset). A set (MediaSet) is an ordered
+list that points at library files, so the same file can be in several sets
+without being copied. An agent only downloads the files in the sets of its
+own location's upcoming events.
+
+Events are still called "Service" in code and in the agent protocol.
 """
 import hashlib
 import secrets
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import models
@@ -23,28 +30,56 @@ def new_nonce():
     return secrets.token_hex(12)
 
 
-class Service(models.Model):
-    name = models.CharField(max_length=200)
-    date = models.DateField(default=timezone.localdate)
-    is_active = models.BooleanField(
-        default=True,
-        help_text="Active services are sent to the agents. The agent picks one of them as its session.",
+class Organization(models.Model):
+    """A team with its own staff, people, locations and library."""
+
+    name = models.CharField(max_length=120, unique=True)
+    staff = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name="vitrine_orgs",
+        help_text="Staff accounts that manage this organization. Superusers see every organization.",
     )
-    auto_approve = models.BooleanField(
+    shares_with = models.ManyToManyField(
+        "self", symmetrical=False, blank=True, related_name="shared_from",
+        help_text="Organizations that may use our shared files.",
+    )
+    share_all = models.BooleanField(
         default=False,
-        help_text="Skip the approval queue for uploads from this service's guests.",
+        help_text="Share every approved, non-private file. Otherwise only files marked 'shared'.",
     )
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-date", "-id"]
+        ordering = ["name"]
 
     def __str__(self):
-        return f"{self.name} · {self.date:%d %b %Y}"
+        return self.name
+
+    def shares_asset(self, asset):
+        return self.share_all or asset.shared
 
 
-class Guest(models.Model):
-    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="guests")
+class Location(models.Model):
+    """A venue or hall. One location is one agent, which is one vMix PC."""
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="locations")
+    name = models.CharField(max_length=120)
+    agent = models.OneToOneField(
+        "Agent", null=True, blank=True, on_delete=models.SET_NULL, related_name="location",
+        help_text="The vMix PC at this location.",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["organization__name", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.name})"
+
+
+class Person(models.Model):
+    """Someone who brings media. Roams between events with one permanent link."""
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="people")
     name = models.CharField(max_length=120)
     token = models.CharField(max_length=64, unique=True, default=new_guest_token)
     can_upload = models.BooleanField(default=True)
@@ -54,20 +89,119 @@ class Guest(models.Model):
 
     class Meta:
         ordering = ["name"]
+        verbose_name_plural = "people"
 
     def __str__(self):
-        return f"{self.name} ({self.service.name})"
+        return self.name
 
     @property
     def is_expired(self):
         return self.expires_at is not None and self.expires_at < timezone.now()
 
-    def link_for(self, request=None):
-        """The guest's link. Uses VITRINE_PUBLIC_URL, or else the address of the current request."""
+    def link_for(self, request=None, event=None):
+        """The person's link. Uses VITRINE_PUBLIC_URL, or else the address of the current request."""
         base = settings.VITRINE_PUBLIC_URL
         if not base and request is not None:
             base = f"{request.scheme}://{request.get_host()}"
-        return f"{base}/g/{self.token}/"
+        link = f"{base}/g/{self.token}/"
+        return f"{link}?e={event.pk}" if event else link
+
+    @property
+    def link(self):
+        return self.link_for()
+
+    def participations(self):
+        return self.guests.select_related("service", "service__location").order_by("service__date", "service_id")
+
+    def current_participation(self):
+        """The event to show by default: the next active one from yesterday on, else the latest."""
+        yesterday = timezone.localdate() - timedelta(days=1)
+        upcoming = self.participations().filter(service__is_active=True, service__date__gte=yesterday)
+        today = upcoming.filter(service__date__gte=timezone.localdate()).first()
+        return today or upcoming.first() or self.participations().order_by("-service__date", "-service_id").first()
+
+
+class PersonAlias(models.Model):
+    """An older link that still opens a person's page (e.g. from before people were merged)."""
+
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="aliases")
+    token = models.CharField(max_length=64, unique=True)
+
+    def __str__(self):
+        return f"{self.person.name} ({self.token[:6]}…)"
+
+
+class Service(models.Model):
+    """An event: a date at a location (called "service" in code and in the agent protocol)."""
+
+    location = models.ForeignKey(
+        Location, null=True, blank=True, on_delete=models.SET_NULL, related_name="events",
+        help_text="The agent of this location shows the event and downloads its files ahead of time.",
+    )
+    name = models.CharField(max_length=200)
+    date = models.DateField(default=timezone.localdate)
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Active events from yesterday to the next days are sent to their location's agent.",
+    )
+    auto_approve = models.BooleanField(
+        default=False,
+        help_text="Skip the approval queue for uploads from this event's people.",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        verbose_name = "event"
+
+    def __str__(self):
+        where = f" · {self.location.name}" if self.location_id else ""
+        return f"{self.name} · {self.date:%d %b %Y}{where}"
+
+    @property
+    def organization(self):
+        return self.location.organization if self.location_id else None
+
+
+class Guest(models.Model):
+    """A person taking part in one event. Gives them a set there."""
+
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="guests")
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="guests")
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["person__name"]
+        constraints = [
+            models.UniqueConstraint(fields=["service", "person"], name="person_once_per_event"),
+        ]
+
+    def __str__(self):
+        return f"{self.person.name} ({self.service.name})"
+
+    # The link, rights and expiry belong to the person.
+    @property
+    def name(self):
+        return self.person.name
+
+    @property
+    def token(self):
+        return self.person.token
+
+    @property
+    def can_upload(self):
+        return self.person.can_upload
+
+    @property
+    def can_browse(self):
+        return self.person.can_browse
+
+    @property
+    def is_expired(self):
+        return self.person.is_expired
+
+    def link_for(self, request=None):
+        return self.person.link_for(request, self.service)
 
     @property
     def link(self):
@@ -115,7 +249,11 @@ class MediaAsset(models.Model):
     ]
 
     owner_name = models.CharField(max_length=120, help_text="Shown as 'from …' on the tablets.")
-    uploaded_by = models.ForeignKey(Guest, null=True, blank=True, on_delete=models.SET_NULL, related_name="uploads")
+    organization = models.ForeignKey(
+        Organization, null=True, blank=True, on_delete=models.SET_NULL, related_name="assets",
+        help_text="Whose library the file is in.",
+    )
+    uploaded_by = models.ForeignKey(Person, null=True, blank=True, on_delete=models.SET_NULL, related_name="uploads")
     service = models.ForeignKey(Service, null=True, blank=True, on_delete=models.SET_NULL, related_name="uploads")
     original_name = models.CharField(max_length=255)
     original = models.FileField(upload_to=original_upload_path, max_length=500, blank=True)
@@ -126,6 +264,9 @@ class MediaAsset(models.Model):
     error = models.TextField(blank=True)
     approval = models.CharField(max_length=10, choices=APPROVAL_CHOICES, default=APPROVAL_PENDING)
     private = models.BooleanField(default=False, help_text="Only the uploader can pick it; hidden from the shared library.")
+    shared = models.BooleanField(
+        default=False, help_text="Other organizations we share with may use it (always, if the organization shares everything)."
+    )
 
     processed = models.FileField(max_length=500, blank=True)
     processed_size = models.BigIntegerField(default=0)
@@ -179,15 +320,40 @@ class MediaAsset(models.Model):
     def owner_slug(self):
         return slugify(self.owner_name)[:60] or "guest"
 
-    def visible_to(self, guest):
-        """May this guest see and pick this file?"""
+    def visible_to(self, person):
+        """May this person see and pick this file? (A Guest works too: its person is used.)"""
+        person = getattr(person, "person", person)
         if self.deleted_at is not None or self.status == self.STATUS_FAILED:
             return False
-        if self.uploaded_by_id == guest.id:
+        if self.uploaded_by_id == person.id:
             return self.approval != self.APPROVAL_REJECTED
-        if not guest.can_browse:
+        if not person.can_browse:
             return False
-        return self.approval == self.APPROVAL_APPROVED and not self.private and self.status == self.STATUS_READY
+        if not (self.approval == self.APPROVAL_APPROVED and not self.private and self.status == self.STATUS_READY):
+            return False
+        return self.organization_id is None or self.organization_id == person.organization_id or self.is_shared_with(person.organization)
+
+    def is_shared_with(self, organization):
+        owner = self.organization
+        if owner is None or organization is None or owner.pk == organization.pk:
+            return False
+        return owner.shares_asset(self) and owner.shares_with.filter(pk=organization.pk).exists()
+
+    @classmethod
+    def library_for(cls, organization):
+        """Approved, ready, non-private files an organization's people may pick: its own and those shared with it."""
+        from django.db.models import Q
+
+        base = cls.objects.filter(status=cls.STATUS_READY, approval=cls.APPROVAL_APPROVED, private=False)
+        if organization is None:
+            return base.filter(organization__isnull=True)
+        sharing = Organization.objects.filter(shares_with=organization)
+        return base.filter(
+            Q(organization=organization)
+            | Q(organization__isnull=True)
+            | Q(organization__in=sharing.filter(share_all=True))
+            | Q(organization__in=sharing, shared=True)
+        )
 
 
 class MediaSet(models.Model):
@@ -294,6 +460,11 @@ class Agent(models.Model):
         self.token_prefix = raw[4:12]
         self.save(update_fields=["token_hash", "token_prefix"])
         return raw
+
+    @property
+    def current_manifest_version(self):
+        """Changes with every content change and once a day, so the agent picks up the moving event window."""
+        return self.manifest_version * 1000 + timezone.localdate().toordinal() % 1000
 
     @property
     def is_online(self):

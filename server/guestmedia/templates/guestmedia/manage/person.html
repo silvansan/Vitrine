@@ -1,0 +1,79 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}{{ person.name }}{% endblock %}
+{% block content %}
+<div class="row-head">
+  <h1>{{ person.name }}</h1>
+  {% if person.is_expired %}<span class="pill warn">Link expired</span>{% endif %}
+</div>
+
+<div class="grid-2">
+<section class="card">
+  <h2>Link</h2>
+  <div class="guest-row">
+    <img class="qr" src="{% url 'manage-qr' %}?d={{ link|urlencode }}" alt="QR code for {{ person.name }}'s link" width="140" height="140">
+    <div class="grow">
+      <p class="muted">One link for every event. It opens their next event; they can switch if they are in several.</p>
+      <code class="link">{{ link }}</code>
+      <div class="actions">
+        <button class="btn small" type="button" data-copy="{{ link }}">Copy link</button>
+        <a class="btn small" href="{{ link }}" target="_blank" rel="noopener">Open as {{ person.name }}</a>
+        <form method="post" class="inline" onsubmit="return confirm('Make a new link? The old one stops working.')">{% csrf_token %}<input type="hidden" name="action" value="new_link"><button class="btn small" type="submit">New link</button></form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Details</h2>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="update">
+    {{ form.as_p }}
+    <button class="btn" type="submit">Save</button>
+  </form>
+</section>
+</div>
+
+<section class="card">
+  <h2>Events</h2>
+  <table class="table">
+    <thead><tr><th>Event</th><th>Date</th><th>Location</th><th>Files in set</th><th></th></tr></thead>
+    <tbody>
+    {% for g in participations %}
+      <tr>
+        <td><a href="{% url 'manage-service' g.service.pk %}">{{ g.service.name }}</a></td>
+        <td>{{ g.service.date|date:"D d M Y" }}{% if g.service.date == today %} <span class="pill warn">Today</span>{% endif %}</td>
+        <td>{{ g.service.location.name|default:"—" }}</td>
+        <td>{% for s in g.sets.all %}{{ s.items.all|length }}{% empty %}0{% endfor %}</td>
+        <td><form method="post" class="inline" onsubmit="return confirm('Remove from this event?')">{% csrf_token %}<input type="hidden" name="action" value="remove_event"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Remove</button></form></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="muted">Not in any event yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if events %}
+  <form method="post" class="inline-form" style="margin-top:12px">
+    {% csrf_token %}<input type="hidden" name="action" value="add_event">
+    <label>Add to <select name="event_id">{% for e in events %}<option value="{{ e.pk }}">{{ e.name }} · {{ e.date|date:"D d M" }} · {{ e.location.name }}</option>{% endfor %}</select></label>
+    <button class="btn primary" type="submit">Add</button>
+  </form>
+  <p class="muted">That location's agent downloads {{ person.name }}'s files before the day, once they are approved and converted.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Uploads</h2>
+  <div class="tiles">
+    {% for a in uploads %}
+      <a class="tile" href="{% url 'manage-asset' a.pk %}">
+        {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph">{{ a.get_status_display }}</div>{% endif %}
+        <div class="tile-body">{{ a.original_name }}<div class="muted">{{ a.get_approval_display }}</div></div>
+      </a>
+    {% empty %}<p class="muted">No uploads yet.</p>{% endfor %}
+  </div>
+</section>
+
+<form method="post" onsubmit="return confirm('Delete {{ person.name|escapejs }}? Their link stops working; their uploads stay in the library.')">
+  {% csrf_token %}<input type="hidden" name="action" value="delete"><button class="btn danger" type="submit">Delete person</button>
+</form>
+{% endblock %}

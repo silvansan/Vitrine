@@ -43,6 +43,9 @@ if "example.org" in VITRINE_PUBLIC_URL or "example.com" in VITRINE_PUBLIC_URL:
 VITRINE_KEY_PATH = Path(os.environ.get("VITRINE_KEY_PATH", BASE_DIR / "data" / "keys" / "pairing_ed25519.pem"))
 # Days a deleted file stays in the trash before it is removed for good.
 VITRINE_TRASH_DAYS = int(os.environ.get("VITRINE_TRASH_DAYS", "30"))
+# An agent receives the active events of its location from yesterday up to this
+# many days ahead, and downloads their files before the day.
+VITRINE_PRESYNC_DAYS = int(os.environ.get("VITRINE_PRESYNC_DAYS", "14"))
 # Frame rate of the vMix project; videos are converted to this constant frame rate.
 VITRINE_VIDEO_FPS = int(os.environ.get("VITRINE_VIDEO_FPS", "25"))
 # Seconds between filmstrip frames used by the cue panel.

@@ -4,21 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>{{ guest.name }} · {{ service.name }}</title>
+<title>{{ person.name }} · {{ service.name }}</title>
 <link rel="stylesheet" href="{% static 'guestmedia/guest.css' %}">
 </head>
 <body>
 <div class="app" id="app"
-     data-token="{{ guest.token }}"
-     data-tus="/g/{{ guest.token }}/tus/"
+     data-token="{{ person.token }}"
+     data-event="{{ service.pk }}"
+     data-tus="/g/{{ person.token }}/tus/?e={{ service.pk }}"
      data-max-mb="{{ max_upload_mb }}"
      data-can-upload="{{ guest.can_upload|yesno:'1,0' }}"
      data-can-browse="{{ guest.can_browse|yesno:'1,0' }}">
   <header class="head">
-    <div class="sub">{{ service.name }} · {{ service.date|date:"d M" }}</div>
-    <h1>Hi {{ guest.name }}</h1>
+    {% if events|length > 1 %}
+    <label class="event-switch">
+      <span class="sr-only">Event</span>
+      <select onchange="location.href='?e='+this.value">
+        {% for e in events %}<option value="{{ e.id }}"{% if e.current %} selected{% endif %}>{{ e.label }}</option>{% endfor %}
+      </select>
+    </label>
+    {% else %}
+    <div class="sub">{{ event_label }}</div>
+    {% endif %}
+    <h1>Hi {{ person.name }}</h1>
     <p>Pick the pictures and videos for your part.</p>
-    <a class="help-link" href="{% url 'guest-tablet-help' guest.token %}">Tips: learn how to use the tablet at the pulpit →</a>
+    <a class="help-link" href="{% url 'guest-tablet-help' person.token %}">Tips: learn how to use the tablet at the pulpit →</a>
   </header>
 
   <nav class="tabs-wrap" aria-label="Sections">
@@ -30,7 +40,11 @@
   </nav>
 
   <section class="panel" data-panel="mine">
-    <p class="hint">Your set, in the order you'll show it.</p>
+    <p class="hint">Your set for this event, in the order you'll show it.</p>
+    <div class="copy-prev" id="copy-prev" hidden>
+      <span id="copy-prev-text"></span>
+      <button type="button" class="secondary" id="copy-prev-btn">Use it</button>
+    </div>
     <ol class="set-list" id="set-list"></ol>
     <p class="empty" id="set-empty" hidden>Nothing here yet. Upload your own files or pick from the library.</p>
   </section>
@@ -49,9 +63,10 @@
   <section class="panel" data-panel="library" hidden>
     <div class="filters" id="filters">
       <button type="button" data-filter="all" aria-pressed="true">All</button>
-      <button type="button" data-filter="today" aria-pressed="false">This service</button>
-      <button type="button" data-filter="earlier" aria-pressed="false">Earlier services</button>
+      <button type="button" data-filter="today" aria-pressed="false">This event</button>
+      <button type="button" data-filter="earlier" aria-pressed="false">Earlier events</button>
       <button type="button" data-filter="mine" aria-pressed="false">My uploads</button>
+      <button type="button" data-filter="shared" aria-pressed="false" id="filter-shared" hidden>Shared</button>
     </div>
     <div class="grid" id="library"></div>
     <p class="empty" id="library-empty" hidden>Nothing to pick here.</p>

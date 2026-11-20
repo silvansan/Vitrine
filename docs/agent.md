@@ -18,7 +18,7 @@ The agent is one Windows service (`vitrine-agent.exe`) plus a tray icon (`vitrin
    - opens TCP port 8090 in the Windows firewall for all network types (venue networks are often marked Public),
    - starts the tray icon (and sets it to start at every logon),
    - opens the settings page in your browser.
-3. In the settings page, under **Connection**, paste the **server address** (e.g. `https://vitrine.yourdomain.ch`) and the **agent token** from the backend (Agents & tablets), then **Save and restart agent**. The agent checks the connection before saving.
+3. In the settings page, under **Connection**, paste the **server address** (e.g. `https://vitrine.yourdomain.ch`) and the **agent token** from the backend (**Locations & tablets**, on the location of this PC), then **Save and restart agent**. The agent checks the connection before saving.
 
 **Updating** is the same: unzip the new version and double-click its `vitrine-agent.exe`. Your settings, tablets and downloaded files are kept (they live in `C:\ProgramData\Vitrine\`).
 
@@ -40,7 +40,7 @@ All of these are in **Open settings… → Connection** (the first two) and **Mo
 | Setting | config.json key | Meaning |
 |---|---|---|
 | Server address | `server_url` | The Vitrine server: your public domain, or `http://<tailscale-ip>:8080` |
-| Agent token | `agent_token` | From the backend (Agents & tablets); shown only as its first characters |
+| Agent token | `agent_token` | From the backend (Locations & tablets); shown only as its first characters |
 | Media folder | `media_dir` | Where files are kept; vMix plays them from here. Use a local disk |
 | vMix address | `vmix_url` | Keep `http://127.0.0.1:8088` when the agent runs on the vMix PC |
 | Tablet port | `listen` | Port for the tablets (default 8090) |
@@ -83,7 +83,7 @@ C:\ProgramData\Vitrine\thumbs\                     tablet thumbnails and filmstr
 C:\ProgramData\Vitrine\state.json                  settings, tablets, last manifest, positions
 ```
 
-Files that leave all active services are removed at the next sync (unless they're on air).
+The agent receives the active events of its location from yesterday up to `VITRINE_PRESYNC_DAYS` (14) days ahead and downloads their files ahead of time. Files that leave all of them are removed at the next sync (unless they're on air). Moving this PC to another venue: in the backend, assign its agent to that location (**Locations & tablets**); nothing changes on the PC.
 
 ## Testing without vMix
 

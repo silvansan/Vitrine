@@ -1,0 +1,49 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}{{ org.name }}{% endblock %}
+{% block content %}
+<h1>{{ org.name }}</h1>
+
+<form method="post" class="card">
+  {% csrf_token %}<input type="hidden" name="action" value="update">
+  <h2>Name</h2>
+  <p><input name="name" value="{{ org.name }}" aria-label="Organization name" required></p>
+
+  <h2>Share our media</h2>
+  <p class="muted">Organizations you tick can pick our shared files in their library (staff and people). Their agents download a shared file only when one of their events uses it.</p>
+  {% if others %}
+  <div class="checks">
+    {% for o in others %}<label><input type="checkbox" name="shares_with" value="{{ o.pk }}"{% if o.pk in sharing_ids %} checked{% endif %}> {{ o.name }}</label>{% endfor %}
+  </div>
+  <p><label><input type="checkbox" name="share_all"{% if org.share_all %} checked{% endif %}> Share every approved, non-private file</label><br>
+    <span class="muted">Otherwise only the files marked “Shared” in the library.</span></p>
+  {% else %}
+  <p class="muted">There is no other organization yet.</p>
+  {% endif %}
+
+  {% if users %}
+  <h2>Staff</h2>
+  <p class="muted">Staff accounts that work in this organization. Superusers see every organization. Create accounts in <a href="/admin/auth/user/">Admin → Users</a> (tick “Staff status”).</p>
+  <div class="checks">
+    {% for u in users %}<label><input type="checkbox" name="staff" value="{{ u.pk }}"{% if u.pk in staff_ids %} checked{% endif %}> {{ u.get_username }}{% if u.is_superuser %} <span class="muted">(superuser)</span>{% endif %}</label>{% endfor %}
+  </div>
+  {% endif %}
+  <button class="btn primary" type="submit">Save</button>
+</form>
+
+<section class="card">
+  <h2>Shared with us</h2>
+  {% for o in shared_from %}<span class="chip">{{ o.name }}</span> {% empty %}<p class="muted">No organization shares with us yet.</p>{% endfor %}
+  {% if shared_from %}<p><a href="{% url 'manage-library' %}?scope=shared">See their shared files</a></p>{% endif %}
+</section>
+
+{% if request.user.is_superuser %}
+<section class="card">
+  <h2>New organization</h2>
+  <form method="post" class="inline-form">
+    {% csrf_token %}<input type="hidden" name="action" value="create">
+    <label>Name <input name="new_name" placeholder="Geneva team" required></label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

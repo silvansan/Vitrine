@@ -1,45 +1,76 @@
 {% extends "guestmedia/manage/base.html" %}
-{% block title %}Services{% endblock %}
+{% block title %}Events{% endblock %}
 {% block content %}
 <div class="row-head">
-  <h1>Services</h1>
+  <h1>Events</h1>
   {% if pending %}<a class="pill warn" href="{% url 'manage-library' %}?approval=pending">{{ pending }} waiting for approval</a>{% endif %}
 </div>
 
+{% if not locations %}
+<section class="card highlight">
+  <h2>Start with a location</h2>
+  <p>A location is a venue or hall with one vMix PC (agent). Events happen at a location, and its agent downloads their files ahead of time.</p>
+  <a class="btn primary" href="{% url 'manage-agents' %}">Add a location</a>
+</section>
+{% else %}
 <section class="card">
-  <h2>New service</h2>
+  <h2>New event</h2>
   <form method="post" class="inline-form">
     {% csrf_token %}
     {{ form.as_p }}
     <button class="btn primary" type="submit">Create</button>
   </form>
 </section>
+{% endif %}
 
 <section class="card">
+  <div class="row-head">
+    <h2>All events</h2>
+    {% if locations|length > 1 %}
+    <form method="get" class="inline-form">
+      <select name="location" aria-label="Location" onchange="this.form.submit()">
+        <option value="">All locations</option>
+        {% for l in locations %}<option value="{{ l.pk }}"{% if location_filter == l.pk|stringformat:"d" %} selected{% endif %}>{{ l.name }}</option>{% endfor %}
+      </select>
+    </form>
+    {% endif %}
+  </div>
   <table class="table">
-    <thead><tr><th>Service</th><th>Date</th><th>Guests</th><th>Sent to agents</th></tr></thead>
+    <thead><tr><th>Event</th><th>Date</th><th>Location</th><th>People</th><th>Sent to the agent</th></tr></thead>
     <tbody>
-    {% for s in services %}
+    {% for s in events %}
       <tr>
         <td><a href="{% url 'manage-service' s.pk %}">{{ s.name }}</a></td>
-        <td>{{ s.date|date:"D d M Y" }}</td>
+        <td>{{ s.date|date:"D d M Y" }}{% if s.date == today %} <span class="pill warn">Today</span>{% endif %}</td>
+        <td>{{ s.location.name }}</td>
         <td>{{ s.guest_count }}</td>
-        <td>{% if s.is_active %}<span class="pill ok">Active</span>{% else %}<span class="pill">Off</span>{% endif %}</td>
+        <td>{% if not s.is_active %}<span class="pill">Off</span>{% elif s.date < today %}<span class="pill">Past</span>{% else %}<span class="pill ok">Active</span>{% endif %}</td>
       </tr>
     {% empty %}
-      <tr><td colspan="4" class="muted">No services yet.</td></tr>
+      <tr><td colspan="5" class="muted">No events yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  <p class="muted">Each agent receives the active events of its location from yesterday up to the next days, and downloads their files ahead of time.</p>
 </section>
 
+{% if unplaced %}
 <section class="card">
-  <h2>Agents</h2>
-  {% for a in agents %}
-    <p><span class="dot {% if a.is_online %}on{% endif %}"></span> <strong>{{ a.name }}</strong>
-      {% if a.is_online %}online · {{ a.lan_ip }}{% else %}offline{% if a.last_seen %} · last seen {{ a.last_seen|timesince }} ago{% endif %}{% endif %}</p>
+  <h2>Events without a location</h2>
+  <p class="muted">No agent receives these. Open one and choose its location.</p>
+  <ul>{% for s in unplaced %}<li><a href="{% url 'manage-service' s.pk %}">{{ s }}</a></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Locations</h2>
+  {% for l in locations %}
+    <p><span class="dot {% if l.agent.is_online %}on{% endif %}"></span> <strong>{{ l.name }}</strong> ·
+      {% if not l.agent %}<span class="muted">no agent yet</span>
+      {% elif l.agent.is_online %}online · {{ l.agent.lan_ip }}{% if l.agent.status.sync %} · {{ l.agent.status.sync.done|default:0 }} of {{ l.agent.status.sync.total|default:0 }} files synced{% endif %}
+      {% else %}offline{% if l.agent.last_seen %} · last seen {{ l.agent.last_seen|timesince }} ago{% endif %}{% endif %}</p>
   {% empty %}
-    <p class="muted">No agent yet. <a href="{% url 'manage-agents' %}">Add the vMix PC</a>.</p>
+    <p class="muted">No location yet. <a href="{% url 'manage-agents' %}">Add one</a>.</p>
   {% endfor %}
 </section>
 {% endblock %}

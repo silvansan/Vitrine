@@ -6,6 +6,7 @@
   <h1>{{ asset.original_name }}</h1>
   <span class="pill {{ asset.approval }}">{{ asset.get_approval_display }}</span>
   {% if asset.deleted_at %}<span class="pill warn">In trash</span>{% endif %}
+  {% if readonly %}<span class="pill">Shared by {{ asset.organization.name }}</span>{% endif %}
 </div>
 
 <div class="grid-2">
@@ -22,20 +23,23 @@
   {% else %}
     <p class="muted">Still processing…</p>
   {% endif %}
-  <div class="actions">
+  {% if not readonly %}<div class="actions">
     <form method="post" action="{% url 'manage-approve' asset.pk %}" class="inline">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn primary" name="decision" value="approve">Approve</button><button class="btn danger" name="decision" value="reject">Reject</button></form>
     <a class="btn" href="{% url 'manage-asset-file' asset.pk 'original' %}">Original file</a>
-  </div>
+  </div>{% endif %}
 </section>
 
 <section class="card">
   <h2>Details</h2>
+  {% if not readonly %}
   <form method="post">
     {% csrf_token %}<input type="hidden" name="action" value="update">
     <p><label>Shown as from <input name="owner_name" value="{{ asset.owner_name }}"></label></p>
     <p><label><input type="checkbox" name="private" {% if asset.private %}checked{% endif %}> Private (only the uploader can pick it)</label></p>
+    <p><label><input type="checkbox" name="shared" {% if asset.shared %}checked{% endif %}> Shared with the organizations we share with</label></p>
     <button class="btn" type="submit">Save</button>
   </form>
+  {% endif %}
   <p class="muted">{{ asset.get_kind_display }} · {{ asset.processed_size|filesizeformat }} · uploaded {{ asset.created|date:"d M Y H:i" }}{% if asset.service %} for {{ asset.service.name }}{% endif %}</p>
   <p class="muted">In sets: {% for s in sets %}{{ s.title }} ({{ s.service.name }}){% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
 
@@ -48,12 +52,12 @@
       </li>
     {% empty %}<li class="muted">No markers.</li>{% endfor %}
   </ul>
-  <form method="post" class="inline-form">
+  {% if not readonly %}<form method="post" class="inline-form">
     {% csrf_token %}<input type="hidden" name="action" value="add_marker">
     <input name="label" placeholder="Label, e.g. Baptism" aria-label="Marker label">
     <input name="time" placeholder="1:12" aria-label="Time (m:ss)" size="6">
     <button class="btn" type="submit">Add marker</button>
-  </form>
+  </form>{% endif %}
   {% endif %}
 </section>
 </div>

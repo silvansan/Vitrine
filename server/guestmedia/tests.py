@@ -11,7 +11,11 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from PIL import Image
 
-from .models import Agent, Guest, MediaAsset, ScreenGrant, Service
+from datetime import timedelta
+
+from django.utils import timezone
+
+from .models import Agent, Guest, Location, MediaAsset, Organization, Person, PersonAlias, ScreenGrant, Service
 from .signing import private_key
 
 TMP = Path(tempfile.mkdtemp(prefix="vitrine-test-"))
@@ -37,6 +41,13 @@ def video_bytes(seconds=3):
     return out.read_bytes()
 
 
+def make_guest(service, name, org=None):
+    """A person (in the event's organization) taking part in the event."""
+    org = org or service.location.organization
+    person = Person.objects.create(organization=org, name=name)
+    return Guest.objects.create(service=service, person=person)
+
+
 def b64(text):
     return base64.b64encode(text.encode()).decode()
 
@@ -55,10 +66,12 @@ class FlowTests(TestCase):
 
     def setUp(self):
         private_key.cache_clear()
-        self.service = Service.objects.create(name="Sunday Service")
-        self.maria = Guest.objects.create(service=self.service, name="Maria")
-        self.daniel = Guest.objects.create(service=self.service, name="Daniel")
+        self.org = Organization.objects.create(name="Main")
         self.agent, self.agent_token = Agent.create_with_token("vMix PC")
+        self.location = Location.objects.create(organization=self.org, name="Zurich hall", agent=self.agent)
+        self.service = Service.objects.create(name="Sunday Service", location=self.location)
+        self.maria = make_guest(self.service, "Maria")
+        self.daniel = make_guest(self.service, "Daniel")
         self.auth = {"HTTP_AUTHORIZATION": f"Bearer {self.agent_token}"}
 
     def tus_upload(self, guest, name, data, chunk=100_000):
@@ -128,7 +141,7 @@ class FlowTests(TestCase):
         # Private files disappear from other guests' libraries.
         asset.private = True
         asset.save()
-        other = Guest.objects.create(service=self.service, name="Youth team")
+        other = make_guest(self.service, "Youth team")
         state = self.client.get(f"/g/{other.token}/api/state").json()
         self.assertEqual(state["library"], [])
 
@@ -188,7 +201,9 @@ class FlowTests(TestCase):
         self.client.login(username="admin", password="pw")
         asset = self.tus_upload(self.maria, "IMG_2.jpg", jpeg_bytes())
         for url in ["/manage/", f"/manage/service/{self.service.pk}/", "/manage/library/", "/manage/library/?trash=1",
-                    f"/manage/asset/{asset.pk}/", "/manage/agents/", f"/g/{self.maria.token}/", f"/g/{self.maria.token}/tablet/"]:
+                    f"/manage/asset/{asset.pk}/", "/manage/agents/", f"/g/{self.maria.token}/", f"/g/{self.maria.token}/tablet/",
+                    "/manage/people/", f"/manage/people/{self.maria.person.pk}/", "/manage/organization/",
+                    "/manage/library/?scope=shared"]:
             self.assertEqual(self.client.get(url).status_code, 200, url)
         response = self.client.post("/manage/agents/", {"action": "pair", "agent_id": self.agent.pk, "role": "back", "name": "Back"})
         self.assertContains(response, "/pair?t=s1.")
@@ -205,16 +220,19 @@ class GuestLinkTests(TestCase):
     def test_link_follows_the_manage_address(self):
         User.objects.create_superuser("admin", "a@example.org", "pw")
         self.client.login(username="admin", password="pw")
-        service = Service.objects.create(name="Test")
-        guest = Guest.objects.create(service=service, name="Maria")
+        org = Organization.objects.create(name="Main")
+        service = Service.objects.create(name="Test", location=Location.objects.create(organization=org, name="Hall"))
+        guest = make_guest(service, "Maria")
         response = self.client.get(f"/manage/service/{service.pk}/", HTTP_HOST="vitrine.mychurch.ch", secure=True)
         self.assertContains(response, f"https://vitrine.mychurch.ch/g/{guest.token}/")
 
     @override_settings(VITRINE_PUBLIC_URL="https://guests.mychurch.ch")
     def test_setting_wins(self):
-        service = Service.objects.create(name="Test")
-        guest = Guest.objects.create(service=service, name="Maria")
-        self.assertEqual(guest.link, f"https://guests.mychurch.ch/g/{guest.token}/")
+        org = Organization.objects.create(name="Main")
+        service = Service.objects.create(name="Test", location=Location.objects.create(organization=org, name="Hall"))
+        guest = make_guest(service, "Maria")
+        self.assertEqual(guest.person.link, f"https://guests.mychurch.ch/g/{guest.token}/")
+        self.assertEqual(guest.link, f"https://guests.mychurch.ch/g/{guest.token}/?e={service.pk}")
 
 
 @override_settings(VITRINE_VIDEO_FPS=25, VITRINE_FILMSTRIP_INTERVAL=1)
@@ -295,3 +313,107 @@ class DocsTests(TestCase):
         self.assertEqual(self.client.get("/docs/nope/").status_code, 404)
         self.assertEqual(self.client.get("/docs/_media/back-tablet.png").status_code, 200)
         self.assertEqual(self.client.get("/docs/_media/../../server/manage.py").status_code, 404)
+
+
+@override_settings(
+    MEDIA_ROOT=TMP / "media",
+    UPLOAD_TMP_ROOT=TMP / "media" / "incoming",
+    VITRINE_KEY_PATH=TMP / "keys" / "key.pem",
+    VITRINE_PRESYNC_DAYS=14,
+)
+class OrganizationTests(TestCase):
+    """Organizations → locations (agents) → events; people roam between them."""
+
+    def setUp(self):
+        from .signing import private_key
+
+        private_key.cache_clear()
+        today = timezone.localdate()
+        self.org = Organization.objects.create(name="Main")
+        self.zurich_agent, zt = Agent.create_with_token("Zurich PC")
+        self.geneva_agent, gt = Agent.create_with_token("Geneva PC")
+        self.zurich = Location.objects.create(organization=self.org, name="Zurich", agent=self.zurich_agent)
+        self.geneva = Location.objects.create(organization=self.org, name="Geneva", agent=self.geneva_agent)
+        self.zt = {"HTTP_AUTHORIZATION": f"Bearer {zt}"}
+        self.gt = {"HTTP_AUTHORIZATION": f"Bearer {gt}"}
+        self.z_today = Service.objects.create(name="Zurich today", date=today, location=self.zurich)
+        self.g_next_week = Service.objects.create(name="Geneva", date=today + timedelta(days=7), location=self.geneva)
+        self.g_far = Service.objects.create(name="Geneva later", date=today + timedelta(days=60), location=self.geneva)
+        self.z_old = Service.objects.create(name="Zurich old", date=today - timedelta(days=10), location=self.zurich)
+        self.maria = Person.objects.create(organization=self.org, name="Maria")
+        self.photo = MediaAsset.objects.create(
+            owner_name="Maria", uploaded_by=self.maria, organization=self.org, original_name="a.jpg", kind="photo",
+            status="ready", approval="approved", sha256="x", processed_size=1,
+        )
+
+    def manifest(self, auth):
+        return self.client.get("/api/agent/manifest", **auth).json()
+
+    def test_each_agent_gets_its_location_window(self):
+        self.assertEqual([s["name"] for s in self.manifest(self.zt)["services"]], ["Zurich today"])
+        self.assertEqual([s["name"] for s in self.manifest(self.gt)["services"]], ["Geneva"])
+        self.assertEqual(self.manifest(self.gt)["location"]["name"], "Geneva")
+        # An agent without a location gets nothing.
+        loose, raw = Agent.create_with_token("Spare PC")
+        self.assertEqual(self.client.get("/api/agent/manifest", HTTP_AUTHORIZATION=f"Bearer {raw}").json()["services"], [])
+
+    def test_person_roams_and_files_presync(self):
+        z = Guest.objects.create(service=self.z_today, person=self.maria)
+        z.get_set().items.create(asset=self.photo, position=0)
+        # Next week in Geneva: same link, set copied from Zurich.
+        Guest.objects.create(service=self.g_next_week, person=self.maria)
+        page = self.client.get(f"/g/{self.maria.token}/")
+        self.assertContains(page, "Zurich today")
+        self.assertContains(page, "Geneva")  # event switcher
+        state = self.client.get(f"/g/{self.maria.token}/api/state?e={self.g_next_week.pk}").json()
+        self.assertEqual(state["set"], [])
+        self.assertEqual(state["previous_set"]["count"], 1)
+        state = self.client.post(
+            f"/g/{self.maria.token}/api/set/copy?e={self.g_next_week.pk}",
+            json.dumps({"set_id": state["previous_set"]["id"]}), content_type="application/json",
+        ).json()
+        self.assertEqual([a["id"] for a in state["set"]], [self.photo.pk])
+        # Geneva's agent downloads it a week ahead; Zurich's has it today.
+        self.assertEqual([a["id"] for a in self.manifest(self.gt)["assets"]], [self.photo.pk])
+        self.assertEqual([a["id"] for a in self.manifest(self.zt)["assets"]], [self.photo.pk])
+
+    def test_old_links_and_waiting_page(self):
+        PersonAlias.objects.create(person=self.maria, token="old-token-123")
+        self.assertContains(self.client.get("/g/old-token-123/"), "aren't in an upcoming event")
+        self.assertEqual(self.client.get("/g/nope/").status_code, 404)
+
+    def test_sharing_between_organizations(self):
+        other = Organization.objects.create(name="Geneva team")
+        loc = Location.objects.create(organization=other, name="Lausanne")
+        event = Service.objects.create(name="Lausanne", location=loc)
+        john = Guest.objects.create(service=event, person=Person.objects.create(organization=other, name="John"))
+        library = lambda: [a["id"] for a in self.client.get(f"/g/{john.token}/api/state").json()["library"]]  # noqa: E731
+        self.assertEqual(library(), [])
+        self.org.shares_with.add(other)
+        self.assertEqual(library(), [])  # only files marked shared
+        self.photo.shared = True
+        self.photo.save()
+        self.assertEqual(library(), [self.photo.pk])
+        state = self.client.get(f"/g/{john.token}/api/state").json()
+        self.assertEqual(state["library"][0]["group"], "shared")
+        self.photo.shared = False
+        self.photo.save()
+        self.org.share_all = True
+        self.org.save()
+        self.assertEqual(library(), [self.photo.pk])
+
+    def test_staff_only_see_their_organization(self):
+        other = Organization.objects.create(name="Other")
+        stranger = Person.objects.create(organization=other, name="Stranger")
+        user = User.objects.create_user("tech", password="pw", is_staff=True)
+        self.org.staff.add(user)
+        self.client.login(username="tech", password="pw")
+        self.assertEqual(self.client.get(f"/manage/people/{self.maria.pk}/").status_code, 200)
+        self.assertEqual(self.client.get(f"/manage/people/{stranger.pk}/").status_code, 404)
+        self.assertNotContains(self.client.get("/manage/people/"), "Stranger")
+        # Adding Maria to the Geneva event from her page.
+        self.client.post(f"/manage/people/{self.maria.pk}/", {"action": "add_event", "event_id": self.g_next_week.pk})
+        self.assertTrue(Guest.objects.filter(person=self.maria, service=self.g_next_week).exists())
+        # Creating an event needs one of our locations.
+        response = self.client.post("/manage/", {"name": "Youth night", "date": timezone.localdate().isoformat(), "location": self.zurich.pk, "is_active": "on"})
+        self.assertEqual(response.status_code, 302)

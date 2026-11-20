@@ -10,10 +10,9 @@ from pathlib import Path
 
 from django.conf import settings
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Guest, MediaAsset, SetItem, Upload
+from .models import MediaAsset, SetItem, Upload
 from .tasks import process_asset
 
 TUS_VERSION = "1.0.0"
@@ -50,16 +49,24 @@ def safe_filename(name):
     return name[:200] or "upload"
 
 
-def guest_for(token):
-    guest = get_object_or_404(Guest.objects.select_related("service"), token=token)
-    if guest.is_expired or not guest.can_upload:
+def guest_for(request, token):
+    """The participation uploads go to (?e=<event id> on the upload endpoint), if the person may upload."""
+    from django.http import Http404
+
+    from .guest_views import load_guest
+
+    try:
+        person, guest = load_guest(request, token)
+    except Http404:
+        return None
+    if not person.can_upload:
         return None
     return guest
 
 
 @csrf_exempt
 def collection(request, token):
-    guest = guest_for(token)
+    guest = guest_for(request, token)
     if guest is None:
         return tus_response(403)
     max_size = settings.VITRINE_MAX_UPLOAD_MB * 1024 * 1024
@@ -97,10 +104,15 @@ def collection(request, token):
 
 @csrf_exempt
 def resource(request, token, upload_id):
-    guest = guest_for(token)
-    if guest is None:
+    from .guest_views import load_person
+
+    try:
+        person = load_person(token)
+    except Exception:
         return tus_response(403)
-    upload = Upload.objects.filter(pk=upload_id, guest=guest).first()
+    if not person.can_upload:
+        return tus_response(403)
+    upload = Upload.objects.filter(pk=upload_id, guest__person=person).first()
     if upload is None:
         return tus_response(404)
 
@@ -146,8 +158,9 @@ def finish_upload(upload):
     os.replace(upload.temp_path, target)
 
     asset = MediaAsset.objects.create(
-        owner_name=guest.name,
-        uploaded_by=guest,
+        owner_name=guest.person.name,
+        uploaded_by=guest.person,
+        organization=guest.person.organization,
         service=guest.service,
         original_name=upload.filename,
         original_size=upload.length,

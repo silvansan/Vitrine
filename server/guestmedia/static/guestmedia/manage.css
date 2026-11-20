@@ -51,3 +51,14 @@ code.link{display:block;word-break:break-all;background:#F3F4F7;padding:6px 8px;
 .log{white-space:pre-wrap;font-size:12px;background:#F3F4F7;padding:8px;border-radius:6px;max-height:240px;overflow:auto}
 .markers{padding-left:18px}
 .top .logout{margin-left:auto}
+.org-switch select,.org-name{font-weight:600;border-radius:8px}
+.org-name{color:var(--muted);padding:0 4px}
+.top{flex-wrap:wrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;background:#EEF0F4;font-size:13px;color:var(--text);text-decoration:none}
+.chip.today{background:#FDE7E5;color:var(--danger);font-weight:600}
+.loc{display:flex;flex-direction:column;gap:10px}
+.stack{display:flex;flex-direction:column;gap:6px}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-bottom:18px}
+.grid-3 .card{margin-bottom:0}
+.checks{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 0}

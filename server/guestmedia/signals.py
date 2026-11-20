@@ -1,10 +1,10 @@
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Guest, MediaAsset, MediaSet, Marker, ScreenGrant, Service, SetItem
+from .models import Guest, Location, MediaAsset, MediaSet, Marker, Organization, Person, ScreenGrant, Service, SetItem
 from .notify import notify_agents
 
-WATCHED = (Service, Guest, MediaAsset, MediaSet, SetItem, Marker, ScreenGrant)
+WATCHED = (Service, Guest, Person, Location, Organization, MediaAsset, MediaSet, SetItem, Marker, ScreenGrant)
 
 
 @receiver(post_save)

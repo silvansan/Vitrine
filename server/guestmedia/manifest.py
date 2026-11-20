@@ -1,4 +1,7 @@
-"""What an agent needs to know: active services, their sets, and the files in them."""
+"""What an agent needs to know: its location's events, their sets, and the files in them."""
+from datetime import timedelta
+
+from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -30,11 +33,30 @@ def asset_entry(asset):
     return entry
 
 
+def events_for(agent):
+    """Active events of the agent's location, from yesterday up to VITRINE_PRESYNC_DAYS ahead.
+
+    Today's (or the next) event comes first: the agent shows the first one unless
+    someone picks another on the back tablet.
+    """
+    location = getattr(agent, "location", None)
+    if location is None:
+        return []
+    today = timezone.localdate()
+    events = Service.objects.filter(
+        location=location,
+        is_active=True,
+        date__gte=today - timedelta(days=1),
+        date__lte=today + timedelta(days=settings.VITRINE_PRESYNC_DAYS),
+    ).order_by("date", "id")
+    return sorted(events, key=lambda e: (e.date < today, e.date, e.id))
+
+
 def build_manifest(agent):
-    services = list(Service.objects.filter(is_active=True).order_by("date", "id"))
+    services = list(events_for(agent))
     sets = (
         MediaSet.objects.filter(service__in=services)
-        .select_related("guest")
+        .select_related("guest__person")
         .prefetch_related("items__asset")
         .order_by("service_id", "title")
     )
@@ -52,7 +74,7 @@ def build_manifest(agent):
                 "id": media_set.pk,
                 "service_id": media_set.service_id,
                 "title": media_set.title,
-                "guest": media_set.guest.name if media_set.guest else media_set.title,
+                "guest": media_set.guest.person.name if media_set.guest else media_set.title,
                 "items": playable,
             }
         )
@@ -61,9 +83,13 @@ def build_manifest(agent):
     revoked = list(ScreenGrant.objects.filter(agent=agent, revoked=True).values_list("nonce", flat=True))
 
     return {
-        "version": agent.manifest_version,
+        "version": agent.current_manifest_version,
         "server_time": timezone.now().isoformat(),
         "agent": {"id": agent.pk, "name": agent.name},
+        "location": (
+            {"id": agent.location.pk, "name": agent.location.name, "organization": agent.location.organization.name}
+            if getattr(agent, "location", None) else None
+        ),
         "pubkey": public_key_b64(),
         "services": [
             {"id": s.pk, "name": s.name, "date": s.date.isoformat()} for s in services

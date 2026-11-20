@@ -1,16 +1,16 @@
-# Organizations, locations and people (planned)
+# Organizations, locations and people
 
-> **Status: design, not built yet.** This page describes how Vitrine will grow from "one vMix PC" to several venues. Whiteboard: [Vitrine: organizations, locations and roaming people](https://claude.ai/artifact/9Mn8wpuPA2zB49CMCoM5kZ).
+> **Status: built** (organizations, locations, events, people, pre-sync, event switcher, sharing). How to use it: [Using Vitrine](usage.md#organizations-locations-events-and-people). Whiteboard: [Vitrine: organizations, locations and roaming people](https://claude.ai/artifact/9Mn8wpuPA2zB49CMCoM5kZ).
 
 ## Why
 
-Today every agent receives every active service, and a guest link belongs to one service. With several vMix PCs in several places, each one would download everyone's media, and a speaker who comes to two venues would need two links.
+Before, every agent received every active service, and a guest link belonged to one service. With several vMix PCs in several places, each one would have downloaded everyone's media, and a speaker who comes to two venues would have needed two links.
 
 The server becomes the main hub: it keeps the database and the files and converts uploads. Each agent pulls only what its own location needs.
 
 ## The pieces
 
-| Piece | What it is | Today |
+| Piece | What it is | Before |
 |---|---|---|
 | **Organization** | A team with its own staff accounts, library and people. Not separate customers: organizations can share media with each other. | (none: one implicit organization) |
 | **Location** | One venue or hall. **A location is one agent, which is one vMix PC**, with its default input and transition settings. | the single agent |
@@ -66,8 +66,9 @@ Ideas kept for later, if tablets ever need to move between venues: a server-sign
 
 The migration creates one organization and one location ("Main") for the existing agent, turns each service into an event at that location and each guest into a person. Existing guest links keep working.
 
-## Build order
+## Where it lives in the code
 
-1. Organizations, locations (agent ↔ location), events, people; agent manifest filtered by location; staff pages and guest page updated.
-2. Pre-sync of upcoming events and the guest event switcher.
-3. Sharing between organizations.
+- Models: `Organization`, `Location`, `Person`, `PersonAlias`, `Service` (event), `Guest` (person in an event) in `server/guestmedia/models.py`; migration `0003_organizations`.
+- What an agent receives: `events_for()` in `server/guestmedia/manifest.py`.
+- Staff pages: `manage_views.py` (`people`, `person_detail`, `organization`, locations in `agents`); current organization in `orgs.py`.
+- Guest page: `load_guest()` in `guest_views.py` picks the event from `?e=` or the person's next event.

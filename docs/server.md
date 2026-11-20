@@ -45,8 +45,10 @@ curl http://100.101.102.103:8080/api/agent/manifest
 
 Open `https://vitrine.example.org/manage/` (or `http://<tailscale-ip>:8080/manage/`) and sign in with the superuser (the Vitrine sign-in page at `/login/` is also used by `/admin/`; **Sign out** is at the top right of `/manage/`). Then:
 
-1. **Agents & tablets → Create agent token** for the vMix PC. Copy the token (shown once) into the agent's config.
-2. **Services → New service**, then add guests and send them their links or QR codes.
+1. **Locations & tablets → Add a location** (e.g. "Main hall"), then **Create agent token** for its vMix PC. Copy the token (shown once) into the agent's settings page. An organization "Main" is created for you on first login.
+2. **Events → New event** at that location, then add people and send them their links or QR codes.
+
+Upgrading from a version without organizations: the database migration puts everything into one organization "Main", gives each existing agent a location of the same name, moves every service (now "event") to the first location, and turns guests into people. Guests with the same name become one person; their other links keep working.
 
 ## Storage and backups
 
@@ -61,6 +63,7 @@ Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the 
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `VITRINE_PRESYNC_DAYS` | `14` | How many days ahead an agent receives its location's events (and downloads their files) |
 | `VITRINE_PUBLIC_URL` | empty | Base of guest links; empty = the address /manage/ was opened with |
 | `VITRINE_VIDEO_FPS` | `25` | Frame rate videos are converted to |
 | `VITRINE_FILMSTRIP_INTERVAL` | `5` | Seconds between cue-panel frames |

@@ -9,10 +9,20 @@
 <body>
 <header class="top">
   <a class="brand" href="{% url 'manage-dashboard' %}">Vitrine</a>
+  {% if request.orgs|length > 1 %}
+  <form method="post" action="{% url 'manage-switch-org' %}" class="org-switch">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.path }}">
+    <select name="org" aria-label="Organization" onchange="this.form.submit()">
+      {% for o in request.orgs %}<option value="{{ o.pk }}"{% if o.pk == request.org.pk %} selected{% endif %}>{{ o.name }}</option>{% endfor %}
+    </select>
+  </form>
+  {% elif request.org %}<span class="org-name">{{ request.org.name }}</span>{% endif %}
   <nav>
-    <a href="{% url 'manage-dashboard' %}">Services</a>
+    <a href="{% url 'manage-dashboard' %}">Events</a>
+    <a href="{% url 'manage-people' %}">People</a>
     <a href="{% url 'manage-library' %}">Library</a>
-    <a href="{% url 'manage-agents' %}">Agents &amp; tablets</a>
+    <a href="{% url 'manage-agents' %}">Locations &amp; tablets</a>
+    <a href="{% url 'manage-organization' %}">Organization</a>
     <a href="/admin/">Admin</a>
     <a href="{% url 'docs-home' %}">Docs</a>
   </nav>

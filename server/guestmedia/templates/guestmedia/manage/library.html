@@ -3,14 +3,20 @@
 {% block title %}Library{% endblock %}
 {% block content %}
 <div class="row-head">
-  <h1>{% if show_trash %}Trash{% else %}Library{% endif %}</h1>
+  <h1>{% if show_trash %}Trash{% elif scope == 'shared' %}Shared with us{% else %}Library{% endif %}</h1>
   <span class="muted">{{ totals.count }} files · {{ totals.size|default:0|filesizeformat }}</span>
 </div>
+{% if not show_trash %}
+<div class="actions" style="margin-bottom:12px">
+  <a class="btn{% if scope != 'shared' %} primary{% endif %}" href="{% url 'manage-library' %}">{{ org.name }}</a>
+  <a class="btn{% if scope == 'shared' %} primary{% endif %}" href="?scope=shared">Shared with us</a>
+</div>
+{% endif %}
 
 <form method="get" class="filters card">
   <input type="search" name="q" value="{{ filters.q }}" placeholder="Search name or guest" aria-label="Search">
   <label>Type
-    <select name="kind"><option value="">All</option><option value="photo" {% if filters.kind == 'photo' %}selected{% endif %}>Photos</option><option value="video" {% if filters.kind == 'video' %}selected{% endif %}>Videos</option></select>
+    <select name="kind"><option value="">All</option><option value="photo" {% if filters.kind == 'photo' %}selected{% endif %}>Photos</option><option value="video" {% if filters.kind == 'video' %}selected{% endif %}>Videos</option><option value="audio" {% if filters.kind == 'audio' %}selected{% endif %}>Audio</option></select>
   </label>
   <label>Approval
     <select name="approval"><option value="">All</option><option value="pending" {% if filters.approval == 'pending' %}selected{% endif %}>Waiting</option><option value="approved" {% if filters.approval == 'approved' %}selected{% endif %}>Approved</option><option value="rejected" {% if filters.approval == 'rejected' %}selected{% endif %}>Rejected</option></select>
@@ -19,12 +25,14 @@
     <select name="unused"><option value="">Any</option><option value="30" {% if filters.unused == '30' %}selected{% endif %}>30 days</option><option value="90" {% if filters.unused == '90' %}selected{% endif %}>90 days</option><option value="365" {% if filters.unused == '365' %}selected{% endif %}>1 year</option></select>
   </label>
   {% if show_trash %}<input type="hidden" name="trash" value="1">{% endif %}
+  {% if scope == 'shared' %}<input type="hidden" name="scope" value="shared">{% endif %}
   <button class="btn" type="submit">Filter</button>
   {% if show_trash %}<a class="btn" href="{% url 'manage-library' %}">Back to library</a>{% else %}<a class="btn" href="?trash=1">Trash</a>{% endif %}
 </form>
 
 <form method="post">
   {% csrf_token %}
+  {% if scope != 'shared' %}
   <div class="bulk card">
     <label><input type="checkbox" data-select-all> All</label>
     {% if show_trash %}
@@ -35,12 +43,15 @@
       <button class="btn primary" name="action" value="approve">Approve</button>
       <button class="btn" name="action" value="reject">Reject</button>
       <button class="btn" name="action" value="private">Make private</button>
-      <button class="btn" name="action" value="public">Share in library</button>
+      <button class="btn" name="action" value="public">Not private</button>
+      <button class="btn" name="action" value="share">Share with other organizations</button>
+      <button class="btn" name="action" value="unshare">Stop sharing</button>
       <button class="btn" name="action" value="reprocess">Process again</button>
       <button class="btn danger" name="action" value="trash">Move to trash</button>
       <label><input type="checkbox" name="confirm" value="1"> I know some are in active sets</label>
     {% endif %}
   </div>
+  {% endif %}
 
   <div class="tiles">
   {% for a in assets %}
@@ -54,6 +65,8 @@
           <span class="pill {{ a.approval }}">{{ a.get_approval_display }}</span>
           {% if a.status != 'ready' %}<span class="pill">{{ a.get_status_display }}</span>{% endif %}
           {% if a.private %}<span class="pill">Private</span>{% endif %}
+          {% if a.shared %}<span class="pill ok">Shared</span>{% endif %}
+          {% if scope == 'shared' %}<span class="pill">from {{ a.organization.name }}</span>{% endif %}
           <span class="pill">{% if a.last_used %}Used {{ a.last_used|timesince }} ago{% else %}Never used{% endif %}</span>
         </div>
       </div>

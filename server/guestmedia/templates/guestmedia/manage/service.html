@@ -2,8 +2,10 @@
 {% block title %}{{ service.name }}{% endblock %}
 {% block content %}
 <div class="row-head">
-  <h1>{{ service.name }} <span class="muted">· {{ service.date|date:"D d M Y" }}</span></h1>
+  <h1>{{ service.name }} <span class="muted">· {{ service.date|date:"D d M Y" }}{% if service.location %} · {{ service.location.name }}{% endif %}</span></h1>
 </div>
+{% if not service.location %}<p class="error">This event has no location, so no agent receives it. Choose one below.</p>
+{% elif not service.location.agent %}<p class="error">{{ service.location.name }} has no agent yet: <a href="{% url 'manage-agents' %}">add its vMix PC</a>.</p>{% endif %}
 
 <div class="grid-2">
 <section class="card">
@@ -16,33 +18,42 @@
 </section>
 
 <section class="card">
-  <h2>Add a guest</h2>
-  <form method="post">
-    {% csrf_token %}<input type="hidden" name="action" value="add_guest">
-    {{ guest_form.as_p }}
-    <button class="btn primary" type="submit">Create link</button>
+  <h2>Add people</h2>
+  <p class="muted">People keep one link for every event. Adding someone gives them a set here, and this location's agent downloads their files before the day.</p>
+  {% if people %}
+  <form method="post" class="inline-form">
+    {% csrf_token %}<input type="hidden" name="action" value="add_person">
+    <label>Someone you know
+      <select name="person_id">{% for p in people %}<option value="{{ p.pk }}">{{ p.name }}</option>{% endfor %}</select>
+    </label>
+    <button class="btn primary" type="submit">Add</button>
+  </form>
+  {% endif %}
+  <form method="post" class="inline-form" style="margin-top:12px">
+    {% csrf_token %}<input type="hidden" name="action" value="add_person">
+    <label>New person <input name="name" placeholder="Name" required></label>
+    <button class="btn" type="submit">Create link and add</button>
   </form>
 </section>
 </div>
 
 <section class="card">
-  <h2>Guests and their links</h2>
+  <h2>People and their links</h2>
   {% for g in guests %}
     <div class="guest-row">
       <img class="qr" src="{% url 'manage-qr' %}?d={{ g.public_link|urlencode }}" alt="QR code for {{ g.name }}'s link" width="120" height="120">
       <div class="grow">
-        <div class="guest-name">{{ g.name }}{% if g.is_expired %} <span class="pill warn">Expired</span>{% endif %}</div>
+        <div class="guest-name"><a href="{% url 'manage-person' g.person.pk %}">{{ g.name }}</a>{% if g.is_expired %} <span class="pill warn">Expired</span>{% endif %}{% if g.other_events %} <span class="pill">also in {{ g.other_events }} other event{{ g.other_events|pluralize }}</span>{% endif %}</div>
         <code class="link">{{ g.public_link }}</code>
         <div class="actions">
           <button class="btn small" type="button" data-copy="{{ g.public_link }}">Copy link</button>
-          <a class="btn small" href="{{ g.public_link }}" target="_blank" rel="noopener">Open as guest</a>
-          <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="new_link"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small" type="submit">New link</button></form>
-          <form method="post" class="inline" onsubmit="return confirm('Remove {{ g.name|escapejs }}? Their uploads stay in the library.')">{% csrf_token %}<input type="hidden" name="action" value="delete_guest"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Remove</button></form>
+          <a class="btn small" href="{{ g.public_link }}?e={{ service.pk }}" target="_blank" rel="noopener">Open their set here</a>
+          <form method="post" class="inline" onsubmit="return confirm('Remove {{ g.name|escapejs }} from this event? Their link, uploads and other events stay.')">{% csrf_token %}<input type="hidden" name="action" value="remove_guest"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Remove from event</button></form>
         </div>
       </div>
     </div>
   {% empty %}
-    <p class="muted">No guests yet.</p>
+    <p class="muted">Nobody yet.</p>
   {% endfor %}
 </section>
 
@@ -88,7 +99,7 @@
       </div>
     </div>
   {% empty %}
-    <p class="muted">Sets appear when guests are added.</p>
+    <p class="muted">Sets appear when people are added.</p>
   {% endfor %}
 </section>
 {% endblock %}

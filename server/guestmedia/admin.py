@@ -1,20 +1,58 @@
 """Raw editing in Django admin. Day-to-day work happens in /manage/."""
 from django.contrib import admin
 
-from .models import Agent, Guest, Marker, MediaAsset, MediaSet, ScreenGrant, Service, SetItem
+from .models import (
+    Agent,
+    Guest,
+    Location,
+    Marker,
+    MediaAsset,
+    MediaSet,
+    Organization,
+    Person,
+    PersonAlias,
+    ScreenGrant,
+    Service,
+    SetItem,
+)
 
 
 class GuestInline(admin.TabularInline):
     model = Guest
     extra = 0
-    fields = ["name", "token", "can_upload", "can_browse", "expires_at"]
+    raw_id_fields = ["person"]
+
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ["name", "share_all", "created"]
+    filter_horizontal = ["staff", "shares_with"]
+
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    list_display = ["name", "organization", "agent"]
+    list_filter = ["organization"]
+
+
+class AliasInline(admin.TabularInline):
+    model = PersonAlias
+    extra = 0
+
+
+@admin.register(Person)
+class PersonAdmin(admin.ModelAdmin):
+    list_display = ["name", "organization", "can_upload", "can_browse", "expires_at"]
+    list_filter = ["organization"]
+    search_fields = ["name"]
     readonly_fields = ["token"]
+    inlines = [AliasInline]
 
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    list_display = ["name", "date", "is_active", "auto_approve"]
-    list_filter = ["is_active"]
+    list_display = ["name", "date", "location", "is_active", "auto_approve"]
+    list_filter = ["is_active", "location"]
     inlines = [GuestInline]
 
 
@@ -25,8 +63,8 @@ class MarkerInline(admin.TabularInline):
 
 @admin.register(MediaAsset)
 class MediaAssetAdmin(admin.ModelAdmin):
-    list_display = ["id", "original_name", "owner_name", "kind", "status", "approval", "private", "created", "deleted_at"]
-    list_filter = ["kind", "status", "approval", "private"]
+    list_display = ["id", "original_name", "owner_name", "organization", "kind", "status", "approval", "private", "shared", "created", "deleted_at"]
+    list_filter = ["organization", "kind", "status", "approval", "private", "shared"]
     search_fields = ["original_name", "owner_name"]
     inlines = [MarkerInline]
 

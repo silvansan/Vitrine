@@ -23,7 +23,7 @@ SHORT = {
     "agent": "Agent on the vMix PC",
     "usage": "Using Vitrine",
     "architecture": "Architecture",
-    "organizations": "Organizations (planned)",
+    "organizations": "Organizations & people",
     "integr8": "Moving into Integr8",
 }
 GITHUB = "https://github.com/silvansan/Vitrine/blob/main/"

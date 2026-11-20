@@ -13,10 +13,13 @@ The agent connects **out** to the server over Tailscale (WebSocket + HTTP). The 
 
 ## Data model (`server/guestmedia/models.py`)
 
-- **Service**: a date and name; only active services are sent to agents.
-- **Guest**: belongs to a service; has the token in their link.
-- **MediaAsset**: one file in the library (original + converted file, thumbnail, filmstrip, approval, private flag, last used, soft delete).
-- **MediaSet** / **SetItem**: a guest's ordered list in a service, pointing at library files. The same file can be in many sets without being copied.
+- **Organization**: staff accounts, people, locations and a library. `shares_with` lists organizations that may use its shared files; `share_all` shares every approved, non-private file, otherwise only files marked `shared`.
+- **Location**: a venue or hall of an organization, with at most one **Agent** (`Location.agent`, one-to-one). Location = agent = one vMix PC.
+- **Service** (shown as **Event**): a name and date at a location. The model keeps the name `Service` because the agent protocol uses it.
+- **Person**: belongs to an organization and has the token of their permanent link (`/g/<token>/`). **PersonAlias** keeps older tokens working (people merged when the organizations were introduced).
+- **Guest**: a person taking part in one event (unique per event and person). It owns the person's set in that event; name, token and rights come from the person.
+- **MediaAsset**: one file in the library (organization, uploader person, original + converted file, thumbnail, filmstrip, approval, private and shared flags, last used, soft delete). `MediaAsset.library_for(org)` is what an organization's people may pick: its own files plus those shared with it.
+- **MediaSet** / **SetItem**: a person's ordered list in an event, pointing at library files. The same file can be in many sets without being copied.
 - **Marker**: named start point in a video.
 - **Agent**: a vMix PC; token stored hashed; last heartbeat kept as JSON for the backend.
 - **ScreenGrant**: a pairing code issued from the backend; revoking it unpairs the tablet.
@@ -36,7 +39,7 @@ Audio (MP3, M4A, WAV, FLAC…) becomes an MP4 too: the sound as AAC 48 kHz plus 
 
 ## Agent sync
 
-`GET /api/agent/manifest` returns the active services, their sets (only approved, ready, not deleted files) and the files with markers, plus the server's Ed25519 public key and revoked pairing codes. Any change bumps every agent's `manifest_version` and pings them over the WebSocket (`/ws/agent/`); agents also poll every 60 s and heartbeat every 20 s (`POST /api/agent/heartbeat`: LAN IP, vMix state, sync progress, settings, tablets, assets shown since the last heartbeat).
+`GET /api/agent/manifest` returns the active events **of the agent's location** from yesterday up to `VITRINE_PRESYNC_DAYS` (14) ahead, today's or the next one first, plus `location` (id, name, organization). The agent downloads the files of all of them, so a person's media is on the vMix PC days before their event. An agent without a location gets no events. With the events come their sets (only approved, ready, not deleted files) and the files with markers, plus the server's Ed25519 public key and revoked pairing codes. The version an agent sees is `manifest_version × 1000 + day`, so it also refetches once a day when the event window moves. Any change bumps every agent's `manifest_version` and pings them over the WebSocket (`/ws/agent/`); agents also poll every 60 s and heartbeat every 20 s (`POST /api/agent/heartbeat`: LAN IP, vMix state, sync progress, settings, tablets, assets shown since the last heartbeat).
 
 Downloads resume with HTTP Range (served by nginx via `X-Accel-Redirect`), are verified, then renamed into place. While anything is live, the download speed is capped (`live_throttle_kbps`). Files no longer in the manifest are deleted unless on air.
 

@@ -1,22 +1,44 @@
 """The page a guest opens from their link: My set, Upload, Library."""
 import json
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .files import serve_field
-from .models import Guest, Marker, MediaAsset, SetItem
+from .models import Guest, Marker, MediaAsset, MediaSet, Person, PersonAlias, SetItem
 
 
-def load_guest(token):
-    guest = get_object_or_404(Guest.objects.select_related("service"), token=token)
-    if guest.is_expired:
+def load_person(token):
+    person = Person.objects.select_related("organization").filter(token=token).first()
+    if person is None:
+        alias = PersonAlias.objects.select_related("person__organization").filter(token=token).first()
+        if alias is None:
+            raise Http404("This link doesn't work (any more). Ask the production team for a new one.")
+        person = alias.person
+    if person.is_expired:
         raise Http404("This link has expired")
-    return guest
+    return person
+
+
+def load_guest(request, token, required=True):
+    """The person's participation in the event the page is about (?e=<event id>, else the current one)."""
+    person = load_person(token)
+    event_id = request.GET.get("e", "")
+    guest = None
+    if event_id.isdigit():
+        guest = person.guests.select_related("service", "service__location", "person__organization").filter(service_id=int(event_id)).first()
+    if guest is None:
+        guest = person.current_participation()
+    if guest is None and required:
+        raise Http404("You aren't in an event yet. The production team will add you.")
+    return person, guest
 
 
 def read_json(request):
@@ -26,17 +48,27 @@ def read_json(request):
         return {}
 
 
+def event_label(event):
+    where = f" · {event.location.name}" if event.location_id else ""
+    return f"{event.name} · {event.date:%d %b}{where}"
+
+
 def asset_for_guest(asset, guest):
-    if asset.uploaded_by_id == guest.id:
+    person = guest.person
+    if asset.uploaded_by_id == person.id:
         when = "Your upload"
         group = "mine"
+    elif asset.organization_id and asset.organization_id != person.organization_id:
+        when = f"Shared by {asset.organization.name}"
+        group = "shared"
     elif asset.service_id == guest.service_id:
-        when = "This service"
+        when = "This event"
         group = "today"
     else:
         service = asset.service.name if asset.service else "the library"
         when = f"From {service}"
         group = "earlier"
+    q = f"?e={guest.service_id}"
     return {
         "id": asset.pk,
         "kind": asset.kind or "processing",
@@ -45,27 +77,36 @@ def asset_for_guest(asset, guest):
         "status": asset.status,
         "approval": asset.approval,
         "private": asset.private,
-        "mine": asset.uploaded_by_id == guest.id,
+        "mine": asset.uploaded_by_id == person.id,
         "duration_ms": asset.duration_ms,
-        "thumb": f"/g/{guest.token}/thumb/{asset.pk}" if asset.thumb else "",
-        "file": f"/g/{guest.token}/file/{asset.pk}" if asset.processed and asset.status == MediaAsset.STATUS_READY else "",
+        "thumb": f"/g/{person.token}/thumb/{asset.pk}{q}" if asset.thumb else "",
+        "file": f"/g/{person.token}/file/{asset.pk}{q}" if asset.processed and asset.status == MediaAsset.STATUS_READY else "",
         "when": when,
         "group": group,
         "markers": [
-            {"id": m.pk, "label": m.label, "t_ms": m.t_ms, "mine": m.created_by == guest.name}
+            {"id": m.pk, "label": m.label, "t_ms": m.t_ms, "mine": m.created_by == person.name}
             for m in asset.markers.all()
         ],
     }
 
 
 def page(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token, required=False)
+    if guest is None:
+        return render(request, "guestmedia/guest_waiting.html", {"person": person}, status=200)
     return render(
         request,
         "guestmedia/guest.html",
         {
             "guest": guest,
+            "person": person,
             "service": guest.service,
+            "event_label": event_label(guest.service),
+            "events": [
+                {"id": g.service_id, "label": event_label(g.service), "current": g.pk == guest.pk}
+                for g in person.participations()
+                if g.service.date >= timezone.localdate() - timedelta(days=1) or g.pk == guest.pk
+            ],
             "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
         },
     )
@@ -74,35 +115,48 @@ def page(request, token):
 @require_GET
 def tablet_help(request, token):
     """How the pulpit tablet works, with screenshots, so guests can prepare."""
-    guest = load_guest(token)
-    return render(request, "guestmedia/tablet_help.html", {"guest": guest, "service": guest.service})
+    person, guest = load_guest(request, token, required=False)
+    return render(request, "guestmedia/tablet_help.html", {"person": person, "guest": guest})
+
+
+def previous_set(guest):
+    """The person's most recent other non-empty set, to start this one from."""
+    return (
+        MediaSet.objects.filter(guest__person=guest.person)
+        .exclude(guest=guest)
+        .filter(items__isnull=False)
+        .select_related("service")
+        .order_by("-service__date", "-service_id")
+        .distinct()
+        .first()
+    )
 
 
 @require_GET
 def api_state(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token)
     media_set = guest.get_set()
     in_set = media_set.asset_ids()
     set_assets = {
         a.pk: a
-        for a in MediaAsset.objects.filter(pk__in=in_set).select_related("service").prefetch_related("markers")
+        for a in MediaAsset.objects.filter(pk__in=in_set).select_related("service", "organization").prefetch_related("markers")
     }
-    my_set = [asset_for_guest(set_assets[i], guest) for i in in_set if i in set_assets and set_assets[i].visible_to(guest)]
+    my_set = [asset_for_guest(set_assets[i], guest) for i in in_set if i in set_assets and set_assets[i].visible_to(person)]
 
     library = []
-    if guest.can_browse:
+    if person.can_browse:
         candidates = (
-            MediaAsset.objects.filter(status=MediaAsset.STATUS_READY, approval=MediaAsset.APPROVAL_APPROVED, private=False)
+            MediaAsset.library_for(person.organization)
             .exclude(pk__in=in_set)
-            .select_related("service")
+            .select_related("service", "organization")
             .prefetch_related("markers")[:400]
         )
         library = [asset_for_guest(a, guest) for a in candidates]
     own_extra = (
-        MediaAsset.objects.filter(uploaded_by=guest)
+        MediaAsset.objects.filter(uploaded_by=person)
         .exclude(pk__in=in_set)
         .exclude(approval=MediaAsset.APPROVAL_REJECTED)
-        .select_related("service")
+        .select_related("service", "organization")
         .prefetch_related("markers")
     )
     library_ids = {item["id"] for item in library}
@@ -110,27 +164,51 @@ def api_state(request, token):
         if asset.pk not in library_ids:
             library.insert(0, asset_for_guest(asset, guest))
 
+    previous = previous_set(guest) if not in_set else None
     return JsonResponse(
         {
-            "guest": {"name": guest.name, "can_upload": guest.can_upload, "can_browse": guest.can_browse},
-            "service": {"name": guest.service.name, "date": guest.service.date.isoformat()},
+            "guest": {"name": person.name, "can_upload": person.can_upload, "can_browse": person.can_browse},
+            "service": {"id": guest.service_id, "name": guest.service.name, "date": guest.service.date.isoformat()},
             "set": my_set,
             "library": library,
+            "previous_set": (
+                {"id": previous.pk, "label": event_label(previous.service), "count": previous.items.count()}
+                if previous else None
+            ),
         }
     )
 
 
 @csrf_exempt
 @require_POST
+def api_set_copy(request, token):
+    """Start this event's set from the person's set of another event."""
+    person, guest = load_guest(request, token)
+    source = get_object_or_404(MediaSet, pk=read_json(request).get("set_id"), guest__person=person)
+    media_set = guest.get_set()
+    with transaction.atomic():
+        last = media_set.items.order_by("-position").first()
+        position = (last.position + 1) if last else 0
+        for item in source.items.select_related("asset").order_by("position", "id"):
+            if not item.asset.visible_to(person):
+                continue
+            _, created = SetItem.objects.get_or_create(media_set=media_set, asset=item.asset, defaults={"position": position})
+            if created:
+                position += 1
+    return api_state(request_as_get(request), token)
+
+
+@csrf_exempt
+@require_POST
 def api_set_add(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token)
     ids = [int(i) for i in read_json(request).get("asset_ids", []) if str(i).isdigit()]
     media_set = guest.get_set()
     with transaction.atomic():
         last = media_set.items.order_by("-position").first()
         position = (last.position + 1) if last else 0
         for asset in MediaAsset.objects.filter(pk__in=ids):
-            if not asset.visible_to(guest):
+            if not asset.visible_to(person):
                 continue
             _, created = SetItem.objects.get_or_create(media_set=media_set, asset=asset, defaults={"position": position})
             if created:
@@ -141,7 +219,7 @@ def api_set_add(request, token):
 @csrf_exempt
 @require_POST
 def api_set_remove(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token)
     asset_id = read_json(request).get("asset_id")
     guest.get_set().items.filter(asset_id=asset_id).delete()
     return api_state(request_as_get(request), token)
@@ -150,7 +228,7 @@ def api_set_remove(request, token):
 @csrf_exempt
 @require_POST
 def api_set_order(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token)
     ids = [int(i) for i in read_json(request).get("asset_ids", []) if str(i).isdigit()]
     media_set = guest.get_set()
     with transaction.atomic():
@@ -162,10 +240,10 @@ def api_set_order(request, token):
 @csrf_exempt
 @require_POST
 def api_marker_add(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token)
     body = read_json(request)
     asset = get_object_or_404(MediaAsset, pk=body.get("asset_id"))
-    if not asset.visible_to(guest) or not asset.is_timed:
+    if not asset.visible_to(person) or not asset.is_timed:
         raise Http404()
     label = str(body.get("label", "")).strip()[:60]
     try:
@@ -175,16 +253,16 @@ def api_marker_add(request, token):
     if asset.duration_ms:
         t_ms = min(t_ms, asset.duration_ms)
     if label:
-        Marker.objects.create(asset=asset, label=label, t_ms=t_ms, created_by=guest.name)
+        Marker.objects.create(asset=asset, label=label, t_ms=t_ms, created_by=person.name)
     return api_state(request_as_get(request), token)
 
 
 @csrf_exempt
 @require_POST
 def api_marker_delete(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token)
     marker = get_object_or_404(Marker, pk=read_json(request).get("marker_id"))
-    if marker.created_by == guest.name or marker.asset.uploaded_by_id == guest.id:
+    if marker.created_by == person.name or marker.asset.uploaded_by_id == person.id:
         marker.delete()
     return api_state(request_as_get(request), token)
 
@@ -192,18 +270,18 @@ def api_marker_delete(request, token):
 @csrf_exempt
 @require_POST
 def api_private(request, token):
-    guest = load_guest(token)
+    person, guest = load_guest(request, token)
     body = read_json(request)
-    asset = get_object_or_404(MediaAsset, pk=body.get("asset_id"), uploaded_by=guest)
+    asset = get_object_or_404(MediaAsset, pk=body.get("asset_id"), uploaded_by=person)
     asset.private = bool(body.get("private"))
     asset.save(update_fields=["private"])
     return api_state(request_as_get(request), token)
 
 
 def thumb(request, token, asset_id):
-    guest = load_guest(token)
+    person = load_person(token)
     asset = get_object_or_404(MediaAsset, pk=asset_id)
-    if not asset.visible_to(guest):
+    if not asset.visible_to(person):
         raise Http404()
     return serve_field(request, asset.thumb)
 
@@ -215,8 +293,8 @@ def request_as_get(request):
 
 def media_file(request, token, asset_id):
     """The converted file, for previewing a video and placing markers."""
-    guest = load_guest(token)
+    person = load_person(token)
     asset = get_object_or_404(MediaAsset, pk=asset_id)
-    if not asset.visible_to(guest) or asset.status != MediaAsset.STATUS_READY:
+    if not asset.visible_to(person) or asset.status != MediaAsset.STATUS_READY:
         raise Http404()
     return serve_field(request, asset.processed, asset.local_name)

@@ -1,12 +1,13 @@
 {% extends "guestmedia/manage/base.html" %}
-{% block title %}Agents &amp; tablets{% endblock %}
+{% block title %}Locations &amp; tablets{% endblock %}
 {% block content %}
-<h1>Agents &amp; tablets</h1>
+<h1>Locations &amp; tablets</h1>
+<p class="muted">A location is a venue or hall with one vMix PC (its agent). The agent receives the location's events and downloads their files ahead of time; its tablets work on the local network.</p>
 
 {% if new_token %}
 <section class="card highlight">
   <h2>Agent token</h2>
-  <p>Put this in the agent's config (<code>agent_token</code>). It is shown only once.</p>
+  <p>Paste this on the agent's settings page under <strong>Connection</strong>. It is shown only once.</p>
   <code class="link">{{ new_token }}</code>
   <button class="btn small" type="button" data-copy="{{ new_token }}">Copy</button>
 </section>
@@ -26,12 +27,24 @@
 </section>
 {% endif %}
 
-{% for a in agents %}
+{% for l in locations %}
+{% with a=l.agent %}
 <section class="card">
   <div class="row-head">
-    <h2><span class="dot {% if a.is_online %}on{% endif %}"></span> {{ a.name }}</h2>
-    <span class="muted">token vta_{{ a.token_prefix }}… · {% if a.version %}v{{ a.version }}{% endif %}</span>
+    <h2>{% if a %}<span class="dot {% if a.is_online %}on{% endif %}"></span> {% endif %}{{ l.name }}</h2>
+    {% if a %}<span class="muted">agent {{ a.name }} · token vta_{{ a.token_prefix }}… {% if a.version %}· v{{ a.version }}{% endif %}</span>{% endif %}
   </div>
+  {% if not a %}
+    <p>No vMix PC yet.</p>
+    <div class="actions">
+      <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="create"><input type="hidden" name="location_id" value="{{ l.pk }}"><button class="btn primary" type="submit">Create agent token</button></form>
+      {% if unassigned %}
+      <form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="action" value="assign"><input type="hidden" name="location_id" value="{{ l.pk }}">
+        <select name="agent_id" aria-label="Existing agent">{% for u in unassigned %}<option value="{{ u.pk }}">{{ u.name }}</option>{% endfor %}</select>
+        <button class="btn" type="submit">Use this agent</button></form>
+      {% endif %}
+    </div>
+  {% else %}
   {% if a.is_online %}
     <p>Online at <strong>{{ a.lan_ip }}:{{ a.listen_port }}</strong>
       · vMix {% if a.status.vmix.ok %}connected{% else %}<span class="error">not reachable</span>{% endif %}
@@ -68,18 +81,34 @@
   {% endwith %}
 
   <div class="actions">
-    <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="rotate"><input type="hidden" name="agent_id" value="{{ a.pk }}"><button class="btn small" type="submit">New token</button></form>
+    <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="rotate"><input type="hidden" name="agent_id" value="{{ a.pk }}"><button class="btn small" type="submit">New token (e.g. new PC)</button></form>
+    <form method="post" class="inline" onsubmit="return confirm('Detach this vMix PC from {{ l.name|escapejs }}? It stops receiving events until you assign it again.')">{% csrf_token %}<input type="hidden" name="action" value="unassign"><input type="hidden" name="location_id" value="{{ l.pk }}"><button class="btn small" type="submit">Detach agent</button></form>
     <form method="post" class="inline" onsubmit="return confirm('Delete this agent?')">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="agent_id" value="{{ a.pk }}"><button class="btn small danger" type="submit">Delete agent</button></form>
   </div>
+  {% endif %}
+  <details>
+    <summary>Rename or delete location</summary>
+    <form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="action" value="rename_location"><input type="hidden" name="location_id" value="{{ l.pk }}"><input name="name" value="{{ l.name }}" aria-label="Location name"><button class="btn small" type="submit">Rename</button></form>
+    <form method="post" class="inline" onsubmit="return confirm('Delete {{ l.name|escapejs }}? Its events stay, without a location.')">{% csrf_token %}<input type="hidden" name="action" value="delete_location"><input type="hidden" name="location_id" value="{{ l.pk }}"><button class="btn small danger" type="submit">Delete location</button></form>
+  </details>
 </section>
+{% endwith %}
 {% endfor %}
 
 <section class="card">
-  <h2>Add an agent</h2>
+  <h2>Add a location</h2>
   <form method="post" class="inline-form">
-    {% csrf_token %}<input type="hidden" name="action" value="create">
-    <label>Name <input name="name" placeholder="vMix PC"></label>
-    <button class="btn primary" type="submit">Create agent token</button>
+    {% csrf_token %}<input type="hidden" name="action" value="create_location">
+    <label>Name <input name="name" placeholder="Zurich hall"></label>
+    <button class="btn primary" type="submit">Add location</button>
   </form>
 </section>
+
+{% if unassigned %}
+<section class="card">
+  <h2>Agents without a location</h2>
+  <p class="muted">These vMix PCs receive no events. Assign one to a location above.</p>
+  <ul>{% for u in unassigned %}<li><span class="dot {% if u.is_online %}on{% endif %}"></span> {{ u.name }}{% if u.lan_ip %} · {{ u.lan_ip }}{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endif %}
 {% endblock %}
