@@ -23,6 +23,8 @@ type input struct {
 	DurMs            int
 	AudioOn          bool
 	AudioAuto        bool
+	Volume           float64
+	Fades            []string
 	lastTick         time.Time
 }
 
@@ -47,7 +49,7 @@ func New() *Fake {
 
 func (f *Fake) add(typ, title string) *input {
 	f.nextKey++
-	in := &input{Key: fmt.Sprintf("key-%04d", f.nextKey), Title: title, Type: typ, Number: len(f.inputs) + 1}
+	in := &input{Key: fmt.Sprintf("key-%04d", f.nextKey), Title: title, Type: typ, Number: len(f.inputs) + 1, Volume: 100}
 	f.inputs = append(f.inputs, in)
 	return in
 }
@@ -108,6 +110,16 @@ func (f *Fake) Audio(title string) bool {
 	return false
 }
 
+// Volume reports an input's volume (fades jump to their end value) and the fades sent to it.
+func (f *Fake) Volume(title string) (float64, []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if in := f.find(title); in != nil {
+		return in.Volume, append([]string{}, in.Fades...)
+	}
+	return -1, nil
+}
+
 // Switch puts an input on a mix, as if the operator clicked in vMix.
 func (f *Fake) Switch(mix int, title string) {
 	f.mu.Lock()
@@ -133,6 +145,18 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	in := f.find(q.Get("Input"))
 	switch fn {
+	case "SetVolume":
+		if in != nil {
+			v, _ := strconv.ParseFloat(q.Get("Value"), 64)
+			in.Volume = v
+		}
+	case "SetVolumeFade":
+		if in != nil {
+			parts := strings.SplitN(q.Get("Value"), ",", 2)
+			v, _ := strconv.ParseFloat(parts[0], 64)
+			in.Volume = v
+			in.Fades = append(in.Fades, q.Get("Value"))
+		}
 	case "AudioOn", "AudioOff", "AudioAutoOn", "AudioAutoOff":
 		if in != nil {
 			switch fn {
@@ -207,16 +231,17 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type xmlInput struct {
-	Key           string `xml:"key,attr"`
-	Number        int    `xml:"number,attr"`
-	Type          string `xml:"type,attr"`
-	Title         string `xml:"title,attr"`
-	ShortTitle    string `xml:"shortTitle,attr"`
-	State         string `xml:"state,attr"`
-	Position      int    `xml:"position,attr"`
-	Duration      int    `xml:"duration,attr"`
-	SelectedIndex int    `xml:"selectedIndex,attr"`
-	Text          string `xml:",chardata"`
+	Key           string  `xml:"key,attr"`
+	Number        int     `xml:"number,attr"`
+	Type          string  `xml:"type,attr"`
+	Title         string  `xml:"title,attr"`
+	ShortTitle    string  `xml:"shortTitle,attr"`
+	State         string  `xml:"state,attr"`
+	Position      int     `xml:"position,attr"`
+	Duration      int     `xml:"duration,attr"`
+	SelectedIndex int     `xml:"selectedIndex,attr"`
+	Volume        float64 `xml:"volume,attr"`
+	Text          string  `xml:",chardata"`
 }
 
 type xmlMix struct {
@@ -248,7 +273,7 @@ func (f *Fake) writeXML(w http.ResponseWriter) {
 			title = in.Title + " - " + parts[len(parts)-1]
 		}
 		root.Inputs = append(root.Inputs, xmlInput{Key: in.Key, Number: in.Number, Type: in.Type, Title: title, ShortTitle: in.Title,
-			State: state, Position: in.PosMs, Duration: in.DurMs, SelectedIndex: in.Selected, Text: title})
+			State: state, Position: in.PosMs, Duration: in.DurMs, SelectedIndex: in.Selected, Volume: in.Volume, Text: title})
 	}
 	for n := 2; n <= 4; n++ {
 		root.Mixes = append(root.Mixes, xmlMix{Number: n, Active: f.active[n], Preview: 1})

@@ -26,6 +26,7 @@ func setup(t *testing.T) (*Engine, *vmixfake.Fake) {
 		s.Settings.DefaultInputTitle = "Banner Sunday"
 		s.Settings.TransitionMs = 50
 		s.Settings.VideoAudio = true
+		s.Settings.AudioFadeMs = 300
 	})
 	media := map[int64]*Media{
 		1: {ID: 1, Path: `C:\Vitrine\media\maria\1-photo.jpg`, Kind: "photo"},
@@ -155,18 +156,28 @@ func TestVideoSoundFollowsTheMix(t *testing.T) {
 	if !fake.Audio("GM_A") {
 		t.Fatal("a live video on Mix 2 should have its sound on")
 	}
+	if vol, fades := fake.Volume("GM_A"); vol != 100 || len(fades) == 0 || fades[len(fades)-1] != "100,300" {
+		t.Fatalf("the sound should fade in to 100 over 300 ms, got %v %v", vol, fades)
+	}
 	if err := e.Seek(8000); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(700 * time.Millisecond) // the old slot fades out, then goes silent
 	if !fake.Audio("GM_B") || fake.Audio("GM_A") {
 		t.Fatalf("after a crossfade seek the sound should move to GM_B (A=%v B=%v)", fake.Audio("GM_A"), fake.Audio("GM_B"))
 	}
 	if err := e.Take(1, 0); err != nil { // a photo replaces the video
 		t.Fatal(err)
 	}
-	time.Sleep(600 * time.Millisecond)
+	time.Sleep(700 * time.Millisecond)
 	if fake.Audio("GM_A") || fake.Audio("GM_B") {
 		t.Fatal("no sound should stay on behind a photo")
+	}
+	if _, fades := fake.Volume("GM_B"); fades[len(fades)-1] != "0,300" {
+		t.Fatalf("the replaced video should fade out, got %v", fades)
+	}
+	if vol, _ := fake.Volume("GM_B"); vol != 100 {
+		t.Fatalf("the slot's volume should be put back after the fade-out, got %v", vol)
 	}
 
 	// Left to vMix: Vitrine doesn't touch the audio.

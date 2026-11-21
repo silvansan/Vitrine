@@ -22,6 +22,8 @@ type Input struct {
 	Position      int    `json:"position"`
 	Duration      int    `json:"duration"`
 	SelectedIndex int    `json:"selected_index"`
+	// Audio volume 0–100 as vMix shows it.
+	Volume float64 `json:"volume"`
 }
 
 // Name is the input's own name, without the file name vMix appends for some types.
@@ -93,15 +95,16 @@ func (s *State) Mixes() []int {
 }
 
 type xmlInput struct {
-	Key           string `xml:"key,attr"`
-	Number        int    `xml:"number,attr"`
-	Type          string `xml:"type,attr"`
-	Title         string `xml:"title,attr"`
-	ShortTitle    string `xml:"shortTitle,attr"`
-	State         string `xml:"state,attr"`
-	Position      int    `xml:"position,attr"`
-	Duration      int    `xml:"duration,attr"`
-	SelectedIndex int    `xml:"selectedIndex,attr"`
+	Key           string  `xml:"key,attr"`
+	Number        int     `xml:"number,attr"`
+	Type          string  `xml:"type,attr"`
+	Title         string  `xml:"title,attr"`
+	ShortTitle    string  `xml:"shortTitle,attr"`
+	State         string  `xml:"state,attr"`
+	Position      int     `xml:"position,attr"`
+	Duration      int     `xml:"duration,attr"`
+	SelectedIndex int     `xml:"selectedIndex,attr"`
+	Volume        float64 `xml:"volume,attr"`
 }
 
 type xmlMix struct {

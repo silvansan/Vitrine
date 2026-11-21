@@ -77,6 +77,7 @@
     $('input_audio').value = s.input_audio || 'GM_AUDIO';
     $('audio_keep_default').checked = !!s.audio_keep_default;
     $('video_audio').checked = !!s.video_audio;
+    $('audio_fade_ms').value = s.audio_fade_ms || 0;
 
     var screens = data.screens || [];
     $('tablets').innerHTML = screens.length ? screens.map(function (sc) {

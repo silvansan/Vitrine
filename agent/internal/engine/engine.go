@@ -80,12 +80,16 @@ type Engine struct {
 
 	cmd sync.Mutex // one command at a time
 
-	mu        sync.Mutex
-	status    Status
-	last      *vmix.State
-	busy      bool
-	ending    int64
-	slotGen   map[string]int
+	mu      sync.Mutex
+	status  Status
+	last    *vmix.State
+	busy    bool
+	ending  int64
+	slotGen map[string]int
+	// Each slot's own volume (as set in vMix), restored after a sound fade-out.
+	slotVolume map[string]float64
+	// Bumped by every PlayAudio, so a fade-out doesn't stop the next file.
+	audioGen  int
 	used      []int64
 	errorTill time.Time
 }
@@ -353,25 +357,92 @@ func (e *Engine) pauseLater(s store.Settings, slot string, delayMs int) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_ = e.VMix.Call(ctx, "Pause", map[string]string{"Input": slotName(s, slot)})
-		e.slotAudio(ctx, s, slotName(s, slot), false)
+		e.silence(ctx, s, slotName(s, slot))
 	}()
 }
 
-// slotAudio turns a slot's sound on or off in vMix (unless audio is left to vMix).
-// vMix's "Audio Auto" only switches sound for the main output (Mix 1), so a video
-// on Mix 2+ would otherwise play silently.
-func (e *Engine) slotAudio(ctx context.Context, s store.Settings, input string, on bool) {
+// Sound of the slots (unless audio is left to vMix). vMix's "Audio Auto" only
+// switches sound for the main output (Mix 1), so a video on Mix 2+ would otherwise
+// play silently. The sound fades in and out over AudioFadeMs instead of cutting;
+// each slot's own volume (as set in vMix) is kept and restored after a fade-out.
+
+func (e *Engine) volumeOf(name string) float64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if v, ok := e.slotVolume[name]; ok && v > 0 {
+		return v
+	}
+	return 100
+}
+
+func (e *Engine) rememberVolume(name string, v float64) {
+	if v <= 0 {
+		return
+	}
+	e.mu.Lock()
+	if e.slotVolume == nil {
+		e.slotVolume = map[string]float64{}
+	}
+	e.slotVolume[name] = v
+	e.mu.Unlock()
+}
+
+func volumeText(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+
+// soundIn turns a slot's audio on, fading up to its volume over fadeMs.
+func (e *Engine) soundIn(ctx context.Context, s store.Settings, in *vmix.Input, fadeMs int) {
+	if !s.VideoAudio || in == nil {
+		return
+	}
+	name := in.Name()
+	e.rememberVolume(name, in.Volume)
+	vol := e.volumeOf(name)
+	_ = e.VMix.Call(ctx, "AudioAutoOff", map[string]string{"Input": in.Key})
+	if fadeMs > 0 {
+		_ = e.VMix.Call(ctx, "SetVolume", map[string]string{"Input": in.Key, "Value": "0"})
+	}
+	if err := e.VMix.Call(ctx, "AudioOn", map[string]string{"Input": in.Key}); err != nil {
+		log.Printf("vMix AudioOn %s: %v", name, err)
+	}
+	if fadeMs > 0 {
+		_ = e.VMix.Call(ctx, "SetVolumeFade", map[string]string{"Input": in.Key, "Value": volumeText(vol) + "," + strconv.Itoa(fadeMs)})
+	}
+}
+
+// soundOut starts fading a slot's audio down; silence() finishes once the slot is off the mix.
+func (e *Engine) soundOut(ctx context.Context, s store.Settings, st *vmix.State, name string, fadeMs int) {
 	if !s.VideoAudio {
 		return
 	}
-	_ = e.VMix.Call(ctx, "AudioAutoOff", map[string]string{"Input": input})
-	fn := "AudioOff"
-	if on {
-		fn = "AudioOn"
+	if st != nil {
+		if in := st.InputByName(name); in != nil {
+			e.rememberVolume(name, in.Volume)
+		}
 	}
-	if err := e.VMix.Call(ctx, fn, map[string]string{"Input": input}); err != nil {
-		log.Printf("vMix %s %s: %v", fn, input, err)
+	if fadeMs > 0 {
+		_ = e.VMix.Call(ctx, "SetVolumeFade", map[string]string{"Input": name, "Value": "0," + strconv.Itoa(fadeMs)})
+		return
 	}
+	_ = e.VMix.Call(ctx, "AudioOff", map[string]string{"Input": name})
+}
+
+// silence turns a faded-out slot's audio off and puts its volume back for next time.
+func (e *Engine) silence(ctx context.Context, s store.Settings, name string) {
+	if !s.VideoAudio {
+		return
+	}
+	_ = e.VMix.Call(ctx, "AudioOff", map[string]string{"Input": name})
+	if s.AudioFadeMs > 0 {
+		_ = e.VMix.Call(ctx, "SetVolume", map[string]string{"Input": name, "Value": volumeText(e.volumeOf(name))})
+	}
+}
+
+// outMs is how long a slot needs before it can be paused: the picture transition or the sound fade.
+func outMs(s store.Settings, transitionMs int) int {
+	if s.VideoAudio && s.AudioFadeMs > transitionMs {
+		return s.AudioFadeMs
+	}
+	return transitionMs
 }
 
 // Take puts an asset on the projector mix, starting at startMs (videos).
@@ -419,8 +490,13 @@ func (e *Engine) Take(assetID int64, startMs int) error {
 		e.setError(err)
 		return err
 	}
-	// Sound on with the picture (videos and audio cards); a photo's slot stays silent.
-	e.slotAudio(ctx, s, input.Key, timed(media.Kind))
+	// Sound with the picture: the new video fades in, the one it replaces fades out.
+	if timed(media.Kind) {
+		e.soundIn(ctx, s, input, s.AudioFadeMs)
+	}
+	if prev.AssetID != 0 && timed(prev.Kind) {
+		e.soundOut(ctx, s, st, slotName(s, prev.Slot), s.AudioFadeMs)
+	}
 	if !e.waitActive(ctx, s.Mix, input.Number) {
 		err := fmt.Errorf("vMix didn't switch Mix %d; check the projector mix in the companion", s.Mix)
 		e.setError(err)
@@ -433,7 +509,7 @@ func (e *Engine) Take(assetID int64, startMs int) error {
 	e.used = append(e.used, assetID)
 	e.mu.Unlock()
 	if prev.AssetID != 0 && timed(prev.Kind) {
-		e.pauseLater(s, prev.Slot, s.TransitionMs)
+		e.pauseLater(s, prev.Slot, outMs(s, s.TransitionMs))
 	}
 	e.changed()
 	return nil
@@ -467,13 +543,16 @@ func (e *Engine) Clear() error {
 		e.setError(err)
 		return err
 	}
+	if timed(prev.Kind) {
+		e.soundOut(ctx, s, st, slotName(s, prev.Slot), s.AudioFadeMs)
+	}
 	e.waitActive(ctx, s.Mix, def.Number)
 	e.rememberPosition(prev)
 	e.mu.Lock()
 	e.status.Live = Live{}
 	e.mu.Unlock()
 	if timed(prev.Kind) {
-		e.pauseLater(s, prev.Slot, s.TransitionMs)
+		e.pauseLater(s, prev.Slot, outMs(s, backMs))
 	}
 	e.changed()
 	return nil
@@ -569,9 +648,9 @@ func (e *Engine) Seek(positionMs int) error {
 		e.setError(err)
 		return err
 	}
-	// The sound jumps with the picture: new slot on, old slot off.
-	e.slotAudio(ctx, s, input.Key, true)
-	e.slotAudio(ctx, s, slotName(s, live.Slot), false)
+	// The sound crossfades with the picture.
+	e.soundIn(ctx, s, input, jumpMs)
+	e.soundOut(ctx, s, st, slotName(s, live.Slot), jumpMs)
 	if !e.waitActive(ctx, s.Mix, input.Number) {
 		err := errors.New("vMix didn't take the jump")
 		e.setError(err)
@@ -790,16 +869,41 @@ func (e *Engine) PlayAudio(media *Media, startMs int) error {
 		}
 	}
 	time.Sleep(250 * time.Millisecond)
-	// Heard although the input isn't on the output: automatic audio off, audio on.
-	for _, step := range []struct {
+	e.mu.Lock()
+	e.audioGen++
+	e.mu.Unlock()
+	name := in.Name()
+	e.rememberVolume(name, in.Volume)
+	fade := s.AudioFadeMs
+	// Heard although the input isn't on the output: automatic audio off, audio on,
+	// fading up to the input's own volume.
+	steps2 := []struct {
 		fn     string
 		params map[string]string
 	}{
 		{"SetPosition", map[string]string{"Input": in.Key, "Value": strconv.Itoa(startMs)}},
 		{"AudioAutoOff", map[string]string{"Input": in.Key}},
+	}
+	if fade > 0 {
+		steps2 = append(steps2, struct {
+			fn     string
+			params map[string]string
+		}{"SetVolume", map[string]string{"Input": in.Key, "Value": "0"}})
+	}
+	steps2 = append(steps2, []struct {
+		fn     string
+		params map[string]string
+	}{
 		{"AudioOn", map[string]string{"Input": in.Key}},
 		{"Play", map[string]string{"Input": in.Key}},
-	} {
+	}...)
+	if fade > 0 {
+		steps2 = append(steps2, struct {
+			fn     string
+			params map[string]string
+		}{"SetVolumeFade", map[string]string{"Input": in.Key, "Value": volumeText(e.volumeOf(name)) + "," + strconv.Itoa(fade)}})
+	}
+	for _, step := range steps2 {
 		if err := e.VMix.Call(ctx, step.fn, step.params); err != nil {
 			e.audioFailed(err)
 			return err
@@ -839,8 +943,35 @@ func (e *Engine) StopAudio() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = e.VMix.Call(ctx, "Pause", map[string]string{"Input": s.InputAudio})
-	_ = e.VMix.Call(ctx, "AudioOff", map[string]string{"Input": s.InputAudio})
+	if s.AudioFadeMs > 0 {
+		// Fade out, then pause and put the volume back, unless another file started meanwhile.
+		if st, err := e.VMix.State(ctx); err == nil {
+			if in := st.InputByName(s.InputAudio); in != nil {
+				e.rememberVolume(s.InputAudio, in.Volume)
+			}
+		}
+		_ = e.VMix.Call(ctx, "SetVolumeFade", map[string]string{"Input": s.InputAudio, "Value": "0," + strconv.Itoa(s.AudioFadeMs)})
+		e.mu.Lock()
+		gen := e.audioGen
+		e.mu.Unlock()
+		go func() {
+			time.Sleep(time.Duration(s.AudioFadeMs+150) * time.Millisecond)
+			e.mu.Lock()
+			again := e.audioGen != gen
+			e.mu.Unlock()
+			if again {
+				return
+			}
+			c, done := context.WithTimeout(context.Background(), 3*time.Second)
+			defer done()
+			_ = e.VMix.Call(c, "Pause", map[string]string{"Input": s.InputAudio})
+			_ = e.VMix.Call(c, "AudioOff", map[string]string{"Input": s.InputAudio})
+			_ = e.VMix.Call(c, "SetVolume", map[string]string{"Input": s.InputAudio, "Value": volumeText(e.volumeOf(s.InputAudio))})
+		}()
+	} else {
+		_ = e.VMix.Call(ctx, "Pause", map[string]string{"Input": s.InputAudio})
+		_ = e.VMix.Call(ctx, "AudioOff", map[string]string{"Input": s.InputAudio})
+	}
 	e.rememberAudio(audio)
 	e.mu.Lock()
 	e.status.Audio = AudioLive{}

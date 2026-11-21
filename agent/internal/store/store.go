@@ -37,6 +37,8 @@ type Settings struct {
 	// (and off afterwards). vMix's own "Audio Auto" only follows the main output, so
 	// on another mix the sound would stay off. Off: leave the audio to vMix.
 	VideoAudio bool `json:"video_audio"`
+	// Fade the sound in and out over this many ms instead of cutting it (0 = cut).
+	AudioFadeMs int `json:"audio_fade_ms"`
 }
 
 // ScreenOptions decide what a tablet shows. The back tablet sets them for the pulpit.
@@ -193,6 +195,7 @@ func Open(dataDir string) (*Store, error) {
 	if st.Version < 4 {
 		// 0.1.9: videos play their sound (vMix Audio Auto doesn't follow Mix 2+).
 		st.Settings.VideoAudio = true
+		st.Settings.AudioFadeMs = 800
 	}
 	if st.Version < 4 {
 		st.Version = 4
