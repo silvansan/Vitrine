@@ -91,8 +91,14 @@ class Person(models.Model):
     can_browse = models.BooleanField(default=True, help_text="May pick files from the shared library.")
     expires_at = models.DateTimeField(null=True, blank=True)
     # Asked once per phone or computer; that device is then remembered until signed out.
-    # Kept readable so staff can tell it to the person (send it apart from the link).
-    pin = models.CharField(max_length=12, default=new_pin)
+    # Normally set by staff (kept readable so staff can tell it to the person). The
+    # person can change it on their page; a PIN they chose is stored hashed, like a
+    # password. Staff can also clear it: then the next device that opens the link
+    # chooses one.
+    pin = models.CharField(max_length=12, blank=True, default=new_pin, help_text="A PIN set by staff (readable).")
+    pin_hash = models.CharField(max_length=128, blank=True, default="", help_text="A PIN the person chose (hashed).")
+    pin_set_at = models.DateTimeField(null=True, blank=True)
+    pin_set_from = models.CharField(max_length=160, blank=True, default="", help_text="Device that chose the PIN.")
     failed_pins = models.PositiveIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -103,6 +109,51 @@ class Person(models.Model):
     class Meta:
         ordering = ["name"]
         verbose_name_plural = "people"
+
+    @property
+    def has_pin(self):
+        return bool(self.pin or self.pin_hash)
+
+    @property
+    def pin_chosen_by_person(self):
+        return bool(self.pin_hash)
+
+    def check_pin_value(self, value):
+        import hmac
+
+        from django.contrib.auth.hashers import check_password
+
+        if self.pin_hash:
+            return check_password(value, self.pin_hash)
+        return bool(self.pin) and hmac.compare_digest(value, self.pin)
+
+    def choose_pin(self, value, device_label=""):
+        """The person picks their own PIN (stored hashed)."""
+        from django.contrib.auth.hashers import make_password
+
+        self.pin_hash = make_password(value)
+        self.pin = ""
+        self.pin_set_at = timezone.now()
+        self.pin_set_from = device_label[:160]
+        self.failed_pins = 0
+        self.locked_until = None
+
+    def set_staff_pin(self):
+        self.pin = new_pin()
+        self.pin_hash = ""
+        self.pin_set_at = timezone.now()
+        self.pin_set_from = ""
+        self.failed_pins = 0
+        self.locked_until = None
+
+    def reset_pin(self):
+        """No PIN: the next device that opens the link chooses one."""
+        self.pin = ""
+        self.pin_hash = ""
+        self.pin_set_at = None
+        self.pin_set_from = ""
+        self.failed_pins = 0
+        self.locked_until = None
 
     @property
     def is_locked(self):

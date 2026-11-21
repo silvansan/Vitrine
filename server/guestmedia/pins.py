@@ -6,7 +6,6 @@ remembered until someone signs it out (on the person's page in /manage/).
 Staff signed in to /manage/ for the person's organization skip the PIN.
 """
 import hashlib
-import hmac
 import re
 import secrets
 from datetime import timedelta
@@ -93,7 +92,7 @@ def check_pin(request, person, pin):
         minutes = max(1, int((person.locked_until - timezone.now()).total_seconds() // 60) + 1)
         return False, f"Too many wrong PINs. Try again in {minutes} minute{'s' if minutes != 1 else ''}, or ask the production team."
     pin = re.sub(r"\D", "", pin or "")
-    if pin and hmac.compare_digest(pin, person.pin):
+    if pin and person.check_pin_value(pin):
         if person.failed_pins:
             person.failed_pins = 0
             person.locked_until = None
@@ -108,6 +107,24 @@ def check_pin(request, person, pin):
         return False, f"Too many wrong PINs. The link is locked for {person.LOCK_MINUTES} minutes."
     person.save(update_fields=["failed_pins"])
     return False, f"That PIN isn't right. {left} tr{'ies' if left != 1 else 'y'} left."
+
+
+MIN_LEN, MAX_LEN = 4, 6
+
+
+def choose_pin(request, person, pin, again):
+    """First opening: the person picks their PIN. Returns (ok, message)."""
+    pin = re.sub(r"\D", "", pin or "")
+    again = re.sub(r"\D", "", again or "")
+    if not MIN_LEN <= len(pin) <= MAX_LEN:
+        return False, f"Choose {MIN_LEN} to {MAX_LEN} digits."
+    if len(set(pin)) == 1 or pin in "0123456789" or pin in "9876543210":
+        return False, "That PIN is too easy to guess. Try another."
+    if pin != again:
+        return False, "The two PINs aren't the same."
+    person.choose_pin(pin, describe_device(request))
+    person.save(update_fields=["pin", "pin_hash", "pin_set_at", "pin_set_from", "failed_pins", "locked_until"])
+    return True, ""
 
 
 def remember_device(request, response, person):

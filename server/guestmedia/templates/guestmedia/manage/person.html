@@ -15,12 +15,19 @@
     <div class="grow">
       <p class="muted">One link for every event. It opens their next event; they can switch if they are in several.</p>
       <code class="link">{{ link }}</code>
-      <p class="pin-line">PIN <strong class="pin">{{ person.pin }}</strong> <span class="muted">· send it separately from the link (e.g. say it or text it). Each phone asks for it once.</span></p>
+      {% if person.pin %}
+      <p class="pin-line">PIN <strong class="pin">{{ person.pin }}</strong> <span class="muted">· send it separately from the link (e.g. say it or text it). Each phone asks for it once; {{ person.name }} can change it on their page.</span></p>
+      {% elif person.pin_hash %}
+      <p class="pin-line">PIN <strong>chosen by {{ person.name }}</strong> <span class="muted">{% if person.pin_set_at %}on {{ person.pin_set_at|date:"d M Y H:i" }}{% endif %}{% if person.pin_set_from %} ({{ person.pin_set_from }}){% endif %}. Only they know it; reset it if they forget.</span></p>
+      {% else %}
+      <p class="pin-line"><strong>No PIN yet</strong> <span class="muted">· the next phone that opens the link chooses one. Send the link only to {{ person.name }}.</span></p>
+      {% endif %}
       <div class="actions">
         <button class="btn small" type="button" data-copy="{{ link }}">Copy link</button>
         <a class="btn small" href="{{ link }}" target="_blank" rel="noopener">Open as {{ person.name }}</a>
-        <button class="btn small" type="button" data-copy="{{ link }} (PIN {{ person.pin }})">Copy link + PIN</button>
-        <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="new_pin"><button class="btn small" type="submit">New PIN</button></form>
+        {% if person.pin %}<button class="btn small" type="button" data-copy="{{ link }} (PIN {{ person.pin }})">Copy link + PIN</button>{% endif %}
+        <form method="post" class="inline"{% if person.pin_hash %} onsubmit="return confirm('Replace the PIN {{ person.name|escapejs }} chose with a new one you send them?')"{% endif %}>{% csrf_token %}<input type="hidden" name="action" value="new_pin"><button class="btn small" type="submit">{% if person.pin %}New PIN{% else %}Set a PIN{% endif %}</button></form>
+        {% if person.has_pin %}<form method="post" class="inline" onsubmit="return confirm('Clear the PIN and sign out every device? The next phone that opens the link chooses a new PIN.')">{% csrf_token %}<input type="hidden" name="action" value="reset_pin"><button class="btn small" type="submit">Reset: let them choose</button></form>{% endif %}
         <form method="post" class="inline" onsubmit="return confirm('Make a new link? The old one stops working and every device must enter the PIN again.')">{% csrf_token %}<input type="hidden" name="action" value="new_link"><button class="btn small" type="submit">New link</button></form>
         {% if person.is_locked %}<form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="unlock"><button class="btn small" type="submit">Unlock</button></form>{% endif %}
       </div>

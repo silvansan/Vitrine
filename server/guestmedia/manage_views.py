@@ -30,7 +30,6 @@ from .models import (
     Service,
     SetItem,
     new_guest_token,
-    new_pin,
 )
 from .orgs import check_org, org_view
 from .notify import notify_agents
@@ -253,13 +252,14 @@ def person_detail(request, pk):
             person.devices.all().delete()
             messages.success(request, "New link created; the old one no longer works and every device has to enter the PIN again.")
         elif action == "new_pin":
-            person.pin = new_pin()
-            person.failed_pins = 0
-            person.locked_until = None
-            person.save(update_fields=["pin", "failed_pins", "locked_until"])
-            if request.POST.get("sign_out") == "1":
-                person.devices.all().delete()
-            messages.success(request, f"New PIN: {person.pin}. Devices already signed in stay signed in unless you signed them out.")
+            person.set_staff_pin()
+            person.save()
+            messages.success(request, f"New PIN: {person.pin}. Devices already signed in stay signed in unless you sign them out.")
+        elif action == "reset_pin":
+            person.reset_pin()
+            person.save()
+            person.devices.all().delete()
+            messages.success(request, f"PIN cleared and every device signed out. {person.name} chooses a new PIN the next time they open their link.")
         elif action == "unlock":
             person.failed_pins = 0
             person.locked_until = None

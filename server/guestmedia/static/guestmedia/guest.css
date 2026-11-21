@@ -110,3 +110,8 @@ button,input{font:inherit}
 .pin-help{font-size:13px !important;margin:16px 0 0 !important}
 .sign-out-device{margin-top:10px}
 .sign-out-device button{background:none;border:0;padding:0;color:var(--subtle);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}
+.pin-again{margin-top:10px}
+.pin-link{display:flex;align-items:center;justify-content:center;text-decoration:none}
+.pin-card input::placeholder{letter-spacing:normal;font-size:16px}
+.guest-links{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:10px;align-items:center}
+.guest-links a,.guest-links button{font-size:13px;color:var(--subtle)}

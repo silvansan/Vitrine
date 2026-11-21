@@ -124,16 +124,40 @@ def page(request, token):
 def pin_page(request, person):
     """Ask for the PIN; on success remember this device and show the page."""
     error = ""
+    choosing = not person.has_pin
     if request.method == "POST":
-        ok, error = pins.check_pin(request, person, request.POST.get("pin", ""))
+        if choosing:
+            ok, error = pins.choose_pin(request, person, request.POST.get("pin", ""), request.POST.get("pin2", ""))
+        else:
+            ok, error = pins.check_pin(request, person, request.POST.get("pin", ""))
         if ok:
             target = request.get_full_path()
             return pins.remember_device(request, HttpResponseRedirect(target), person)
     return render(
         request,
         "guestmedia/guest_pin.html",
-        {"person": person, "error": error, "locked": person.is_locked},
+        {"person": person, "error": error, "locked": person.is_locked, "choosing": choosing,
+         "min_len": pins.MIN_LEN, "max_len": pins.MAX_LEN},
         status=401 if error else 200,
+    )
+
+
+@require_http_methods(["GET", "POST"])
+def change_pin(request, token):
+    """A signed-in person picks a new PIN (needs the current one)."""
+    person = load_person(token, request)
+    error = ""
+    done = False
+    if request.method == "POST":
+        if person.has_pin and not person.check_pin_value(request.POST.get("current", "").strip()):
+            error = "Your current PIN isn't right."
+        else:
+            ok, error = pins.choose_pin(request, person, request.POST.get("pin", ""), request.POST.get("pin2", ""))
+            done = ok
+    return render(
+        request,
+        "guestmedia/guest_pin_change.html",
+        {"person": person, "error": error, "done": done, "min_len": pins.MIN_LEN, "max_len": pins.MAX_LEN},
     )
 
 

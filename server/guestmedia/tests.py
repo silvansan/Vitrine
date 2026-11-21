@@ -488,3 +488,31 @@ class PinTests(TestCase):
         self.assertEqual(self.person.devices.count(), 1)  # a new PIN alone keeps devices signed in
         staff.post(f"/manage/people/{self.person.pk}/", {"action": "new_link"})
         self.assertEqual(self.person.devices.count(), 0)
+
+    def test_person_changes_pin_and_staff_reset_lets_them_choose(self):
+        enter_pin(self.client, self.person)
+        staff_pin = self.person.pin
+        # Change my PIN: needs the current one.
+        self.assertContains(self.client.post(self.base + "pin", {"current": "999999" if staff_pin != "999999" else "888888", "pin": "4826", "pin2": "4826"}), "isn")
+        self.assertContains(self.client.post(self.base + "pin", {"current": staff_pin, "pin": "1111", "pin2": "1111"}), "too easy")
+        self.assertContains(self.client.post(self.base + "pin", {"current": staff_pin, "pin": "4826", "pin2": "4826"}), "PIN changed")
+        self.person.refresh_from_db()
+        self.assertEqual(self.person.pin, "")
+        self.assertTrue(self.person.pin_hash.startswith("pbkdf2"))
+        other = self.client_class()
+        self.assertEqual(other.post(self.base, {"pin": staff_pin}).status_code, 401)
+        self.assertEqual(other.post(self.base, {"pin": "4826"}).status_code, 302)
+        # Staff reset: PIN cleared, devices out; the next phone chooses.
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        staff = self.client_class()
+        staff.login(username="admin", password="pw")
+        staff.post(f"/manage/people/{self.person.pk}/", {"action": "reset_pin"})
+        self.person.refresh_from_db()
+        self.assertFalse(self.person.has_pin)
+        self.assertEqual(self.person.devices.count(), 0)
+        fresh = self.client_class()
+        self.assertContains(fresh.get(self.base), "Choose a PIN")
+        self.assertContains(fresh.post(self.base, {"pin": "5931", "pin2": "5932"}), "aren", status_code=401)
+        self.assertEqual(fresh.post(self.base, {"pin": "5931", "pin2": "5931"}).status_code, 302)
+        self.assertEqual(fresh.get(self.base + "api/state").status_code, 200)
+        self.assertContains(staff.get(f"/manage/people/{self.person.pk}/"), "chosen by Maria")

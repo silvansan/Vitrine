@@ -16,7 +16,10 @@ Every person has a 6-digit **PIN** next to their link (event page and person pag
 - **Send the PIN separately** from the link: say it, text it, or put it in a different message. **Copy link + PIN** on the person page copies both if you prefer one message.
 - After **5 wrong PINs** the link locks for 15 minutes; the person page shows it and has **Unlock**.
 - **Signed-in devices** on the person page lists every device (browser, system, when, IP). **Sign out** one, or **Sign out all**. A person can also sign out a phone that isn't theirs from their own page.
-- **New PIN** changes the PIN; devices already signed in stay signed in unless you sign them out. **New link** changes the link *and* signs out every device: use it when a link has leaked.
+- **Change my PIN** on their page lets a person replace your PIN with their own (they type the current one first). Their own PIN is stored like a password: you can't see it any more, the person page shows "chosen by …" with when and from which device.
+- **New PIN** gives them a new PIN you can see and send; devices already signed in stay signed in unless you sign them out.
+- **Reset: let them choose** clears the PIN and signs out every device; the next phone that opens the link chooses a new PIN. Use it when someone forgot the PIN they chose.
+- **New link** changes the link *and* signs out every device: use it when a link has leaked.
 - Staff signed in to `/manage/` open people's pages without the PIN. The pulpit-tablet tips page needs no PIN.
 
 ## Before an event (backend, `/manage/`)
