@@ -25,6 +25,7 @@ func setup(t *testing.T) (*Engine, *vmixfake.Fake) {
 		s.Settings.DefaultInputKey = "key-0001"
 		s.Settings.DefaultInputTitle = "Banner Sunday"
 		s.Settings.TransitionMs = 50
+		s.Settings.VideoAudio = true
 	})
 	media := map[int64]*Media{
 		1: {ID: 1, Path: `C:\Vitrine\media\maria\1-photo.jpg`, Kind: "photo"},
@@ -139,5 +140,41 @@ func TestSeparateTransitionBack(t *testing.T) {
 	last := fake.Calls[len(fake.Calls)-1]
 	if fake.Active(2) != "Banner Sunday" || last[:10] != "AlphaFade " {
 		t.Fatalf("back to default should use AlphaFade, last call %q", last)
+	}
+}
+
+func TestVideoSoundFollowsTheMix(t *testing.T) {
+	e, fake := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.Run(ctx)
+
+	if err := e.Take(2, 0); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.Audio("GM_A") {
+		t.Fatal("a live video on Mix 2 should have its sound on")
+	}
+	if err := e.Seek(8000); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.Audio("GM_B") || fake.Audio("GM_A") {
+		t.Fatalf("after a crossfade seek the sound should move to GM_B (A=%v B=%v)", fake.Audio("GM_A"), fake.Audio("GM_B"))
+	}
+	if err := e.Take(1, 0); err != nil { // a photo replaces the video
+		t.Fatal(err)
+	}
+	time.Sleep(600 * time.Millisecond)
+	if fake.Audio("GM_A") || fake.Audio("GM_B") {
+		t.Fatal("no sound should stay on behind a photo")
+	}
+
+	// Left to vMix: Vitrine doesn't touch the audio.
+	_ = e.Store.Update(func(s *store.State) { s.Settings.VideoAudio = false })
+	if err := e.Take(2, 0); err != nil {
+		t.Fatal(err)
+	}
+	if fake.Audio("GM_A") || fake.Audio("GM_B") {
+		t.Fatal("with video_audio off Vitrine must not switch sound on")
 	}
 }

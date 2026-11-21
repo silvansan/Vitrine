@@ -353,7 +353,25 @@ func (e *Engine) pauseLater(s store.Settings, slot string, delayMs int) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_ = e.VMix.Call(ctx, "Pause", map[string]string{"Input": slotName(s, slot)})
+		e.slotAudio(ctx, s, slotName(s, slot), false)
 	}()
+}
+
+// slotAudio turns a slot's sound on or off in vMix (unless audio is left to vMix).
+// vMix's "Audio Auto" only switches sound for the main output (Mix 1), so a video
+// on Mix 2+ would otherwise play silently.
+func (e *Engine) slotAudio(ctx context.Context, s store.Settings, input string, on bool) {
+	if !s.VideoAudio {
+		return
+	}
+	_ = e.VMix.Call(ctx, "AudioAutoOff", map[string]string{"Input": input})
+	fn := "AudioOff"
+	if on {
+		fn = "AudioOn"
+	}
+	if err := e.VMix.Call(ctx, fn, map[string]string{"Input": input}); err != nil {
+		log.Printf("vMix %s %s: %v", fn, input, err)
+	}
 }
 
 // Take puts an asset on the projector mix, starting at startMs (videos).
@@ -401,6 +419,8 @@ func (e *Engine) Take(assetID int64, startMs int) error {
 		e.setError(err)
 		return err
 	}
+	// Sound on with the picture (videos and audio cards); a photo's slot stays silent.
+	e.slotAudio(ctx, s, input.Key, timed(media.Kind))
 	if !e.waitActive(ctx, s.Mix, input.Number) {
 		err := fmt.Errorf("vMix didn't switch Mix %d; check the projector mix in the companion", s.Mix)
 		e.setError(err)
@@ -549,6 +569,9 @@ func (e *Engine) Seek(positionMs int) error {
 		e.setError(err)
 		return err
 	}
+	// The sound jumps with the picture: new slot on, old slot off.
+	e.slotAudio(ctx, s, input.Key, true)
+	e.slotAudio(ctx, s, slotName(s, live.Slot), false)
 	if !e.waitActive(ctx, s.Mix, input.Number) {
 		err := errors.New("vMix didn't take the jump")
 		e.setError(err)

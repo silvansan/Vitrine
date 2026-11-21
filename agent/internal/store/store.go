@@ -33,6 +33,10 @@ type Settings struct {
 	// Audio files: keep the default input on the projector (true) or show their card.
 	AudioKeepDefault bool   `json:"audio_keep_default"`
 	InputAudio       string `json:"input_audio"`
+	// Vitrine turns the sound of videos and audio cards on in vMix while they are live
+	// (and off afterwards). vMix's own "Audio Auto" only follows the main output, so
+	// on another mix the sound would stay off. Off: leave the audio to vMix.
+	VideoAudio bool `json:"video_audio"`
 }
 
 // ScreenOptions decide what a tablet shows. The back tablet sets them for the pulpit.
@@ -186,8 +190,12 @@ func Open(dataDir string) (*Store, error) {
 			sc.Options.VideoSeek = true
 		}
 	}
-	if st.Version < 3 {
-		st.Version = 3
+	if st.Version < 4 {
+		// 0.1.9: videos play their sound (vMix Audio Auto doesn't follow Mix 2+).
+		st.Settings.VideoAudio = true
+	}
+	if st.Version < 4 {
+		st.Version = 4
 	}
 	return s, s.saveLocked()
 }

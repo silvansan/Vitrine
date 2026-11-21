@@ -21,6 +21,8 @@ type input struct {
 	Playing          bool
 	PosMs            int
 	DurMs            int
+	AudioOn          bool
+	AudioAuto        bool
 	lastTick         time.Time
 }
 
@@ -96,6 +98,16 @@ func (f *Fake) Position(title string) int {
 	return -1
 }
 
+// Audio reports whether an input's sound is on.
+func (f *Fake) Audio(title string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if in := f.find(title); in != nil {
+		return in.AudioOn
+	}
+	return false
+}
+
 // Switch puts an input on a mix, as if the operator clicked in vMix.
 func (f *Fake) Switch(mix int, title string) {
 	f.mu.Lock()
@@ -121,6 +133,19 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	in := f.find(q.Get("Input"))
 	switch fn {
+	case "AudioOn", "AudioOff", "AudioAutoOn", "AudioAutoOff":
+		if in != nil {
+			switch fn {
+			case "AudioOn":
+				in.AudioOn = true
+			case "AudioOff":
+				in.AudioOn = false
+			case "AudioAutoOn":
+				in.AudioAuto = true
+			default:
+				in.AudioAuto = false
+			}
+		}
 	case "AddInput":
 		if strings.HasPrefix(q.Get("Value"), "VideoList") {
 			f.add("VideoList", "List")
