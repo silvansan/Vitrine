@@ -53,6 +53,29 @@ document.addEventListener('click', function (e) {
     var old = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = old; }, 1200);
   });
 });
+// Optional date fields get a Clear button: phone date pickers often can't empty a field once set.
+document.querySelectorAll('input[type=date]:not([required])').forEach(function (input) {
+  var wrap = document.createElement('span');
+  wrap.className = 'date-clear';
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn small';
+  btn.textContent = 'Clear';
+  btn.setAttribute('aria-label', 'Clear the date');
+  function sync() { btn.hidden = !input.value; }
+  btn.addEventListener('click', function () {
+    input.value = '';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    sync();
+    input.focus();
+  });
+  input.addEventListener('input', sync);
+  input.addEventListener('change', sync);
+  wrap.appendChild(btn);
+  sync();
+});
 document.addEventListener('change', function (e) {
   if (e.target.matches('[data-select-all]')) {
     document.querySelectorAll('input[name=ids]').forEach(function (cb) { cb.checked = e.target.checked; });

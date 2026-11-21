@@ -133,3 +133,5 @@ textarea{max-width:100%}
 .legend .dot{vertical-align:middle;margin:0 2px}
 .table{position:relative}
 .card form p.note{display:block}
+.date-clear{display:flex;gap:8px;align-items:center;width:100%}.date-clear input{flex:1;min-width:0}.date-clear .btn{flex:none}
+.date-clear .btn[hidden]{display:none}

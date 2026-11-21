@@ -639,6 +639,19 @@ class EventPeriodTests(TestCase):
         self.assertEqual(Service.objects.get(name="Always").when, "ongoing")
         self.assertTrue(Service.objects.get(name="From next month").when.startswith("from"))
 
+    def test_end_date_can_be_removed(self):
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        self.client.login(username="admin", password="pw")
+        event = Service.objects.create(name="Camp", starts_on=self.today, ends_on=self.today + timedelta(days=2), location=self.loc)
+        page = self.client.get(f"/manage/event/{event.pk}/")
+        self.assertContains(page, "Empty: no end")
+        self.client.post(f"/manage/event/{event.pk}/", {
+            "action": "update", "name": "Camp", "starts_on": str(self.today), "ends_on": "",
+            "location": self.loc.pk, "is_active": "on",
+        })
+        event.refresh_from_db()
+        self.assertIsNone(event.ends_on)
+
     def test_person_page_and_form(self):
         User.objects.create_superuser("admin", "a@example.org", "pw")
         self.client.login(username="admin", password="pw")

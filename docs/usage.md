@@ -39,7 +39,7 @@ Every person has a 6-digit **PIN** next to their link (event page and person pag
 ## Before an event (backend, `/manage/`)
 
 1. **Locations & tablets → Add a location**, then **Create agent token** for its vMix PC (once per venue).
-2. **Events → New event** (name, From / Until, location). Clear *Until* for an event without an end, both for an ongoing one. Keep it **active** so the location's agent receives it. Tick **auto-approve** only for events where you trust every person.
+2. **Events → New event** (name, From / Until, location). Press **Clear** next to *Until* for an event without an end, next to both for an ongoing one (phone date pickers often have no way to empty a date). Keep it **active** so the location's agent receives it. Tick **auto-approve** only for events where you trust every person.
 3. **Add people** on the event page: pick someone you already know or create a new person. **Copy link**, or print/show the QR. **Open their set here** lets you fill a set for someone. **People** lists everyone with their upcoming events; a person's page has **New link** (the old one stops working), **Add to** another event, and their uploads.
 4. People open their link on their phone:
    - **Use it**: when their set for this event is empty, they can start from their set of an earlier event.
