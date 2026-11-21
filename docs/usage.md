@@ -2,7 +2,13 @@
 
 ## Full screen
 
-The **full-screen button** (four corners, top right on the back tablet, next to the status on the pulpit) hides the browser's address bar and tabs; press it again or swipe from the edge to leave. It works on Android tablets, iPads and computers. iPhones don't allow full screen for web pages: there, use **Share → Add to Home Screen**; opened from the home screen icon, the tablet view has no browser bars (this works on every device and is the best option for a pulpit tablet).
+The **full-screen button** (four corners, top right on the back tablet, next to the status on the pulpit) hides the browser's address bar and tabs; press it again or swipe from the edge to leave. It works on Android tablets, iPads and computers; iPhones don't allow full screen for web pages.
+
+The **Add to home screen** button (a tablet with an arrow, next to it) is the best option for a pulpit tablet: opened from the Vitrine icon, the tablet view starts without browser bars and stays that way. The button shows how to do it on that device (Chrome's own install prompt where the browser offers one).
+
+- **iPad / iPhone:** Safari → Share → *Add to Home Screen*. iOS keeps the home-screen app's sign-in apart from Safari's, so the sheet also shows a **6-digit code**: open Vitrine from the new icon and enter it (valid 10 minutes). The tablet then works from the icon, keeping its name, role and settings, and the Safari tab is signed out. Wrong codes are limited to 10 a minute.
+- **Android:** Chrome menu ⋮ → *Add to Home screen* / *Install app*. The sign-in is shared, nothing to enter. Over the local network (http) Chrome may still show its address bar: tap the full-screen button once.
+- The button hides itself when the view is already opened from the home screen.
 
 ## Which event the tablets show
 

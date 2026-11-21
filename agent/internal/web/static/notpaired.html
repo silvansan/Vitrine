@@ -2,16 +2,41 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0F1115">
 <title>Vitrine · not paired</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icon.svg">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="theme-dark">
 <main class="message-page">
   <h1>This tablet isn't paired yet</h1>
-  <p>Open the pairing QR code in the Vitrine backend (Agents &amp; tablets → Show pairing QR) or in the tray companion on the vMix PC (Pair a tablet…), and scan it with this tablet's camera.</p>
+  <p>Open the pairing QR code in the Vitrine backend (Locations &amp; tablets → Show pairing QR) or in the tray companion on the vMix PC (Pair a tablet…), and scan it with this tablet's camera.</p>
   <p class="muted">The tablet must be on the same network as the vMix PC.</p>
+  <form id="handoff" class="handoff">
+    <h2>Opened from the home screen?</h2>
+    <p class="muted">On the tablet in the browser, tap <strong>Add to home screen</strong>: it shows a 6-digit code. Enter it here.</p>
+    <div class="row">
+      <input id="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" aria-label="Code">
+      <button type="submit" class="btn primary">Continue</button>
+    </div>
+    <p id="msg" class="muted" role="alert"></p>
+  </form>
 </main>
+<script>
+document.getElementById('handoff').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  var msg = document.getElementById('msg');
+  fetch('/api/handoff', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: document.getElementById('code').value.replace(/\D/g, '') }) })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (res) { if (res.ok) { location.href = '/screen'; } else { msg.textContent = res.d.error || 'That didn\'t work.'; } })
+    .catch(function () { msg.textContent = 'The vMix PC can\'t be reached.'; });
+});
+</script>
 </body>
 </html>

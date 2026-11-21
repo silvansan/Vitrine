@@ -235,3 +235,10 @@ fieldset.box legend { padding: 0 6px; }
 .event-pick select { margin-top: 2px; max-width: 46vw; font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; }
 .p-sub { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.sheet.install ol { margin: 0; padding-left: 22px; line-height: 1.6; }
+.sheet.install p { margin: 0; }
+.handoff { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); text-align: left; }
+.handoff h2 { font-size: 18px; margin: 0 0 6px; }
+.handoff .row { flex-wrap: nowrap; }
+.handoff input { flex: 1; min-width: 0; height: 48px; font-size: 22px; letter-spacing: .25em; text-align: center; border-radius: 12px; border: 1px solid var(--border2); background: var(--surface); color: var(--text); }
+.handoff-code { font-size: 34px; font-weight: 800; letter-spacing: .2em; font-variant-numeric: tabular-nums; text-align: center; padding: 10px; border-radius: 12px; background: var(--surface2, rgba(127,127,127,.12)); }

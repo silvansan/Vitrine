@@ -11,10 +11,11 @@
   var app = document.getElementById('app');
   var PER_PAGE = 6;
   var S = { boot: null, status: null, screens: [], wsOk: false, renderKey: '' };
-  var ui = { set: 'all', page: 0, localSet: null, cue: null, drawer: false, drawerScreen: null, toast: '', toastTimer: null, lastError: '', marker: null };
+  var ui = { install: false, set: 'all', page: 0, localSet: null, cue: null, drawer: false, drawerScreen: null, toast: '', toastTimer: null, lastError: '', marker: null };
 
   var ICON = {
     fullscreen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    install: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M12 7v7M8.5 10.5L12 14l3.5-3.5M10 18h4"/></svg>',
     exitFullscreen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
     photo: '<svg class="ph-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
     video: '<svg class="ph-icon" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4z"/></svg>',
@@ -378,7 +379,7 @@
     html += '<span class="pill strong">' + ICON.monitor + ' Output: ' + (e.mix > 1 ? 'Mix ' + e.mix : 'Main') + '</span>';
     html += '<button type="button" class="icon-btn" data-act="drawer" aria-label="Tablets">' + ICON.tablets + '</button>';
     html += '<button type="button" class="icon-btn" data-act="theme" aria-label="' + (theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme') + '">' + (theme() === 'dark' ? ICON.sun : ICON.moon) + '</button>';
-    html += fullscreenButton();
+    html += installButton() + fullscreenButton();
     html += '</div></header>';
 
     html += '<nav class="nav" aria-label="Filter by guest"><div class="chips">';
@@ -441,7 +442,7 @@
     if (o.show_status) {
       html += '<span class="pill"><span class="dot ' + (e.vmix_ok ? 'ok' : 'bad') + '"></span>' + (e.vmix_ok ? 'vMix' : 'vMix offline') + '</span>';
     }
-    html += '<div class="p-status ' + status.cls + '"><span class="d"></span>' + status.text + '</div>' + fullscreenButton() + '</div></header>';
+    html += '<div class="p-status ' + status.cls + '"><span class="d"></span>' + status.text + '</div>' + installButton() + fullscreenButton() + '</div></header>';
     if (o.show_set_switcher && sets().length > 1) {
       html += '<div class="p-sets"><div class="chips">';
       sets().forEach(function (s) {
@@ -602,6 +603,7 @@
     html += renderCue();
     html += renderDrawer();
     html += renderMarkerSheet();
+    html += renderInstallSheet();
     if (ui.toast) html += '<div class="toast" role="alert">' + h(ui.toast) + '</div>';
     if (!S.wsOk) html += '<div class="offline">Reconnecting to the vMix PC…</div>';
     var scroll = {};
@@ -676,6 +678,60 @@
     return '<button type="button" class="icon-btn" data-act="fullscreen" aria-label="' + (on ? 'Leave full screen' : 'Full screen') +
       '" title="' + (on ? 'Leave full screen' : 'Full screen') + '">' + (on ? ICON.exitFullscreen : ICON.fullscreen) + '</button>';
   }
+  // "Add to home screen": opened from the home screen the tablet view has no browser bars.
+  // Chrome offers its own install prompt only on HTTPS; otherwise we show how to do it.
+  var installPrompt = null;
+  window.addEventListener('beforeinstallprompt', function (ev) { ev.preventDefault(); installPrompt = ev; });
+  window.addEventListener('appinstalled', function () { installPrompt = null; ui.install = false; render(); });
+  function isInstalled() {
+    return (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches)) ||
+      window.navigator.standalone === true;
+  }
+  function installButton() {
+    if (isInstalled()) return '';
+    return '<button type="button" class="icon-btn" data-act="install" aria-label="Add to home screen" title="Add to home screen">' + ICON.install + '</button>';
+  }
+  function addToHomeScreen() {
+    if (installPrompt) {
+      installPrompt.prompt();
+      installPrompt.userChoice.then(function () { installPrompt = null; render(); });
+      return;
+    }
+    ui.install = true;
+    ui.handoff = null;
+    render();
+    if (isApple()) {
+      // iOS keeps the home-screen app's sign-in apart from Safari's: a code moves this tablet's pairing over.
+      post('/api/handoff/new', {}).then(function (res) {
+        if (res && res.code) { ui.handoff = res; render(); }
+      });
+    }
+  }
+  function isApple() {
+    var ua = navigator.userAgent;
+    return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  }
+  function renderInstallSheet() {
+    if (!ui.install) return '';
+    var ua = navigator.userAgent;
+    var steps;
+    if (isApple()) {
+      steps = '<ol><li>Open this page in <strong>Safari</strong>.</li><li>Tap <strong>Share</strong> (the square with the arrow).</li>' +
+        '<li>Choose <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>' +
+        '<li>Open Vitrine from the new icon and enter this code (valid 10 minutes):</li></ol>' +
+        '<div class="handoff-code">' + (ui.handoff ? h(ui.handoff.code) : '······') + '</div>' +
+        '<p class="muted">The icon opens the tablet view full screen, without Safari\'s bars. After entering the code, this tablet works from the icon (this browser tab is signed out).</p>';
+    } else if (/Android/.test(ua)) {
+      steps = '<ol><li>Open the browser menu <strong>⋮</strong> (top right in Chrome).</li><li>Choose <strong>Add to Home screen</strong> (or <strong>Install app</strong>), then <strong>Add</strong>.</li></ol>' +
+        '<p class="muted">Over the local network (http) Chrome may still show its address bar when opened from the icon: tap the full-screen button once it is open. Samsung Internet and Brave have the same item in their menu.</p>';
+    } else {
+      steps = '<ol><li>In Chrome or Edge, open the menu <strong>⋮</strong>.</li><li>Choose <strong>Cast, save and share → Create shortcut</strong> (Chrome) or <strong>Apps → Install this site as an app</strong> (Edge), and tick <em>Open as window</em>.</li></ol>';
+    }
+    return '<div class="overlay top" data-act="install-bg"><div class="sheet small install" role="dialog" aria-label="Add to home screen">' +
+      '<div class="sheet-head"><div><h2>Add Vitrine to the home screen</h2><div class="muted">One tap opens this tablet view, full screen.</div></div>' +
+      '<button type="button" class="icon-btn" data-act="install-close" aria-label="Close">✕</button></div>' + steps + '</div></div>';
+  }
+
   document.addEventListener('fullscreenchange', function () { render(); });
   document.addEventListener('webkitfullscreenchange', function () { render(); });
 
@@ -684,6 +740,8 @@
     var e = eng();
     switch (name) {
       case 'fullscreen': toggleFullscreen(); break;
+      case 'install': addToHomeScreen(); break;
+      case 'install-close': ui.install = false; render(); break;
       case 'tap': tap(id); break;
       case 'resume': post('/api/take', { asset_id: id, start_ms: positions()[String(id)] || 0 }); break;
       case 'cue': ui.cue = { id: id, pos: positions()[String(id)] || 0 }; render(); break;
@@ -734,6 +792,8 @@
     if (!el || el.disabled) return;
     if (el.dataset.act === 'cue-close-bg' && ev.target !== el) return;
     if (el.dataset.act === 'cue-close-bg') { ui.cue = null; render(); return; }
+    if (el.dataset.act === 'install-bg' && ev.target !== el) return;
+    if (el.dataset.act === 'install-bg') { ui.install = false; render(); return; }
     act(el.dataset.act, el.dataset);
   });
 

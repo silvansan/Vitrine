@@ -12,6 +12,7 @@ import (
 	"html"
 	"io/fs"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -56,6 +57,17 @@ type Server struct {
 	hub      *Hub
 	seenMu   sync.Mutex
 	lastSeen map[string]time.Time
+
+	// Hand-over codes: move a tablet's pairing into its home-screen app (iOS keeps
+	// home-screen apps' cookies apart from Safari's).
+	handoffMu    sync.Mutex
+	handoffs     map[string]handoff
+	handoffFails []time.Time
+}
+
+type handoff struct {
+	screenID string
+	expires  time.Time
 }
 
 func (s *Server) Hub() *Hub { return s.hub }
@@ -89,6 +101,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/play", s.screenOnly(s.simple(s.Engine.Play)))
 	mux.HandleFunc("POST /api/audio/stop", s.screenOnly(s.simple(s.Engine.StopAudio)))
 	mux.HandleFunc("POST /api/seek", s.screenOnly(s.handleSeek))
+	mux.HandleFunc("POST /api/handoff/new", s.screenOnly(s.handleHandoffNew))
+	mux.HandleFunc("POST /api/handoff", s.handleHandoffUse)
 	mux.HandleFunc("POST /api/screens/{id}", s.screenOnly(s.handleScreenUpdate))
 	mux.HandleFunc("POST /api/screens/{id}/command", s.screenOnly(s.handleScreenCommand))
 	mux.HandleFunc("POST /api/pulpit", s.screenOnly(s.handlePulpitSet))
@@ -1194,5 +1208,89 @@ func (s *Server) handleKeyDelete(w http.ResponseWriter, r *http.Request, _ *stor
 		st.IntegrationKeys = kept
 	})
 	s.hub.Disconnect("int-" + id)
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// ---------- hand-over to the home-screen app ----------
+
+// handleHandoffNew gives this tablet a 6-digit code (10 minutes) to sign in its home-screen app.
+func (s *Server) handleHandoffNew(w http.ResponseWriter, r *http.Request, sc *store.Screen) {
+	if strings.HasPrefix(sc.ID, "int-") {
+		writeError(w, http.StatusBadRequest, "integrations can't hand over")
+		return
+	}
+	s.handoffMu.Lock()
+	defer s.handoffMu.Unlock()
+	if s.handoffs == nil {
+		s.handoffs = map[string]handoff{}
+	}
+	for code, h := range s.handoffs {
+		if time.Now().After(h.expires) || h.screenID == sc.ID {
+			delete(s.handoffs, code)
+		}
+	}
+	var code string
+	for {
+		n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
+		code = fmt.Sprintf("%06d", n.Int64())
+		if _, taken := s.handoffs[code]; !taken {
+			break
+		}
+	}
+	s.handoffs[code] = handoff{screenID: sc.ID, expires: time.Now().Add(10 * time.Minute)}
+	writeJSON(w, map[string]any{"code": code, "minutes": 10})
+}
+
+// handleHandoffUse signs this browser in as the tablet that made the code. The tablet's
+// session moves here (the browser tab it came from is signed out).
+func (s *Server) handleHandoffUse(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	code := strings.TrimSpace(body.Code)
+	s.handoffMu.Lock()
+	recent := s.handoffFails[:0]
+	for _, t := range s.handoffFails {
+		if time.Since(t) < time.Minute {
+			recent = append(recent, t)
+		}
+	}
+	s.handoffFails = recent
+	if len(recent) >= 10 {
+		s.handoffMu.Unlock()
+		writeError(w, http.StatusTooManyRequests, "Too many wrong codes. Wait a minute.")
+		return
+	}
+	h, ok := s.handoffs[code]
+	if !ok || time.Now().After(h.expires) {
+		s.handoffFails = append(s.handoffFails, time.Now())
+		s.handoffMu.Unlock()
+		writeError(w, http.StatusNotFound, "That code isn't valid (any more). Make a new one on the tablet.")
+		return
+	}
+	delete(s.handoffs, code)
+	s.handoffMu.Unlock()
+
+	sessionToken, hash := pairing.NewSessionToken()
+	found := false
+	_ = s.Store.Update(func(st *store.State) {
+		if sc, ok := st.Screens[h.screenID]; ok {
+			sc.TokenHash = hash
+			sc.LastSeen = time.Now()
+			found = true
+		}
+	})
+	if !found {
+		writeError(w, http.StatusNotFound, "That tablet was unpaired.")
+		return
+	}
+	s.hub.Disconnect(h.screenID)
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: sessionToken, Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, MaxAge: 5 * 365 * 24 * 3600})
+	log.Printf("screen %s moved to its home-screen app", h.screenID)
 	writeJSON(w, map[string]bool{"ok": true})
 }

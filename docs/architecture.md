@@ -68,7 +68,9 @@ Pairing codes are `s1.<payload>.<Ed25519 signature>` from the server (backend or
 
 Roles: **back** can control everything, edit pulpit screens and open the companion; **pulpit** sees its set and the controls its options allow. Screen options and themes live in the agent's `state.json`; the server gets a copy in the heartbeat for display.
 
-Tablet ↔ agent: `GET /api/bootstrap`, WebSocket `/ws` (messages `state`, `catalog`, `screens`, `settings`, `command`), and `POST /api/take|clear|pause|play|seek|pulpit|screens/{id}|screens/{id}/command`. Companion: `GET /api/companion/state`, `POST /api/companion/settings|pair|sync|test-default|screens/{id}/delete` (loopback or back tablet only).
+Tablet ↔ agent: `GET /api/bootstrap`, WebSocket `/ws` (messages `state`, `catalog`, `screens`, `settings`, `command`), and `POST /api/take|clear|pause|play|seek|pulpit|screens/{id}|screens/{id}/command`. Home-screen hand-over: `POST /api/handoff/new` (a paired tablet) returns a 6-digit code valid 10 minutes; `POST /api/handoff {code}` (no sign-in, 10 wrong codes a minute) moves that tablet's session to the calling browser: new session token, the old cookie stops working. Needed because iOS home-screen apps don't share Safari's cookies. `/static/manifest.webmanifest` (`display: fullscreen`) and `/static/icon.svg` make the tablet view installable.
+
+Companion: `GET /api/companion/state`, `POST /api/companion/settings|pair|sync|test-default|screens/{id}/delete` (loopback or back tablet only).
 
 Integrations (Bitfocus Companion module): API keys `vik_…` created at `GET|POST /api/companion/keys` and revoked at `POST /api/companion/keys/{id}/delete` (loopback only; the hash is kept in `state.json`). A key is accepted as `Authorization: Bearer` or `?key=` and acts as a back screen. `/api/take` also takes `{guest, file, from}` and `/api/pulpit` takes `{guest}`, both 1-based in the order the tablets show.
 
