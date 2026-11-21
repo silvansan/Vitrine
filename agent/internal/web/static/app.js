@@ -14,6 +14,8 @@
   var ui = { set: 'all', page: 0, localSet: null, cue: null, drawer: false, drawerScreen: null, toast: '', toastTimer: null, lastError: '', marker: null };
 
   var ICON = {
+    fullscreen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    exitFullscreen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
     photo: '<svg class="ph-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
     video: '<svg class="ph-icon" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4z"/></svg>',
     play: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>',
@@ -376,6 +378,7 @@
     html += '<span class="pill strong">' + ICON.monitor + ' Output: ' + (e.mix > 1 ? 'Mix ' + e.mix : 'Main') + '</span>';
     html += '<button type="button" class="icon-btn" data-act="drawer" aria-label="Tablets">' + ICON.tablets + '</button>';
     html += '<button type="button" class="icon-btn" data-act="theme" aria-label="' + (theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme') + '">' + (theme() === 'dark' ? ICON.sun : ICON.moon) + '</button>';
+    html += fullscreenButton();
     html += '</div></header>';
 
     html += '<nav class="nav" aria-label="Filter by guest"><div class="chips">';
@@ -438,7 +441,7 @@
     if (o.show_status) {
       html += '<span class="pill"><span class="dot ' + (e.vmix_ok ? 'ok' : 'bad') + '"></span>' + (e.vmix_ok ? 'vMix' : 'vMix offline') + '</span>';
     }
-    html += '<div class="p-status ' + status.cls + '"><span class="d"></span>' + status.text + '</div></div></header>';
+    html += '<div class="p-status ' + status.cls + '"><span class="d"></span>' + status.text + '</div>' + fullscreenButton() + '</div></header>';
     if (o.show_set_switcher && sets().length > 1) {
       html += '<div class="p-sets"><div class="chips">';
       sets().forEach(function (s) {
@@ -648,10 +651,39 @@
     post('/api/take', { asset_id: id, start_ms: 0 });
   }
 
+  // Full screen hides the browser's address bar and tabs (Android, iPad, desktop).
+  // iPhones have no full-screen for pages: there the button doesn't show.
+  function canFullscreen() {
+    var d = document.documentElement;
+    return !!(d.requestFullscreen || d.webkitRequestFullscreen);
+  }
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function toggleFullscreen() {
+    var d = document.documentElement;
+    if (isFullscreen()) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      var req = d.requestFullscreen || d.webkitRequestFullscreen;
+      var p = req.call(d, { navigationUI: 'hide' });
+      if (p && p.catch) p.catch(function () {});
+    }
+  }
+  function fullscreenButton() {
+    if (!canFullscreen()) return '';
+    var on = isFullscreen();
+    return '<button type="button" class="icon-btn" data-act="fullscreen" aria-label="' + (on ? 'Leave full screen' : 'Full screen') +
+      '" title="' + (on ? 'Leave full screen' : 'Full screen') + '">' + (on ? ICON.exitFullscreen : ICON.fullscreen) + '</button>';
+  }
+  document.addEventListener('fullscreenchange', function () { render(); });
+  document.addEventListener('webkitfullscreenchange', function () { render(); });
+
   function act(name, data) {
     var id = data.id ? parseInt(data.id, 10) : 0;
     var e = eng();
     switch (name) {
+      case 'fullscreen': toggleFullscreen(); break;
       case 'tap': tap(id); break;
       case 'resume': post('/api/take', { asset_id: id, start_ms: positions()[String(id)] || 0 }); break;
       case 'cue': ui.cue = { id: id, pos: positions()[String(id)] || 0 }; render(); break;

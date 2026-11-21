@@ -1,5 +1,9 @@
 # Using Vitrine
 
+## Full screen
+
+The **full-screen button** (four corners, top right on the back tablet, next to the status on the pulpit) hides the browser's address bar and tabs; press it again or swipe from the edge to leave. It works on Android tablets, iPads and computers. iPhones don't allow full screen for web pages: there, use **Share → Add to Home Screen**; opened from the home screen icon, the tablet view has no browser bars (this works on every device and is the best option for a pulpit tablet).
+
 ## Which event the tablets show
 
 The tablets show the location's name and the event they are on (e.g. *Vitrine · Zurich hall* / *Youth night · Wed 25 Nov*); the pulpit shows it under the guest's name. The vMix PC receives the location's upcoming events, and by default follows **today's or the next event** (*Automatic*). On the back tablet, the event menu under the title switches to another one, e.g. to prepare Sunday on Wednesday; choose *Automatic* again afterwards. All tablets follow the choice.
