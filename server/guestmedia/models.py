@@ -584,6 +584,12 @@ class Upload(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     guest = models.ForeignKey(Guest, null=True, blank=True, on_delete=models.CASCADE, related_name="tus_uploads")
+    # Uploads by staff from /manage/ (no guest): who, for which organization, and optionally
+    # for which person (their library) and event (their set in it).
+    staff = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    organization = models.ForeignKey(Organization, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    person = models.ForeignKey(Person, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
+    service = models.ForeignKey(Service, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     filename = models.CharField(max_length=255)
     mime = models.CharField(max_length=120, blank=True)
     length = models.BigIntegerField()

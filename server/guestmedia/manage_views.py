@@ -373,6 +373,8 @@ def person_detail(request, pk):
             "events": [e for e in upcoming_events(person.organization) if e.pk not in taken],
             "uploads": MediaAsset.objects.filter(uploaded_by=person)[:60],
             "devices": person.devices.all(),
+            "upload_events": [g.service for g in person.upcoming_participations()],
+            "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
             "today": timezone.localdate(),
         },
     )
@@ -467,6 +469,21 @@ def library(request):
             for asset in selected:
                 process_asset.delay(asset.pk)
             messages.success(request, "Processing again.")
+        elif action == "add_to_set":
+            guest = Guest.objects.filter(pk=request.POST.get("guest_id") or 0, service__location__organization=org).select_related("person", "service").first()
+            if guest is None:
+                messages.error(request, "Choose whose set to add them to.")
+            else:
+                media_set = guest.get_set()
+                last = media_set.items.order_by("-position").first()
+                position = (last.position + 1) if last else 0
+                added = 0
+                for asset in selected.filter(deleted_at__isnull=True).order_by("created"):
+                    _, created = SetItem.objects.get_or_create(media_set=media_set, asset=asset, defaults={"position": position})
+                    if created:
+                        position += 1
+                        added += 1
+                messages.success(request, f"Added {added} file(s) to {guest.person.name}'s set in {guest.service.name}.")
         return redirect(request.get_full_path())
 
     totals = assets.aggregate(size=Sum("processed_size"), count=Count("id"))
@@ -481,6 +498,11 @@ def library(request):
             "show_trash": show_trash,
             "filters": request.GET,
             "trash_days": settings.VITRINE_TRASH_DAYS,
+            "upload_people": Person.objects.filter(organization=org).order_by("name"),
+            "upload_events": upcoming_events(org),
+            "set_targets": Guest.objects.filter(service__in=upcoming_events(org)).select_related("service__location", "person")
+            .order_by("service__starts_on", "service__name", "person__name"),
+            "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
         },
     )
 

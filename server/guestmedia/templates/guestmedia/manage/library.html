@@ -13,6 +13,8 @@
 </div>
 {% endif %}
 
+{% if scope != 'shared' and not show_trash %}{% include "guestmedia/manage/_uploader.html" %}{% endif %}
+
 <form method="get" class="filters card">
   <input type="search" name="q" value="{{ filters.q }}" placeholder="Search name or guest" aria-label="Search">
   <label>Type
@@ -47,6 +49,15 @@
       <button class="btn" name="action" value="share">Share with other organizations</button>
       <button class="btn" name="action" value="unshare">Stop sharing</button>
       <button class="btn" name="action" value="reprocess">Process again</button>
+      {% if set_targets %}
+      <span class="add-to-set">
+        <select name="guest_id" aria-label="Whose set">
+          <option value="">Add to the set of…</option>
+          {% for g in set_targets %}<option value="{{ g.pk }}">{{ g.service.name }} · {{ g.service.short_when }} · {{ g.person.name }}</option>{% endfor %}
+        </select>
+        <button class="btn" name="action" value="add_to_set">Add to set</button>
+      </span>
+      {% endif %}
       <button class="btn danger" name="action" value="trash">Move to trash</button>
       <label><input type="checkbox" name="confirm" value="1"> I know some are in active sets</label>
     {% endif %}

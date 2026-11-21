@@ -110,6 +110,47 @@ class FlowTests(TestCase):
             self.assertEqual(int(head["Upload-Offset"]), offset)
         return MediaAsset.all_objects.latest("id")
 
+    def staff_upload(self, client, name, data, query=""):
+        response = client.post(
+            "/manage/tus/" + query,
+            HTTP_TUS_RESUMABLE="1.0.0",
+            HTTP_UPLOAD_LENGTH=str(len(data)),
+            HTTP_UPLOAD_METADATA=f"filename {b64(name)}",
+        )
+        if response.status_code != 201:
+            return response
+        return client.generic("PATCH", response["Location"], data=data, content_type="application/offset+octet-stream",
+                              HTTP_UPLOAD_OFFSET="0", HTTP_TUS_RESUMABLE="1.0.0")
+
+    def test_staff_uploads_from_manage(self):
+        from django.test import Client
+
+        admin = User.objects.create_superuser("admin", "a@example.org", "pw-long-enough")
+        staff = Client()
+        staff.login(username="admin", password="pw-long-enough")
+        session = staff.session
+        session["vitrine_org"] = self.org.pk
+        session.save()
+        self.assertContains(staff.get("/manage/library/"), "Add photos, videos or audio")
+        self.assertContains(staff.get(f"/manage/people/{self.maria.person.pk}/"), "Add photos, videos or audio")
+        # For the organization's library: approved, owned by the organization.
+        self.assertEqual(self.staff_upload(staff, "logo.jpg", jpeg_bytes()).status_code, 204)
+        asset = MediaAsset.objects.latest("id")
+        self.assertEqual((asset.owner_name, asset.approval, asset.organization, asset.uploaded_by), ("Main", "approved", self.org, None))
+        self.assertEqual(asset.status, "ready", asset.error)
+        # For Maria, into her set in the event.
+        self.staff_upload(staff, "slide.jpg", jpeg_bytes(), f"?person={self.maria.person.pk}&event={self.service.pk}")
+        slide = MediaAsset.objects.latest("id")
+        self.assertEqual((slide.owner_name, slide.uploaded_by, slide.approval), ("Maria", self.maria.person, "approved"))
+        self.assertIn(slide.pk, self.maria.get_set().asset_ids())
+        # A library file into Daniel's set (bulk action).
+        staff.post("/manage/library/", {"action": "add_to_set", "ids": [asset.pk], "guest_id": self.daniel.pk})
+        self.assertIn(asset.pk, self.daniel.get_set().asset_ids())
+        # Not for guests or anonymous visitors, nor for another organization's person.
+        self.assertEqual(self.staff_upload(self.client, "x.jpg", b"123").status_code, 403)
+        other = Person.objects.create(organization=Organization.objects.create(name="Other"), name="Zed")
+        self.assertEqual(self.staff_upload(staff, "x.jpg", b"123", f"?person={other.pk}").status_code, 404)
+
     def test_photo_upload_approval_library_and_manifest(self):
         asset = self.tus_upload(self.maria, "IMG_1.jpg", jpeg_bytes())
         asset.refresh_from_db()

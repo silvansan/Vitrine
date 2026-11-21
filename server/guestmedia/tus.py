@@ -70,8 +70,11 @@ def collection(request, token):
     guest = guest_for(request, token)
     if guest is None:
         return tus_response(403)
-    max_size = settings.VITRINE_MAX_UPLOAD_MB * 1024 * 1024
+    return _create(request, guest=guest)
 
+
+def _create(request, **owner):
+    max_size = settings.VITRINE_MAX_UPLOAD_MB * 1024 * 1024
     if request.method == "OPTIONS":
         return tus_response(
             204,
@@ -92,10 +95,10 @@ def collection(request, token):
     meta = parse_metadata(request.headers.get("Upload-Metadata"))
     upload = Upload.objects.create(
         id=uuid.uuid4(),
-        guest=guest,
         filename=safe_filename(meta.get("filename") or meta.get("name")),
         mime=(meta.get("filetype") or meta.get("type") or "")[:120],
         length=length,
+        **owner,
     )
     settings.UPLOAD_TMP_ROOT.mkdir(parents=True, exist_ok=True)
     upload.temp_path.touch()
@@ -116,7 +119,10 @@ def resource(request, token, upload_id):
     upload = Upload.objects.filter(pk=upload_id, guest__person=person).first()
     if upload is None:
         return tus_response(404)
+    return _transfer(request, upload)
 
+
+def _transfer(request, upload):
     if request.method == "HEAD":
         return tus_response(200, Upload_Offset=upload.offset, Upload_Length=upload.length)
 
@@ -150,6 +156,56 @@ def resource(request, token, upload_id):
     return tus_response(204, Upload_Offset=upload.offset)
 
 
+def _staff_user(request):
+    user = request.user
+    return user if user.is_authenticated and user.is_staff and user.is_active else None
+
+
+def staff_collection(request):
+    """Upload from /manage/: ?person=<id>&event=<id> (both optional) in the current organization.
+
+    Session + CSRF header protected (tus-js-client sends X-CSRFToken).
+    """
+    from .models import Person, Service
+    from .orgs import current_org
+
+    user = _staff_user(request)
+    if user is None:
+        return tus_response(403)
+    if request.method == "OPTIONS":
+        return _create(request)
+    org = current_org(request)
+    person = service = None
+    if request.GET.get("person", "").isdigit():
+        person = Person.objects.filter(pk=request.GET["person"], organization=org).first()
+        if person is None:
+            return tus_response(404)
+    if request.GET.get("event", "").isdigit():
+        service = Service.objects.filter(pk=request.GET["event"], location__organization=org).first()
+        if service is None:
+            return tus_response(404)
+    return _create(request, staff=user, organization=org, person=person, service=service)
+
+
+def staff_resource(request, upload_id):
+    user = _staff_user(request)
+    if user is None:
+        return tus_response(403)
+    upload = Upload.objects.filter(pk=upload_id, staff=user).first()
+    if upload is None:
+        return tus_response(404)
+    return _transfer(request, upload)
+
+
+def _add_to_set(media_set, asset):
+    last = media_set.items.order_by("-position").first()
+    SetItem.objects.get_or_create(
+        media_set=media_set,
+        asset=asset,
+        defaults={"position": (last.position + 1) if last else 0},
+    )
+
+
 def finish_upload(upload):
     """Move the finished file into the library and start processing."""
     guest = upload.guest
@@ -158,24 +214,38 @@ def finish_upload(upload):
     target.parent.mkdir(parents=True, exist_ok=True)
     os.replace(upload.temp_path, target)
 
-    asset = MediaAsset.objects.create(
-        owner_name=guest.person.name,
-        uploaded_by=guest.person,
-        organization=guest.person.organization,
-        service=guest.service,
-        original_name=upload.filename,
-        original_size=upload.length,
-    )
+    if guest is not None:
+        asset = MediaAsset.objects.create(
+            owner_name=guest.person.name,
+            uploaded_by=guest.person,
+            organization=guest.person.organization,
+            service=guest.service,
+            original_name=upload.filename,
+            original_size=upload.length,
+        )
+    else:
+        # Staff upload: approved right away, for a person or for the organization's library.
+        person = upload.person
+        owner = person.name if person else (upload.organization.name if upload.organization else "Team")
+        asset = MediaAsset.objects.create(
+            owner_name=owner[:120],
+            uploaded_by=person,
+            organization=upload.organization,
+            service=upload.service,
+            original_name=upload.filename,
+            original_size=upload.length,
+            approval=MediaAsset.APPROVAL_APPROVED,
+        )
     asset.original.name = relative
     asset.save(update_fields=["original"])
 
-    media_set = guest.get_set()
-    last = media_set.items.order_by("-position").first()
-    SetItem.objects.get_or_create(
-        media_set=media_set,
-        asset=asset,
-        defaults={"position": (last.position + 1) if last else 0},
-    )
+    if guest is not None:
+        _add_to_set(guest.get_set(), asset)
+    elif upload.person and upload.service:
+        from .models import Guest
+
+        staff_guest, _ = Guest.objects.get_or_create(service=upload.service, person=upload.person)
+        _add_to_set(staff_guest.get_set(), asset)
 
     upload.completed = True
     upload.asset = asset

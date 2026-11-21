@@ -50,4 +50,6 @@ urlpatterns = [
     path("manage/asset/<int:pk>/<str:variant>", manage_views.asset_file, name="manage-asset-file"),
     path("manage/agents/", manage_views.agents, name="manage-agents"),
     path("manage/qr.svg", manage_views.qr_svg, name="manage-qr"),
+    path("manage/tus/", tus.staff_collection, name="manage-tus"),
+    path("manage/tus/<uuid:upload_id>", tus.staff_resource, name="manage-tus-resource"),
 ]

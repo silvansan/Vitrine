@@ -1,0 +1,32 @@
+{# Staff upload (tus, resumable). Context: upload_people (optional), person (fixed, optional), upload_events. #}
+{% load static %}
+<section class="card uploader" id="upload" data-endpoint="{% url 'manage-tus' %}" data-csrf="{{ csrf_token }}" data-max-mb="{{ max_upload_mb }}">
+  <h2>Add photos, videos or audio</h2>
+  <div class="form-grid">
+    {% if person %}
+      <input type="hidden" data-field="person" value="{{ person.pk }}">
+    {% else %}
+    <label>For
+      <select data-field="person">
+        <option value="">The organization's library</option>
+        {% for p in upload_people %}<option value="{{ p.pk }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label>Put them in a set
+      <select data-field="event">
+        <option value="">No, only in the library</option>
+        {% for e in upload_events %}<option value="{{ e.pk }}">{{ e.name }} · {{ e.short_when }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="muted note" data-hint>{% if person %}They go to {{ person.name }}'s library{% else %}They go to the library{% endif %}, approved. Choose an event to also add them, in order, to {% if person %}their{% else %}that person's{% endif %} set there.</p>
+  <label class="drop">
+    <input type="file" multiple accept="image/*,video/*,audio/*" data-files>
+    <span><strong>Choose files</strong> or drop them here</span>
+    <span class="muted">Up to {{ max_upload_mb }} MB each. Big videos continue where they stopped if the connection drops.</span>
+  </label>
+  <ul class="uploads" data-list></ul>
+</section>
+<script src="{% static 'guestmedia/tus.min.js' %}"></script>
+<script src="{% static 'guestmedia/staff_upload.js' %}"></script>
