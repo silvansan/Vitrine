@@ -29,6 +29,12 @@
     <h1>Hi {{ person.name }}</h1>
     <p>Pick the pictures and videos for your part.</p>
     <a class="help-link" href="{% url 'guest-tablet-help' person.token %}">Tips: learn how to use the tablet at the pulpit →</a>
+    {% if on_device %}
+    <form method="post" action="{% url 'guest-sign-out' person.token %}" class="sign-out-device"
+          onsubmit="return confirm('Sign out this phone? You will need your PIN to open your set again.')">
+      {% csrf_token %}<button type="submit">Not your phone? Sign out here</button>
+    </form>
+    {% endif %}
   </header>
 
   <nav class="tabs-wrap" aria-label="Sections">

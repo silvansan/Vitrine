@@ -4,6 +4,7 @@
 <div class="row-head">
   <h1>{{ person.name }}</h1>
   {% if person.is_expired %}<span class="pill warn">Link expired</span>{% endif %}
+  {% if person.is_locked %}<span class="pill warn">Locked after wrong PINs</span>{% endif %}
 </div>
 
 <div class="grid-2">
@@ -14,10 +15,14 @@
     <div class="grow">
       <p class="muted">One link for every event. It opens their next event; they can switch if they are in several.</p>
       <code class="link">{{ link }}</code>
+      <p class="pin-line">PIN <strong class="pin">{{ person.pin }}</strong> <span class="muted">· send it separately from the link (e.g. say it or text it). Each phone asks for it once.</span></p>
       <div class="actions">
         <button class="btn small" type="button" data-copy="{{ link }}">Copy link</button>
         <a class="btn small" href="{{ link }}" target="_blank" rel="noopener">Open as {{ person.name }}</a>
-        <form method="post" class="inline" onsubmit="return confirm('Make a new link? The old one stops working.')">{% csrf_token %}<input type="hidden" name="action" value="new_link"><button class="btn small" type="submit">New link</button></form>
+        <button class="btn small" type="button" data-copy="{{ link }} (PIN {{ person.pin }})">Copy link + PIN</button>
+        <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="new_pin"><button class="btn small" type="submit">New PIN</button></form>
+        <form method="post" class="inline" onsubmit="return confirm('Make a new link? The old one stops working and every device must enter the PIN again.')">{% csrf_token %}<input type="hidden" name="action" value="new_link"><button class="btn small" type="submit">New link</button></form>
+        {% if person.is_locked %}<form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="unlock"><button class="btn small" type="submit">Unlock</button></form>{% endif %}
       </div>
     </div>
   </div>
@@ -32,6 +37,25 @@
   </form>
 </section>
 </div>
+
+<section class="card">
+  <div class="row-head">
+    <h2>Signed-in devices</h2>
+    {% if devices %}<form method="post" class="inline" onsubmit="return confirm('Sign out every device? They will need the PIN again.')">{% csrf_token %}<input type="hidden" name="action" value="sign_out_all"><button class="btn small danger" type="submit">Sign out all</button></form>{% endif %}
+  </div>
+  <p class="muted">Phones and computers that entered the PIN. They stay signed in until you sign them out here. If you see one you don't recognise, sign it out and make a new PIN.</p>
+  <table class="table">
+    <thead><tr><th>Device</th><th>Signed in</th><th>Last used</th><th>IP</th><th></th></tr></thead>
+    <tbody>
+    {% for d in devices %}
+      <tr><td>{{ d.label|default:"Device" }}</td><td>{{ d.created|date:"d M Y H:i" }}</td><td>{{ d.last_seen|timesince }} ago</td><td class="muted">{{ d.ip|default:"" }}</td>
+        <td><form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="sign_out_device"><input type="hidden" name="device_id" value="{{ d.pk }}"><button class="btn small" type="submit">Sign out</button></form></td></tr>
+    {% empty %}
+      <tr><td colspan="5" class="muted">No device has entered the PIN yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
 
 <section class="card">
   <h2>Events</h2>

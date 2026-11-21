@@ -22,6 +22,11 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 
+def new_pin():
+    """A 6-digit PIN for a person's link."""
+    return f"{secrets.randbelow(10**6):06d}"
+
+
 def new_guest_token():
     return secrets.token_urlsafe(18)
 
@@ -85,11 +90,23 @@ class Person(models.Model):
     can_upload = models.BooleanField(default=True)
     can_browse = models.BooleanField(default=True, help_text="May pick files from the shared library.")
     expires_at = models.DateTimeField(null=True, blank=True)
+    # Asked once per phone or computer; that device is then remembered until signed out.
+    # Kept readable so staff can tell it to the person (send it apart from the link).
+    pin = models.CharField(max_length=12, default=new_pin)
+    failed_pins = models.PositiveIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
+
+    MAX_PIN_TRIES = 5
+    LOCK_MINUTES = 15
 
     class Meta:
         ordering = ["name"]
         verbose_name_plural = "people"
+
+    @property
+    def is_locked(self):
+        return self.locked_until is not None and self.locked_until > timezone.now()
 
     def __str__(self):
         return self.name
@@ -119,6 +136,23 @@ class Person(models.Model):
         upcoming = self.participations().filter(service__is_active=True, service__date__gte=yesterday)
         today = upcoming.filter(service__date__gte=timezone.localdate()).first()
         return today or upcoming.first() or self.participations().order_by("-service__date", "-service_id").first()
+
+
+class PersonDevice(models.Model):
+    """A phone or computer that entered the person's PIN. Remembered until signed out."""
+
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="devices")
+    token_hash = models.CharField(max_length=64, unique=True)
+    label = models.CharField(max_length=160, blank=True, help_text="Browser and system, from the user agent.")
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-last_seen"]
+
+    def __str__(self):
+        return f"{self.person.name}: {self.label or 'device'}"
 
 
 class PersonAlias(models.Model):

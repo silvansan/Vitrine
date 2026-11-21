@@ -62,3 +62,5 @@ code.link{display:block;word-break:break-all;background:#F3F4F7;padding:6px 8px;
 .grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-bottom:18px}
 .grid-3 .card{margin-bottom:0}
 .checks{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 0}
+.pin-line{margin:6px 0}
+.pin{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:17px;letter-spacing:.12em;padding:2px 8px;border-radius:6px;background:#EEF0F4}

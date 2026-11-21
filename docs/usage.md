@@ -9,6 +9,16 @@
 
 The agent of a location receives its active events from yesterday up to two weeks ahead (`VITRINE_PRESYNC_DAYS`) and downloads their files **before the day**. Add someone to next month's event in Geneva and their files are on the Geneva vMix PC as soon as that event is within the window.
 
+## Links are protected by a PIN
+
+Every person has a 6-digit **PIN** next to their link (event page and person page). The first time a phone or computer opens the link, it asks for the PIN; that device is then **remembered until it is signed out**, so speakers type it only once. Their set and uploads stay available to them between events.
+
+- **Send the PIN separately** from the link: say it, text it, or put it in a different message. **Copy link + PIN** on the person page copies both if you prefer one message.
+- After **5 wrong PINs** the link locks for 15 minutes; the person page shows it and has **Unlock**.
+- **Signed-in devices** on the person page lists every device (browser, system, when, IP). **Sign out** one, or **Sign out all**. A person can also sign out a phone that isn't theirs from their own page.
+- **New PIN** changes the PIN; devices already signed in stay signed in unless you sign them out. **New link** changes the link *and* signs out every device: use it when a link has leaked.
+- Staff signed in to `/manage/` open people's pages without the PIN. The pulpit-tablet tips page needs no PIN.
+
 ## Before an event (backend, `/manage/`)
 
 1. **Locations & tablets → Add a location**, then **Create agent token** for its vMix PC (once per venue).

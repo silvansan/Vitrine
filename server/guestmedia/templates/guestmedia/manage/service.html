@@ -45,8 +45,10 @@
       <div class="grow">
         <div class="guest-name"><a href="{% url 'manage-person' g.person.pk %}">{{ g.name }}</a>{% if g.is_expired %} <span class="pill warn">Expired</span>{% endif %}{% if g.other_events %} <span class="pill">also in {{ g.other_events }} other event{{ g.other_events|pluralize }}</span>{% endif %}</div>
         <code class="link">{{ g.public_link }}</code>
+        <div class="pin-line">PIN <strong class="pin">{{ g.person.pin }}</strong></div>
         <div class="actions">
           <button class="btn small" type="button" data-copy="{{ g.public_link }}">Copy link</button>
+          <button class="btn small" type="button" data-copy="{{ g.person.pin }}">Copy PIN</button>
           <a class="btn small" href="{{ g.public_link }}?e={{ service.pk }}" target="_blank" rel="noopener">Open their set here</a>
           <form method="post" class="inline" onsubmit="return confirm('Remove {{ g.name|escapejs }} from this event? Their link, uploads and other events stay.')">{% csrf_token %}<input type="hidden" name="action" value="remove_guest"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Remove from event</button></form>
         </div>

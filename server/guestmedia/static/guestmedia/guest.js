@@ -7,6 +7,15 @@
   var tusEndpoint = root.dataset.tus;
   var maxBytes = parseInt(root.dataset.maxMb, 10) * 1024 * 1024;
   var api = '/g/' + token + '/api/';
+  // This device was signed out (or the PIN changed): reload to show the PIN screen.
+  function checked(r) {
+    if (r.status === 401 || r.status === 403) {
+      location.reload();
+      return new Promise(function () {});
+    }
+    return r.json();
+  }
+
   // Every call is about the event this page shows (a person can be in several).
   var eventQuery = '?e=' + encodeURIComponent(root.dataset.event || '');
 
@@ -55,10 +64,10 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {})
-    }).then(function (r) { return r.json(); }).then(setState);
+    }).then(checked).then(setState);
   }
   function load() {
-    return fetch(api + 'state' + eventQuery).then(function (r) { return r.json(); }).then(setState);
+    return fetch(api + 'state' + eventQuery).then(checked).then(setState);
   }
   function setState(data) {
     state = data;

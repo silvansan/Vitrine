@@ -5,17 +5,19 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from . import pins
 from .files import serve_field
 from .models import Guest, Marker, MediaAsset, MediaSet, Person, PersonAlias, SetItem
 
 
-def load_person(token):
+def load_person(token, request=None, check_pin=True):
+    """The person behind a link. With a request, also checks this device entered the PIN (pins.PinRequired)."""
     person = Person.objects.select_related("organization").filter(token=token).first()
     if person is None:
         alias = PersonAlias.objects.select_related("person__organization").filter(token=token).first()
@@ -24,12 +26,14 @@ def load_person(token):
         person = alias.person
     if person.is_expired:
         raise Http404("This link has expired")
+    if request is not None and check_pin:
+        pins.require(request, person)
     return person
 
 
-def load_guest(request, token, required=True):
+def load_guest(request, token, required=True, check_pin=True):
     """The person's participation in the event the page is about (?e=<event id>, else the current one)."""
-    person = load_person(token)
+    person = load_person(token, request, check_pin)
     event_id = request.GET.get("e", "")
     guest = None
     if event_id.isdigit():
@@ -90,7 +94,11 @@ def asset_for_guest(asset, guest):
     }
 
 
+@require_http_methods(["GET", "POST"])
 def page(request, token):
+    person = load_person(token)
+    if not pins.is_authorized(request, person):
+        return pin_page(request, person)
     person, guest = load_guest(request, token, required=False)
     if guest is None:
         return render(request, "guestmedia/guest_waiting.html", {"person": person}, status=200)
@@ -108,14 +116,37 @@ def page(request, token):
                 if g.service.date >= timezone.localdate() - timedelta(days=1) or g.pk == guest.pk
             ],
             "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
+            "on_device": pins.device_for(request, person) is not None,
         },
     )
 
 
+def pin_page(request, person):
+    """Ask for the PIN; on success remember this device and show the page."""
+    error = ""
+    if request.method == "POST":
+        ok, error = pins.check_pin(request, person, request.POST.get("pin", ""))
+        if ok:
+            target = request.get_full_path()
+            return pins.remember_device(request, HttpResponseRedirect(target), person)
+    return render(
+        request,
+        "guestmedia/guest_pin.html",
+        {"person": person, "error": error, "locked": person.is_locked},
+        status=401 if error else 200,
+    )
+
+
+@require_POST
+def sign_out_device(request, token):
+    person = load_person(token)
+    return pins.forget_device(request, HttpResponseRedirect(f"/g/{token}/"), person)
+
+
 @require_GET
 def tablet_help(request, token):
-    """How the pulpit tablet works, with screenshots, so guests can prepare."""
-    person, guest = load_guest(request, token, required=False)
+    """How the pulpit tablet works, with screenshots, so guests can prepare. Needs no PIN."""
+    person, guest = load_guest(request, token, required=False, check_pin=False)
     return render(request, "guestmedia/tablet_help.html", {"person": person, "guest": guest})
 
 
@@ -279,7 +310,7 @@ def api_private(request, token):
 
 
 def thumb(request, token, asset_id):
-    person = load_person(token)
+    person = load_person(token, request)
     asset = get_object_or_404(MediaAsset, pk=asset_id)
     if not asset.visible_to(person):
         raise Http404()
@@ -293,7 +324,7 @@ def request_as_get(request):
 
 def media_file(request, token, asset_id):
     """The converted file, for previewing a video and placing markers."""
-    person = load_person(token)
+    person = load_person(token, request)
     asset = get_object_or_404(MediaAsset, pk=asset_id)
     if not asset.visible_to(person) or asset.status != MediaAsset.STATUS_READY:
         raise Http404()

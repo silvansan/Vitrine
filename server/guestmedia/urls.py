@@ -6,6 +6,7 @@ urlpatterns = [
     # Guest link
     path("g/<str:token>/", guest_views.page, name="guest-page"),
     path("g/<str:token>/tablet/", guest_views.tablet_help, name="guest-tablet-help"),
+    path("g/<str:token>/sign-out", guest_views.sign_out_device, name="guest-sign-out"),
     path("g/<str:token>/api/state", guest_views.api_state, name="guest-state"),
     path("g/<str:token>/api/set/add", guest_views.api_set_add, name="guest-set-add"),
     path("g/<str:token>/api/set/copy", guest_views.api_set_copy, name="guest-set-copy"),

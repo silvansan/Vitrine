@@ -30,6 +30,7 @@ from .models import (
     Service,
     SetItem,
     new_guest_token,
+    new_pin,
 )
 from .orgs import check_org, org_view
 from .notify import notify_agents
@@ -249,7 +250,28 @@ def person_detail(request, pk):
             person.token = new_guest_token()
             person.save(update_fields=["token"])
             person.aliases.all().delete()
-            messages.success(request, "New link created; the old one no longer works.")
+            person.devices.all().delete()
+            messages.success(request, "New link created; the old one no longer works and every device has to enter the PIN again.")
+        elif action == "new_pin":
+            person.pin = new_pin()
+            person.failed_pins = 0
+            person.locked_until = None
+            person.save(update_fields=["pin", "failed_pins", "locked_until"])
+            if request.POST.get("sign_out") == "1":
+                person.devices.all().delete()
+            messages.success(request, f"New PIN: {person.pin}. Devices already signed in stay signed in unless you signed them out.")
+        elif action == "unlock":
+            person.failed_pins = 0
+            person.locked_until = None
+            person.save(update_fields=["failed_pins", "locked_until"])
+            messages.success(request, "Unlocked.")
+        elif action == "sign_out_device":
+            person.devices.filter(pk=request.POST.get("device_id")).delete()
+            messages.success(request, "That device is signed out.")
+        elif action == "sign_out_all":
+            count = person.devices.count()
+            person.devices.all().delete()
+            messages.success(request, f"Signed out {count} device{'s' if count != 1 else ''}.")
         elif action == "delete":
             name = person.name
             person.delete()
@@ -268,6 +290,7 @@ def person_detail(request, pk):
             "participations": participations,
             "events": [e for e in upcoming_events(person.organization) if e.pk not in taken],
             "uploads": MediaAsset.objects.filter(uploaded_by=person)[:60],
+            "devices": person.devices.all(),
             "today": timezone.localdate(),
         },
     )

@@ -51,13 +51,14 @@ def safe_filename(name):
 
 def guest_for(request, token):
     """The participation uploads go to (?e=<event id> on the upload endpoint), if the person may upload."""
+    from django.core.exceptions import PermissionDenied
     from django.http import Http404
 
     from .guest_views import load_guest
 
     try:
         person, guest = load_guest(request, token)
-    except Http404:
+    except (Http404, PermissionDenied):
         return None
     if not person.can_upload:
         return None
@@ -107,7 +108,7 @@ def resource(request, token, upload_id):
     from .guest_views import load_person
 
     try:
-        person = load_person(token)
+        person = load_person(token, request)
     except Exception:
         return tus_response(403)
     if not person.can_upload:

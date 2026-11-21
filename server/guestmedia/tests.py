@@ -48,6 +48,13 @@ def make_guest(service, name, org=None):
     return Guest.objects.create(service=service, person=person)
 
 
+def enter_pin(client, person):
+    """Sign this test client's 'device' in to a person's link."""
+    person = getattr(person, "person", person)
+    response = client.post(f"/g/{person.token}/", {"pin": person.pin})
+    assert response.status_code == 302, response.status_code
+
+
 def b64(text):
     return base64.b64encode(text.encode()).decode()
 
@@ -72,6 +79,8 @@ class FlowTests(TestCase):
         self.service = Service.objects.create(name="Sunday Service", location=self.location)
         self.maria = make_guest(self.service, "Maria")
         self.daniel = make_guest(self.service, "Daniel")
+        enter_pin(self.client, self.maria)
+        enter_pin(self.client, self.daniel)
         self.auth = {"HTTP_AUTHORIZATION": f"Bearer {self.agent_token}"}
 
     def tus_upload(self, guest, name, data, chunk=100_000):
@@ -142,6 +151,7 @@ class FlowTests(TestCase):
         asset.private = True
         asset.save()
         other = make_guest(self.service, "Youth team")
+        enter_pin(self.client, other)
         state = self.client.get(f"/g/{other.token}/api/state").json()
         self.assertEqual(state["library"], [])
 
@@ -362,6 +372,7 @@ class OrganizationTests(TestCase):
         z.get_set().items.create(asset=self.photo, position=0)
         # Next week in Geneva: same link, set copied from Zurich.
         Guest.objects.create(service=self.g_next_week, person=self.maria)
+        enter_pin(self.client, self.maria)
         page = self.client.get(f"/g/{self.maria.token}/")
         self.assertContains(page, "Zurich today")
         self.assertContains(page, "Geneva")  # event switcher
@@ -379,6 +390,7 @@ class OrganizationTests(TestCase):
 
     def test_old_links_and_waiting_page(self):
         PersonAlias.objects.create(person=self.maria, token="old-token-123")
+        enter_pin(self.client, self.maria)
         self.assertContains(self.client.get("/g/old-token-123/"), "aren't in an upcoming event")
         self.assertEqual(self.client.get("/g/nope/").status_code, 404)
 
@@ -387,6 +399,7 @@ class OrganizationTests(TestCase):
         loc = Location.objects.create(organization=other, name="Lausanne")
         event = Service.objects.create(name="Lausanne", location=loc)
         john = Guest.objects.create(service=event, person=Person.objects.create(organization=other, name="John"))
+        enter_pin(self.client, john)
         library = lambda: [a["id"] for a in self.client.get(f"/g/{john.token}/api/state").json()["library"]]  # noqa: E731
         self.assertEqual(library(), [])
         self.org.shares_with.add(other)
@@ -417,3 +430,61 @@ class OrganizationTests(TestCase):
         # Creating an event needs one of our locations.
         response = self.client.post("/manage/", {"name": "Youth night", "date": timezone.localdate().isoformat(), "location": self.zurich.pk, "is_active": "on"})
         self.assertEqual(response.status_code, 302)
+
+
+@override_settings(MEDIA_ROOT=TMP / "media", UPLOAD_TMP_ROOT=TMP / "media" / "incoming")
+class PinTests(TestCase):
+    """A link alone isn't enough: each device enters the PIN once."""
+
+    def setUp(self):
+        org = Organization.objects.create(name="Main")
+        event = Service.objects.create(name="Sunday", location=Location.objects.create(organization=org, name="Hall"))
+        self.guest = make_guest(event, "Maria")
+        self.person = self.guest.person
+        self.base = f"/g/{self.person.token}/"
+
+    def test_pin_needed_then_device_remembered(self):
+        self.assertRegex(self.person.pin, r"^\d{6}$")
+        page = self.client.get(self.base)
+        self.assertContains(page, "Enter the PIN")
+        self.assertNotContains(page, "id=\"library\"")
+        self.assertEqual(self.client.get(self.base + "api/state").status_code, 403)
+        self.assertEqual(self.client.post(self.base + "tus/", HTTP_TUS_RESUMABLE="1.0.0", HTTP_UPLOAD_LENGTH="10").status_code, 403)
+        self.assertContains(self.client.post(self.base, {"pin": "000000" if self.person.pin != "000000" else "111111"}), "tries left", status_code=401)
+        response = self.client.post(self.base, {"pin": self.person.pin})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.person.devices.count(), 1)
+        self.assertEqual(self.client.get(self.base + "api/state").status_code, 200)
+        self.assertContains(self.client.get(self.base), "Sign out here")
+        # Signed out from the backend: the PIN is needed again.
+        self.person.devices.all().delete()
+        self.assertEqual(self.client.get(self.base + "api/state").status_code, 403)
+
+    def test_lock_after_wrong_pins(self):
+        wrong = "000000" if self.person.pin != "000000" else "111111"
+        for _ in range(Person.MAX_PIN_TRIES):
+            self.client.post(self.base, {"pin": wrong})
+        self.person.refresh_from_db()
+        self.assertTrue(self.person.is_locked)
+        # Even the right PIN waits until the lock ends.
+        self.assertContains(self.client.post(self.base, {"pin": self.person.pin}), "Too many wrong PINs", status_code=401)
+        self.assertEqual(self.person.devices.count(), 0)
+
+    def test_staff_skip_the_pin_and_help_page_is_open(self):
+        self.assertEqual(self.client.get(self.base + "tablet/").status_code, 200)
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        self.client.login(username="admin", password="pw")
+        self.assertEqual(self.client.get(self.base + "api/state").status_code, 200)
+
+    def test_new_link_signs_out_devices(self):
+        enter_pin(self.client, self.person)
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        staff = self.client_class()
+        staff.login(username="admin", password="pw")
+        staff.post(f"/manage/people/{self.person.pk}/", {"action": "new_pin"})
+        old_pin = self.person.pin
+        self.person.refresh_from_db()
+        self.assertNotEqual(self.person.pin, old_pin)
+        self.assertEqual(self.person.devices.count(), 1)  # a new PIN alone keeps devices signed in
+        staff.post(f"/manage/people/{self.person.pk}/", {"action": "new_link"})
+        self.assertEqual(self.person.devices.count(), 0)
