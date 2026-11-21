@@ -51,6 +51,15 @@ class Organization(models.Model):
         default=False,
         help_text="Share every approved, non-private file. Otherwise only files marked 'shared'.",
     )
+    # Where staff hear about things that need them (see guestmedia/alerts.py).
+    notify_telegram_chat = models.CharField(
+        max_length=64, blank=True, help_text="Telegram chat or group id (needs VITRINE_TELEGRAM_BOT_TOKEN)."
+    )
+    notify_emails = models.TextField(blank=True, help_text="Email addresses, one per line or separated by commas.")
+    notify_uploads = models.BooleanField(default=True, help_text="Uploads waiting for approval.")
+    notify_offline = models.BooleanField(default=True, help_text="A vMix PC goes offline before or during an event.")
+    notify_sync = models.BooleanField(default=True, help_text="The day before an event: are all its files on the vMix PC?")
+    notify_backup = models.BooleanField(default=True, help_text="A backup failed.")
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -352,6 +361,7 @@ class MediaAsset(models.Model):
     shared = models.BooleanField(
         default=False, help_text="Other organizations we share with may use it (always, if the organization shares everything)."
     )
+    pending_notified = models.BooleanField(default=False, help_text="Staff were told it waits for approval.")
 
     processed = models.FileField(max_length=500, blank=True)
     processed_size = models.BigIntegerField(default=0)
@@ -526,6 +536,7 @@ class Agent(models.Model):
     version = models.CharField(max_length=40, blank=True)
     status = models.JSONField(default=dict, blank=True, help_text="Last heartbeat from the agent.")
     manifest_version = models.PositiveIntegerField(default=1)
+    offline_notified = models.BooleanField(default=False, help_text="Staff were told it went offline.")
 
     class Meta:
         ordering = ["name"]
@@ -545,6 +556,10 @@ class Agent(models.Model):
         self.token_prefix = raw[4:12]
         self.save(update_fields=["token_hash", "token_prefix"])
         return raw
+
+    @property
+    def offline_since(self):
+        return self.last_seen if self.last_seen and not self.is_online else None
 
     @property
     def current_manifest_version(self):
@@ -582,3 +597,25 @@ class ScreenGrant(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.role})"
+
+
+class BackupRun(models.Model):
+    """One backup: database dump plus media, copied to VITRINE_BACKUP_TARGET with rclone."""
+
+    started = models.DateTimeField(auto_now_add=True)
+    finished = models.DateTimeField(null=True, blank=True)
+    ok = models.BooleanField(default=False)
+    target = models.CharField(max_length=300)
+    database_file = models.CharField(max_length=200, blank=True)
+    database_bytes = models.BigIntegerField(default=0)
+    log = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started"]
+
+    def __str__(self):
+        return f"Backup {self.started:%Y-%m-%d %H:%M} {'ok' if self.ok else 'failed'}"
+
+    @property
+    def duration(self):
+        return (self.finished - self.started) if self.finished else None

@@ -64,3 +64,4 @@ code.link{display:block;word-break:break-all;background:#F3F4F7;padding:6px 8px;
 .checks{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 0}
 .pin-line{margin:6px 0}
 .pin{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:17px;letter-spacing:.12em;padding:2px 8px;border-radius:6px;background:#EEF0F4}
+.log{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:12px;background:#F4F5F7;padding:10px;border-radius:8px}

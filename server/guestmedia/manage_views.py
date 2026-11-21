@@ -116,10 +116,14 @@ def dashboard(request):
         .exclude(status=MediaAsset.STATUS_FAILED)
         .count()
     )
+    from . import backup
+
     return render(
         request,
         "guestmedia/manage/dashboard.html",
         {
+            "backup_warning": request.user.is_superuser and (not backup.enabled() or backup.is_stale()),
+            "backup_enabled": backup.enabled(),
             "events": events[:80],
             "unplaced": unplaced,
             "form": form,
@@ -557,6 +561,25 @@ def organization(request):
                 manifest_version=models.F("manifest_version") + 1
             )
             messages.success(request, "Saved.")
+        elif action == "notifications":
+            org.notify_telegram_chat = request.POST.get("notify_telegram_chat", "").strip()[:64]
+            org.notify_emails = request.POST.get("notify_emails", "").strip()
+            for field in ("notify_uploads", "notify_offline", "notify_sync", "notify_backup"):
+                setattr(org, field, request.POST.get(field) == "on")
+            org.save()
+            if request.POST.get("test") == "1":
+                from . import alerts
+
+                if not alerts.can_send(org):
+                    messages.error(request, "Nothing to send to: add a Telegram chat id (with VITRINE_TELEGRAM_BOT_TOKEN set) or an email address (with EMAIL_HOST set).")
+                else:
+                    errors = alerts.notify(org, "Test message", f"Alerts for {org.name} work.")
+                    if errors:
+                        messages.error(request, "Test failed: " + "; ".join(errors))
+                    else:
+                        messages.success(request, "Test message sent.")
+            else:
+                messages.success(request, "Saved.")
         elif action == "create" and request.user.is_superuser:
             name = request.POST.get("new_name", "").strip()[:120]
             if name and not Organization.objects.filter(name=name).exists():
@@ -579,6 +602,8 @@ def organization(request):
             "shared_from": org.shared_from.all(),
             "users": get_user_model().objects.filter(is_staff=True).order_by("username") if request.user.is_superuser else [],
             "staff_ids": set(org.staff.values_list("pk", flat=True)),
+            "telegram_ready": bool(settings.VITRINE_TELEGRAM_BOT_TOKEN),
+            "email_ready": bool(settings.EMAIL_HOST),
         },
     )
 
@@ -592,3 +617,33 @@ def qr_svg(request):
     buffer = io.BytesIO()
     image.save(buffer)
     return HttpResponse(buffer.getvalue(), content_type="image/svg+xml")
+
+
+@org_view
+def backups(request):
+    """Backup status and history; superusers can start one."""
+    from . import backup
+    from .models import BackupRun
+
+    if not request.user.is_superuser:
+        raise Http404()
+    if request.method == "POST" and request.POST.get("action") == "run":
+        if not backup.enabled():
+            messages.error(request, "Backups are off: set VITRINE_BACKUP_TARGET in the stack.")
+        else:
+            backup.run_backup.delay("started from /manage/")
+            messages.success(request, "Backup started. Refresh this page in a minute.")
+        return redirect("manage-backups")
+    return render(
+        request,
+        "guestmedia/manage/backups.html",
+        {
+            "enabled": backup.enabled(),
+            "target": settings.VITRINE_BACKUP_TARGET,
+            "when": settings.VITRINE_BACKUP_TIME,
+            "keep": settings.VITRINE_BACKUP_KEEP_DAYS,
+            "runs": BackupRun.objects.all()[:30],
+            "last_ok": backup.last_success(),
+            "stale": backup.is_stale(),
+        },
+    )

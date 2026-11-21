@@ -38,6 +38,24 @@ services:
     depends_on: [db, redis]
     networks: [internal]
 
+  scheduler:
+    # Alerts to staff, nightly backup, trash cleanup.
+    image: ghcr.io/silvansan/vitrine-server:latest
+    command: scheduler
+    restart: unless-stopped
+    env_file: stack.env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - vitrine-data:/data
+      # Backup to a folder on this server (USB disk, NAS mounted on the host): uncomment
+      # and set VITRINE_BACKUP_TARGET=/backup. For SMB/NFS without mounting on the host,
+      # use an rclone remote instead (see docs/server.md).
+      # - /mnt/nas/vitrine-backup:/backup
+    depends_on: [db, redis]
+    networks: [internal]
+
   nginx:
     image: ghcr.io/silvansan/vitrine-nginx:latest
     container_name: vitrine-nginx

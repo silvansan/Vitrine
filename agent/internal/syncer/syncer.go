@@ -30,6 +30,10 @@ type Status struct {
 	PendingBytes int64  `json:"pending_bytes"`
 	Current      string `json:"current"`
 	LastError    string `json:"last_error"`
+	// Asset ids still to download (the server warns staff when an event's files aren't all here).
+	Missing []int64 `json:"missing"`
+	// Manifest version these numbers are for.
+	ManifestVersion int `json:"manifest_version"`
 }
 
 type Syncer struct {
@@ -50,7 +54,9 @@ type Syncer struct {
 func (s *Syncer) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.status
+	out := s.status
+	out.Missing = append([]int64{}, s.status.Missing...)
+	return out
 }
 
 // Trigger starts a sync, or queues one if a sync is already running.
@@ -132,6 +138,7 @@ func (s *Syncer) run(ctx context.Context) {
 	assets := manifest.Assets
 	var pending int64
 	done := 0
+	missing := []int64{}
 	var files map[int64]store.LocalFile
 	s.Store.Read(func(st *store.State) {
 		files = map[int64]store.LocalFile{}
@@ -144,9 +151,17 @@ func (s *Syncer) run(ctx context.Context) {
 			done++
 		} else {
 			pending += a.Size
+			missing = append(missing, a.ID)
 		}
 	}
-	s.setStatus(func(st *Status) { st.Total = len(assets); st.Done = done; st.PendingBytes = pending; st.LastError = "" })
+	s.setStatus(func(st *Status) {
+		st.Total = len(assets)
+		st.Done = done
+		st.PendingBytes = pending
+		st.LastError = ""
+		st.Missing = missing
+		st.ManifestVersion = manifest.Version
+	})
 
 	for i := range assets {
 		if ctx.Err() != nil {
@@ -164,7 +179,17 @@ func (s *Syncer) run(ctx context.Context) {
 			continue
 		}
 		_ = s.Store.Update(func(st *store.State) { st.Files[a.ID] = local })
-		s.setStatus(func(st *Status) { st.Done++; st.PendingBytes -= a.Size })
+		s.setStatus(func(st *Status) {
+			st.Done++
+			st.PendingBytes -= a.Size
+			kept := st.Missing[:0]
+			for _, id := range st.Missing {
+				if id != a.ID {
+					kept = append(kept, id)
+				}
+			}
+			st.Missing = kept
+		})
 		if s.OnChanged != nil {
 			s.OnChanged()
 		}

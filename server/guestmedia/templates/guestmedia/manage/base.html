@@ -23,6 +23,7 @@
     <a href="{% url 'manage-library' %}">Library</a>
     <a href="{% url 'manage-agents' %}">Locations &amp; tablets</a>
     <a href="{% url 'manage-organization' %}">Organization</a>
+    {% if request.user.is_superuser %}<a href="{% url 'manage-backups' %}">Backups</a>{% endif %}
     <a href="/admin/">Admin</a>
     <a href="{% url 'docs-home' %}">Docs</a>
   </nav>

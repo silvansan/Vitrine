@@ -1,6 +1,6 @@
 # Server setup (Portainer + Nginx Proxy Manager + Tailscale)
 
-The server runs on your Linux box at home as one Portainer stack: Django (web), a worker for conversions, Postgres, Redis and nginx.
+The server runs on your Linux box at home as one Portainer stack: Django (web), a worker for conversions, a scheduler (alerts, backups, trash), Postgres, Redis and nginx.
 
 ## 1. Create the stack
 
@@ -48,6 +48,8 @@ Open `https://vitrine.example.org/manage/` (or `http://<tailscale-ip>:8080/manag
 1. **Locations & tablets → Add a location** (e.g. "Main hall"), then **Create agent token** for its vMix PC. Copy the token (shown once) into the agent's settings page. An organization "Main" is created for you on first login.
 2. **Events → New event** at that location, then add people and send them their links or QR codes.
 
+Upgrading to a version with the **scheduler** service (alerts and backups): if the stack uses the repository's compose file, Portainer picks it up when you redeploy; if you pasted the compose file into the web editor, paste the new one. Without the scheduler, conversions still work but there are no alerts, no backups and no trash cleanup.
+
 Upgrading from a version without organizations: the database migration puts everything into one organization "Main", gives each existing agent a location of the same name, moves every service (now "event") to the first location, and turns guests into people. Guests with the same name become one person; their other links keep working.
 
 ## Storage and backups
@@ -57,12 +59,16 @@ Everything lives in two Docker volumes:
 - `vitrine-data`: originals, converted files, thumbnails, the pairing key (`/data/keys`). Back this up.
 - `vitrine-db`: Postgres.
 
-Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the worker removes them every night at 03:17.
+Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the scheduler removes them every night at 03:17.
 
 ## Settings reference
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `VITRINE_BACKUP_TARGET` | empty | Where nightly backups go (see [Backups](#backups)); empty = off |
+| `VITRINE_BACKUP_TIME` / `VITRINE_BACKUP_KEEP_DAYS` | `03:30` / `14` | When to back up; how many days of database dumps to keep |
+| `VITRINE_TELEGRAM_BOT_TOKEN`, `EMAIL_HOST`… | empty | Alerts to the team (see [Alerts](#alerts-to-the-team)) |
+| `VITRINE_OFFLINE_ALERT_MINUTES` / `VITRINE_SYNC_CHECK_TIME` | `10` / `18:00` | When a vMix PC counts as offline; when to check tomorrow's files |
 | `VITRINE_PRESYNC_DAYS` | `14` | How many days ahead an agent receives its location's events (and downloads their files) |
 | `VITRINE_PUBLIC_URL` | empty | Base of guest links; empty = the address /manage/ was opened with |
 | `VITRINE_VIDEO_FPS` | `25` | Frame rate videos are converted to |
@@ -84,6 +90,47 @@ Push to `main` and wait for the **build** workflow to finish, then Portainer →
 To pin a release instead of following `main`, tag it (`v1.2.0`); the workflow publishes both images with that tag, and you change `:latest` to `:v1.2.0` in the stack.
 
 For local development, build the images yourself: `docker build -t ghcr.io/silvansan/vitrine-server:latest server` and `docker build -t ghcr.io/silvansan/vitrine-nginx:latest deploy/nginx`.
+
+## Alerts to the team
+
+Vitrine can tell your team when something needs them, by **Telegram** and/or **email**:
+
+- uploads waiting for approval (one message for several files, about every 2 minutes),
+- a vMix PC offline for `VITRINE_OFFLINE_ALERT_MINUTES` (10) while its location has an event today or tomorrow, and when it is back,
+- at `VITRINE_SYNC_CHECK_TIME` (18:00) the day before an event: are all its files on that location's vMix PC, are some still waiting for approval?
+- a failed backup.
+
+Set up once in the stack: `VITRINE_TELEGRAM_BOT_TOKEN` (create a bot with @BotFather) and/or `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL`. Then each organization chooses its Telegram chat (group) id, email addresses and which alerts it wants on **Organization → Alerts to the team**; **Save and send a test** checks it works. To find a group's chat id: add the bot to the group, write something, open `https://api.telegram.org/bot<token>/getUpdates` and copy `chat.id` (it starts with `-100`).
+
+## Backups
+
+The **scheduler** container backs up every night at `VITRINE_BACKUP_TIME` (03:30) with [rclone](https://rclone.org), so the target can be almost anything:
+
+| Target | `VITRINE_BACKUP_TARGET` | Remote settings |
+|---|---|---|
+| Folder on the server (USB disk, NAS mounted on the host) | `/backup` | Uncomment the `/backup` volume of `scheduler` in the compose file |
+| S3-compatible (Hetzner Object Storage, AWS, MinIO, Wasabi, Backblaze B2…) | `s3:my-bucket/vitrine` | `RCLONE_CONFIG_S3_TYPE=s3`, `…_PROVIDER=Other`, `…_ENDPOINT`, `…_ACCESS_KEY_ID`, `…_SECRET_ACCESS_KEY` |
+| Azure Blob Storage | `azure:container/vitrine` | `RCLONE_CONFIG_AZURE_TYPE=azureblob`, `…_ACCOUNT`, `…_KEY` |
+| FTP / FTPS | `ftp:backups/vitrine` | `RCLONE_CONFIG_FTP_TYPE=ftp`, `…_HOST`, `…_USER`, `…_PASS`, `…_EXPLICIT_TLS=true` |
+| SFTP | `sftp:backups/vitrine` | `RCLONE_CONFIG_SFTP_TYPE=sftp`, `…_HOST`, `…_USER`, `…_PASS` |
+| SMB / Windows share / NAS (no host mount) | `nas:share/vitrine` | `RCLONE_CONFIG_NAS_TYPE=smb`, `…_HOST`, `…_USER`, `…_PASS` |
+
+The part before `:` is the remote's name; `RCLONE_CONFIG_<NAME>_<OPTION>` variables define it (examples in `deploy/.env.example`). FTP, SFTP and SMB passwords must be *obscured* first: `docker run --rm rclone/rclone obscure 'your-password'`. Instead of variables you can also put an `rclone.conf` at `/data/rclone.conf` in the data volume.
+
+What is copied:
+
+- `db/vitrine-YYYYMMDD-HHMM.dump`: the database (PostgreSQL custom format), one per night, kept `VITRINE_BACKUP_KEEP_DAYS` (14),
+- `media/`: all uploads, converted files and thumbnails, mirrored; files that leave it go to `media-removed/<date>/` and are kept 30 days,
+- `keys/`: the pairing key that signs the tablets' QR codes.
+
+**Backups** in `/manage/` (superusers) shows the last runs with their logs and has **Back up now**. The Events page warns superusers when backups are off or the last success is older than 36 hours, and the organizations that want it get an alert when one fails.
+
+### Restore from a backup
+
+1. Deploy the stack fresh (or stop `web`, `worker` and `scheduler`).
+2. Copy the files back into the `vitrine-data` volume: `media/` to `/data/media/` and `keys/pairing_ed25519.pem` to `/data/keys/`. With rclone, from any container that has the same `RCLONE_CONFIG_…` variables and the volume mounted: `rclone copy s3:my-bucket/vitrine/media /data/media` and `rclone copy s3:my-bucket/vitrine/keys /data/keys`.
+3. Restore the database into the `db` container: copy the dump in (`docker cp vitrine-….dump <db container>:/tmp/`) and run `pg_restore -U vitrine -d vitrine --clean --if-exists --no-owner /tmp/vitrine-….dump`.
+4. Start the stack again. Agents and tablets reconnect by themselves.
 
 ## Documentation on the server (`/docs/`)
 

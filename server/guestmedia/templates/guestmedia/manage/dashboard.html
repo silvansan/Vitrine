@@ -6,6 +6,10 @@
   {% if pending %}<a class="pill warn" href="{% url 'manage-library' %}?approval=pending">{{ pending }} waiting for approval</a>{% endif %}
 </div>
 
+{% if backup_warning %}
+<p class="error">{% if backup_enabled %}No successful backup in the last 36 hours.{% else %}Backups are off: uploads and the database exist only on this server.{% endif %} <a href="{% url 'manage-backups' %}">Backups</a></p>
+{% endif %}
+
 {% if not locations %}
 <section class="card highlight">
   <h2>Start with a location</h2>

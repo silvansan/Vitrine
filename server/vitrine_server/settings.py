@@ -134,6 +134,13 @@ else:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_BROKER_URL = "memory://"
 
+# Video conversion runs on the "celery" queue (worker); alerts and backups on "light"
+# (scheduler service), so a long conversion never delays them.
+CELERY_TASK_ROUTES = {
+    "guestmedia.tasks.check_*": {"queue": "light"},
+    "guestmedia.tasks.purge_trash": {"queue": "light"},
+    "guestmedia.backup.*": {"queue": "light"},
+}
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
@@ -165,3 +172,33 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "INFO")},
 }
+
+# ---------- alerts to staff (guestmedia/alerts.py) ----------
+# Telegram: create a bot with @BotFather; each organization sets its chat id on /manage/organization/.
+VITRINE_TELEGRAM_BOT_TOKEN = os.environ.get("VITRINE_TELEGRAM_BOT_TOKEN", "")
+# Email (any SMTP server). Leave EMAIL_HOST empty to not send email.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() in ("1", "true", "yes")
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() in ("1", "true", "yes")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "vitrine@localhost")
+EMAIL_TIMEOUT = 15
+# A vMix PC counts as offline after this many minutes without a heartbeat.
+VITRINE_OFFLINE_ALERT_MINUTES = int(os.environ.get("VITRINE_OFFLINE_ALERT_MINUTES", "10"))
+# When to check that tomorrow's files are on each vMix PC (HH:MM, local time).
+VITRINE_SYNC_CHECK_TIME = os.environ.get("VITRINE_SYNC_CHECK_TIME", "18:00")
+
+# ---------- backups (guestmedia/backup.py) ----------
+# Where to copy the database dump and the media: anything rclone understands, e.g.
+#   /backup                 a folder mounted into the container (NAS over SMB/NFS, USB disk)
+#   s3:my-bucket/vitrine     S3-compatible (Hetzner, AWS, MinIO, Wasabi, Backblaze B2 …)
+#   azure:container/vitrine  Azure Blob Storage
+#   ftp:backups/vitrine, sftp:backups/vitrine, nas:share/vitrine (SMB)
+# Remotes are configured with RCLONE_CONFIG_<NAME>_<OPTION> variables (see docs/server.md).
+# Empty: no backups.
+VITRINE_BACKUP_TARGET = os.environ.get("VITRINE_BACKUP_TARGET", "").rstrip("/")
+VITRINE_BACKUP_TIME = os.environ.get("VITRINE_BACKUP_TIME", "03:30")
+VITRINE_BACKUP_KEEP_DAYS = int(os.environ.get("VITRINE_BACKUP_KEEP_DAYS", "14"))
+VITRINE_BACKUP_DIR = Path(os.environ.get("VITRINE_BACKUP_DIR", MEDIA_ROOT.parent / "backup-tmp"))

@@ -83,3 +83,127 @@ def purge_trash():
         count += 1
     logger.info("Purged %s files from the trash", count)
     return count
+
+
+# ---------- alerts to staff ----------
+
+
+@shared_task
+def check_pending_uploads():
+    """One message per organization about new files waiting for approval."""
+    from collections import defaultdict
+
+    from . import alerts
+    from .models import MediaAsset
+
+    waiting = (
+        MediaAsset.objects.filter(
+            approval=MediaAsset.APPROVAL_PENDING,
+            status=MediaAsset.STATUS_READY,
+            pending_notified=False,
+            organization__isnull=False,
+        )
+        .select_related("organization")
+        .order_by("created")
+    )
+    by_org = defaultdict(list)
+    for asset in waiting:
+        by_org[asset.organization].append(asset)
+    for org, assets in by_org.items():
+        if org.notify_uploads and alerts.can_send(org):
+            people = defaultdict(int)
+            for a in assets:
+                people[a.owner_name] += 1
+            lines = [f"- {name}: {count} file{'s' if count != 1 else ''}" for name, count in people.items()]
+            alerts.notify(
+                org,
+                f"{len(assets)} upload{'s' if len(assets) != 1 else ''} waiting for approval",
+                "\n".join(lines) + f"\n\nApprove them: {alerts.manage_url('/manage/library/?approval=pending')}",
+            )
+        MediaAsset.objects.filter(pk__in=[a.pk for a in assets]).update(pending_notified=True)
+
+
+def _event_soon(location):
+    from .models import Service
+
+    today = timezone.localdate()
+    return Service.objects.filter(
+        location=location, is_active=True, date__gte=today, date__lte=today + timedelta(days=1)
+    ).order_by("date").first()
+
+
+@shared_task
+def check_agents():
+    """Tell staff when a vMix PC goes offline (and when it's back) around an event."""
+    from . import alerts
+    from .models import Location
+
+    limit = timezone.now() - timedelta(minutes=settings.VITRINE_OFFLINE_ALERT_MINUTES)
+    for location in Location.objects.select_related("agent", "organization").filter(agent__isnull=False):
+        agent, org = location.agent, location.organization
+        offline = agent.last_seen is not None and agent.last_seen < limit
+        if offline and not agent.offline_notified:
+            event = _event_soon(location)
+            if event and org.notify_offline and alerts.can_send(org):
+                alerts.notify(
+                    org,
+                    f"{location.name}: vMix PC offline",
+                    f"The Vitrine agent at {location.name} hasn't been in touch since "
+                    f"{timezone.localtime(agent.last_seen):%H:%M} ({event.name}, {event.date:%a %d %b} is coming up).\n"
+                    "Tablets keep working on the local network, but new uploads won't arrive. "
+                    "Check that the PC is on and has internet.",
+                )
+                agent.offline_notified = True
+                agent.save(update_fields=["offline_notified"])
+        elif not offline and agent.offline_notified:
+            if org.notify_offline and alerts.can_send(org):
+                alerts.notify(org, f"{location.name}: vMix PC back online", f"The Vitrine agent at {location.name} is back.")
+            agent.offline_notified = False
+            agent.save(update_fields=["offline_notified"])
+
+
+def sync_report(location, event):
+    """(ok, text) about whether the event's files are on the location's vMix PC."""
+    from .models import MediaAsset, SetItem
+
+    agent = location.agent
+    ids = set(
+        SetItem.objects.filter(media_set__service=event, asset__status=MediaAsset.STATUS_READY,
+                               asset__approval=MediaAsset.APPROVAL_APPROVED, asset__deleted_at__isnull=True)
+        .values_list("asset_id", flat=True)
+    )
+    pending = MediaAsset.objects.filter(
+        set_items__media_set__service=event, approval=MediaAsset.APPROVAL_PENDING
+    ).distinct().count()
+    when = f"{event.name}, {event.date:%a %d %b}"
+    if agent is None:
+        return False, f"{when}: {location.name} has no vMix PC (agent) yet, so nothing is downloaded."
+    if not agent.is_online:
+        seen = f"since {timezone.localtime(agent.last_seen):%a %H:%M}" if agent.last_seen else "never seen"
+        return False, f"{when}: the vMix PC at {location.name} is offline ({seen}). {len(ids)} file(s) to download."
+    missing = set((agent.status or {}).get("sync", {}).get("missing") or [])
+    missing_here = ids & missing
+    extra = f"\n{pending} upload(s) still wait for approval and won't be shown until approved." if pending else ""
+    if not ids:
+        return True, f"{when}: no files in the sets yet.{extra}"
+    if missing_here:
+        return False, f"{when}: {len(ids) - len(missing_here)} of {len(ids)} files are on the vMix PC, {len(missing_here)} still downloading.{extra}"
+    return True, f"{when}: all {len(ids)} files are on the vMix PC at {location.name}.{extra}"
+
+
+@shared_task
+def check_sync():
+    """The day before: are all the files of tomorrow's events on their vMix PC?"""
+    from . import alerts
+    from .models import Service
+
+    tomorrow = timezone.localdate() + timedelta(days=1)
+    events = Service.objects.filter(is_active=True, date=tomorrow, location__isnull=False).select_related(
+        "location__agent", "location__organization"
+    )
+    for event in events:
+        org = event.location.organization
+        if not (org.notify_sync and alerts.can_send(org)):
+            continue
+        ok, text = sync_report(event.location, event)
+        alerts.notify(org, f"{event.location.name}: {'ready for' if ok else 'not ready for'} tomorrow", text)

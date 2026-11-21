@@ -8,7 +8,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from PIL import Image
 
 from datetime import timedelta
@@ -516,3 +516,95 @@ class PinTests(TestCase):
         self.assertEqual(fresh.post(self.base, {"pin": "5931", "pin2": "5931"}).status_code, 302)
         self.assertEqual(fresh.get(self.base + "api/state").status_code, 200)
         self.assertContains(staff.get(f"/manage/people/{self.person.pk}/"), "chosen by Maria")
+
+
+@override_settings(VITRINE_TELEGRAM_BOT_TOKEN="123:abc", EMAIL_HOST="smtp.example.org",
+                   EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class AlertTests(TestCase):
+    def setUp(self):
+        from unittest import mock
+
+        self.org = Organization.objects.create(name="Main", notify_telegram_chat="-100", notify_emails="tech@example.org")
+        self.agent, _ = Agent.create_with_token("Zurich PC")
+        self.location = Location.objects.create(organization=self.org, name="Zurich hall", agent=self.agent)
+        self.sent = []
+        patcher = mock.patch("guestmedia.alerts.send_telegram", side_effect=lambda chat, text: self.sent.append(text))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_uploads_waiting_once(self):
+        from django.core import mail
+
+        from .tasks import check_pending_uploads
+
+        for name in ("a.jpg", "b.jpg"):
+            MediaAsset.objects.create(owner_name="Maria", organization=self.org, original_name=name, kind="photo",
+                                      status="ready", approval="pending")
+        check_pending_uploads()
+        check_pending_uploads()
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("2 uploads waiting", self.sent[0])
+        self.assertIn("Maria: 2 files", self.sent[0])
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_offline_only_around_an_event(self):
+        from .tasks import check_agents
+
+        Agent.objects.filter(pk=self.agent.pk).update(last_seen=timezone.now() - timedelta(minutes=30))
+        check_agents()
+        self.assertEqual(self.sent, [])  # no event soon: stay quiet
+        Service.objects.create(name="Sunday", date=timezone.localdate() + timedelta(days=1), location=self.location)
+        check_agents()
+        check_agents()
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("offline", self.sent[0])
+        Agent.objects.filter(pk=self.agent.pk).update(last_seen=timezone.now())
+        check_agents()
+        self.assertIn("back online", self.sent[-1])
+
+    def test_ready_for_tomorrow(self):
+        from .tasks import check_sync
+
+        event = Service.objects.create(name="Sunday", date=timezone.localdate() + timedelta(days=1), location=self.location)
+        guest = make_guest(event, "Maria")
+        asset = MediaAsset.objects.create(owner_name="Maria", organization=self.org, original_name="a.jpg", kind="photo",
+                                          status="ready", approval="approved", sha256="x")
+        guest.get_set().items.create(asset=asset, position=0)
+        Agent.objects.filter(pk=self.agent.pk).update(last_seen=timezone.now(), status={"sync": {"missing": [asset.pk]}})
+        check_sync()
+        self.assertIn("0 of 1 files", self.sent[-1])
+        Agent.objects.filter(pk=self.agent.pk).update(status={"sync": {"missing": []}})
+        check_sync()
+        self.assertIn("all 1 files", self.sent[-1])
+
+    def test_test_message_and_backups_page(self):
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        self.client.login(username="admin", password="pw")
+        self.client.post("/manage/organization/", {"action": "notifications", "notify_telegram_chat": "-100",
+                                                    "notify_uploads": "on", "test": "1"})
+        self.assertIn("Test message", self.sent[-1])
+        self.assertContains(self.client.get("/manage/backups/"), "Backups are off")
+        self.assertContains(self.client.get("/manage/"), "Backups are off")
+
+
+class BackupTests(TransactionTestCase):
+    def test_backup_to_a_folder(self):
+        import shutil as sh
+        import tempfile
+        from pathlib import Path
+
+        if not sh.which("rclone"):
+            self.skipTest("rclone not installed")
+        from .backup import run_backup
+        from .models import BackupRun
+
+        dest = Path(tempfile.mkdtemp())
+        media = Path(tempfile.mkdtemp())
+        (media / "library").mkdir()
+        (media / "library" / "a.jpg").write_bytes(b"jpg")
+        with override_settings(VITRINE_BACKUP_TARGET=str(dest), MEDIA_ROOT=media, UPLOAD_TMP_ROOT=media / "incoming",
+                               VITRINE_BACKUP_DIR=Path(tempfile.mkdtemp())):
+            run = BackupRun.objects.get(pk=run_backup("test"))
+        self.assertTrue(run.ok, run.log)
+        self.assertTrue((dest / "media" / "library" / "a.jpg").exists())
+        self.assertEqual(len(list((dest / "db").iterdir())), 1)
