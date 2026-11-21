@@ -1,0 +1,63 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}{{ member.get_username }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'manage-team' %}">← Team</a></p>
+<h1>{{ member.get_username }}{% if is_me %} <span class="muted">· you</span>{% endif %}</h1>
+
+{% if new_password %}
+<section class="card">
+  <h2>Sign-in details for {{ new_password.username }}</h2>
+  <p>Send these to them; the password is shown only now. They can change it under <em>My account</em>.</p>
+  <pre class="log">{{ login_url }}
+User name: {{ new_password.username }}
+Password:  {{ new_password.password }}</pre>
+  <div class="actions"><button class="btn small" type="button" data-copy="{{ login_url }}
+User name: {{ new_password.username }}
+Password: {{ new_password.password }}">Copy</button></div>
+</section>
+{% endif %}
+
+<div class="grid-2">
+<section class="card">
+  <h2>Account</h2>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="update">
+    <p><label>First name <input name="first_name" value="{{ member.first_name }}"></label></p>
+    <p><label>Last name <input name="last_name" value="{{ member.last_name }}"></label></p>
+    <p><label>Email <input type="email" name="email" value="{{ member.email }}"></label></p>
+    <h3>Organizations</h3>
+    <div class="checks">
+      {% for o in organizations %}<label><input type="checkbox" name="orgs" value="{{ o.pk }}"{% if o.pk in member_org_ids %} checked{% endif %}> {{ o.name }}</label>{% endfor %}
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" name="is_superuser"{% if member.is_superuser %} checked{% endif %}{% if is_me %} disabled{% endif %}> Superuser</label>
+      <label><input type="checkbox" name="is_active"{% if member.is_active %} checked{% endif %}{% if is_me %} disabled{% endif %}> Can sign in</label>
+    </div>
+    {% if is_me %}<input type="hidden" name="is_superuser" value="on"><input type="hidden" name="is_active" value="on">{% endif %}
+    <p class="muted note">Last sign-in: {{ member.last_login|date:"D d M Y H:i"|default:"never" }} · created {{ member.date_joined|date:"d M Y" }}</p>
+    <button class="btn primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Password</h2>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="password">
+    <p><label>New password <input type="password" name="password" autocomplete="new-password" minlength="8" placeholder="Empty: make one for me"></label></p>
+    <p class="muted note">Signs {{ member.get_username }} out on every device.</p>
+    <button class="btn" type="submit">Set new password</button>
+  </form>
+</section>
+</div>
+
+{% if not is_me %}
+<section class="card danger-zone">
+  <h2>Delete account</h2>
+  <p class="muted">To keep the account but stop it from signing in, untick <em>Can sign in</em> instead. Events, people and files aren't affected either way.</p>
+  <form method="post" onsubmit="return confirm('Delete the account {{ member.get_username|escapejs }}?')">
+    {% csrf_token %}<input type="hidden" name="action" value="delete">
+    <button class="btn danger" type="submit">Delete account</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

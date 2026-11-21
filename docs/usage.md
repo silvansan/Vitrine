@@ -51,6 +51,19 @@ Every person has a 6-digit **PIN** next to their link (event page and person pag
 Tip: videos that are already H.264 1920×1080 at your project frame rate (`VITRINE_VIDEO_FPS`) are ready in seconds, because they are copied instead of converted.
 5. **Waiting for approval** on the event page: approve or reject. Rejected files never reach the vMix PC. Converted files appear on the tablets as soon as the agent has downloaded them.
 
+## Editing and deleting
+
+Everything can be changed or removed from `/manage/`; `/admin/` is only needed for raw data.
+
+| What | Edit | Delete |
+|---|---|---|
+| **Event** | Its page → *Settings* (name, From/Until with **Clear**, location, active, auto-approve). **Duplicate** makes a copy with new dates, optionally with its people and the files in their sets (e.g. next year's edition). | Its page → *Delete event*, typing the name to confirm. Its sets go; people, their links and all files stay. Untick *Active* to hide it from the vMix PC without deleting it. |
+| **Person** | Their page: name, events, link, PIN, signed-in devices. | Their page → *Delete person*: the link stops working, their uploads stay in the library. Remove them from one event only on the event's page. |
+| **File** | Its page in the Library: name, markers, private/shared, approval. | Library → *Move to trash* (30 days, *Restore*) → *Delete for good*. |
+| **Location / vMix PC** | Locations & tablets → *Rename or delete location*; new token, unpair tablets. | Same place: *Delete location* (its events stay, without a location), *Delete agent*. |
+| **Organization** | Organization: name, sharing, staff, alerts. | Superusers, Organization → *Delete*: only once it has no locations, people or files. |
+| **Staff accounts** | Superusers, **Team**: add (a password is made for you and shown once, ready to copy), organizations, superuser, *Can sign in*, new password. Everyone: **My account** for name, email and password. | Team → the account → *Delete account* (you can't delete or demote yourself, nor the last superuser). |
+
 ## Settings (superusers)
 
 **Settings** in `/manage/` holds what the whole server shares: how alerts are sent (Telegram bot, email server), when the "ready for tomorrow?" check runs, and where and when backups go (folder/NAS, S3, Azure, Google Drive, OpenDrive, FTP, SFTP, SMB or another rclone remote), with a connection test, **Back up now** and the backup history. Email providers like Brevo have a preset that fills in the server details. Who receives alerts is chosen per organization on **Organization**: **Connect Telegram** links your team group (or your own chat) by tapping a link, no chat id needed; see [Alerts to the team](server.md#alerts-to-the-team).

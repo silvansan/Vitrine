@@ -1,0 +1,41 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}Team{% endblock %}
+{% block content %}
+<h1>Team</h1>
+<p class="muted">Staff accounts that can sign in to <code>/manage/</code>. Staff see the organizations they belong to; superusers see all of them, and Team and Settings.</p>
+
+<section class="card">
+  <table class="table">
+    <thead><tr><th>Account</th><th>Organizations</th><th>Last sign-in</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><a href="{% url 'manage-team-member' u.pk %}">{{ u.get_username }}</a>{% if u.get_full_name %} <span class="muted">{{ u.get_full_name }}</span>{% endif %}
+          {% if u.is_superuser %}<span class="pill">Superuser</span>{% endif %}{% if not u.is_active %} <span class="pill warn">Deactivated</span>{% endif %}{% if u.pk == user.pk %} <span class="pill ok">You</span>{% endif %}</td>
+        <td>{% if u.is_superuser %}<span class="muted">All</span>{% else %}{% for o in u.vitrine_orgs.all %}<span class="chip">{{ o.name }}</span> {% empty %}<span class="muted">None yet</span>{% endfor %}{% endif %}</td>
+        <td>{{ u.last_login|date:"d M Y H:i"|default:"never" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>New account</h2>
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-grid">
+      <label>User name <input name="username" required autocomplete="off" autocapitalize="none"></label>
+      <label>First name <input name="first_name"></label>
+      <label>Email <input type="email" name="email"></label>
+      <label>Password <input type="password" name="password" autocomplete="new-password" minlength="8" placeholder="Empty: make one for me"></label>
+    </div>
+    <h3>Organizations</h3>
+    <div class="checks">
+      {% for o in organizations %}<label><input type="checkbox" name="orgs" value="{{ o.pk }}"{% if o.pk == request.org.pk %} checked{% endif %}> {{ o.name }}</label>{% endfor %}
+    </div>
+    <div class="checks"><label><input type="checkbox" name="is_superuser"> Superuser (everything, including Team and Settings)</label></div>
+    <button class="btn primary" type="submit">Create account</button>
+  </form>
+</section>
+{% endblock %}

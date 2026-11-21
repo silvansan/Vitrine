@@ -85,6 +85,40 @@ def add_to_event(person, event):
     return guest, created
 
 
+def _date_or_none(text):
+    from datetime import date
+
+    try:
+        return date.fromisoformat((text or "").strip())
+    except ValueError:
+        return None
+
+
+def duplicate_event(event, name, starts_on, ends_on, with_people=True, with_files=True):
+    """A new event like this one: same location and options, optionally its people and their sets."""
+    from django.db import transaction
+
+    with transaction.atomic():
+        copy = Service.objects.create(
+            name=name, starts_on=starts_on, ends_on=ends_on if (not starts_on or not ends_on or ends_on >= starts_on) else starts_on,
+            location=event.location, is_active=event.is_active, auto_approve=event.auto_approve,
+        )
+        if with_people:
+            for guest in event.guests.select_related("person"):
+                new_guest, _ = add_to_event(guest.person, copy)
+                if with_files:
+                    old_set = MediaSet.objects.filter(service=event, guest=guest).first()
+                    if old_set:
+                        new_set = new_guest.get_set()
+                        new_set.title = old_set.title
+                        new_set.save(update_fields=["title"])
+                        SetItem.objects.bulk_create(
+                            SetItem(media_set=new_set, asset_id=item.asset_id, position=item.position)
+                            for item in old_set.items.all()
+                        )
+    return copy
+
+
 def parse_time(text):
     """'1:12' or '72' -> milliseconds."""
     text = (text or "").strip()
@@ -184,6 +218,25 @@ def service_detail(request, pk):
             guest = get_object_or_404(Guest, pk=request.POST.get("guest_id"), service=event)
             guest.delete()
             messages.success(request, f"{guest.person.name} removed from this event. Their link and uploads stay.")
+        elif action == "duplicate":
+            copy = duplicate_event(
+                event,
+                name=request.POST.get("name", "").strip()[:120] or f"{event.name} (copy)",
+                starts_on=_date_or_none(request.POST.get("starts_on")),
+                ends_on=_date_or_none(request.POST.get("ends_on")),
+                with_people=request.POST.get("with_people") == "on",
+                with_files=request.POST.get("with_files") == "on",
+            )
+            messages.success(request, f"{copy.name} created. Check its dates and people.")
+            return redirect("manage-service", copy.pk)
+        elif action == "delete_event":
+            if request.POST.get("confirm_name", "").strip() != event.name.strip():
+                messages.error(request, "Type the event's name to delete it.")
+                return redirect(reverse("manage-service", args=[event.pk]) + "#delete")
+            name = event.name
+            event.delete()
+            messages.success(request, f"{name} deleted. Its people, their links and all files are kept.")
+            return redirect("manage-dashboard")
         elif action == "rename_set":
             media_set = get_object_or_404(MediaSet, pk=request.POST.get("set_id"), service=event)
             media_set.title = request.POST.get("title", media_set.title)[:200]
@@ -628,6 +681,26 @@ def organization(request):
                         messages.success(request, "Test message sent.")
             else:
                 messages.success(request, "Saved.")
+        elif action == "delete_org" and request.user.is_superuser:
+            left = []
+            if Organization.objects.count() <= 1:
+                left.append("it is the only organization")
+            if org.locations.exists():
+                left.append(f"{org.locations.count()} location(s)")
+            if org.people.exists():
+                left.append(f"{org.people.count()} people")
+            if MediaAsset.all_objects.filter(organization=org).exists():
+                left.append(f"{MediaAsset.all_objects.filter(organization=org).count()} file(s) in its library or trash")
+            if request.POST.get("confirm_name", "").strip() != org.name:
+                messages.error(request, "Type the organization's name to delete it.")
+            elif left:
+                messages.error(request, "Can't delete it yet: " + ", ".join(left) + ". Delete those first (files: Library → Move to trash → Delete for good).")
+            else:
+                name = org.name
+                org.delete()
+                request.session.pop("vitrine_org", None)
+                messages.success(request, f"Organization {name} deleted.")
+            return redirect("manage-organization")
         elif action == "create" and request.user.is_superuser:
             name = request.POST.get("new_name", "").strip()[:120]
             if name and not Organization.objects.filter(name=name).exists():

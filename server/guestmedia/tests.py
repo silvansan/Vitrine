@@ -925,3 +925,91 @@ class TelegramLinkTests(TestCase):
         page = self.client.get("/manage/settings/")
         self.assertContains(page, "@vitrine_test_bot")
         self.assertContains(page, "smtp-relay.brevo.com")
+
+
+class EditDeleteTests(TestCase):
+    """Duplicate/delete events, accounts and the team, delete an organization."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser("admin", "a@example.org", "pw-long-enough")
+        self.client.login(username="admin", password="pw-long-enough")
+        self.org = Organization.objects.create(name="Main")
+        self.org.staff.add(self.admin)
+        self.loc = Location.objects.create(organization=self.org, name="Hall")
+        self.event = Service.objects.create(name="Camp", location=self.loc, auto_approve=True)
+        self.guest = make_guest(self.event, "Maria")
+        from .models import SetItem
+
+        self.asset = MediaAsset.objects.create(owner_name="Maria", original_name="a.jpg", kind="photo", status="ready", organization=self.org)
+        SetItem.objects.create(media_set=self.guest.get_set(), asset=self.asset)
+
+    def test_duplicate_and_delete_event(self):
+        url = f"/manage/event/{self.event.pk}/"
+        self.assertContains(self.client.get(url), "Duplicate event")
+        response = self.client.post(url, {"action": "duplicate", "name": "Camp 2027", "starts_on": "2027-07-01",
+                                          "ends_on": "2027-07-03", "with_people": "on", "with_files": "on"})
+        copy = Service.objects.get(name="Camp 2027")
+        self.assertRedirects(response, f"/manage/event/{copy.pk}/", fetch_redirect_response=False)
+        self.assertEqual((copy.location, copy.auto_approve, str(copy.ends_on)), (self.loc, True, "2027-07-03"))
+        new_guest = copy.guests.get()
+        self.assertEqual(new_guest.person, self.guest.person)
+        self.assertEqual(new_guest.get_set().asset_ids(), [self.asset.pk])
+        # Delete needs the name typed.
+        self.client.post(url, {"action": "delete_event", "confirm_name": "nope"})
+        self.assertTrue(Service.objects.filter(pk=self.event.pk).exists())
+        self.client.post(url, {"action": "delete_event", "confirm_name": "Camp"})
+        self.assertFalse(Service.objects.filter(pk=self.event.pk).exists())
+        self.assertTrue(Person.objects.filter(pk=self.guest.person.pk).exists())
+        self.assertTrue(MediaAsset.objects.filter(pk=self.asset.pk).exists())
+
+    def test_my_account(self):
+        self.client.post("/manage/account/", {"action": "profile", "first_name": "Silvan", "email": "s@example.org"})
+        self.admin.refresh_from_db()
+        self.assertEqual((self.admin.first_name, self.admin.email), ("Silvan", "s@example.org"))
+        self.client.post("/manage/account/", {"action": "password", "old_password": "wrong", "new_password1": "brand-new-pw", "new_password2": "brand-new-pw"})
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("pw-long-enough"))
+        self.client.post("/manage/account/", {"action": "password", "old_password": "pw-long-enough", "new_password1": "brand-new-pw", "new_password2": "brand-new-pw"})
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("brand-new-pw"))
+        self.assertEqual(self.client.get("/manage/account/").status_code, 200)  # still signed in
+
+    def test_team(self):
+        response = self.client.post("/manage/team/", {"username": "tech", "email": "t@example.org", "orgs": [self.org.pk]})
+        tech = User.objects.get(username="tech")
+        self.assertTrue(tech.is_staff and not tech.is_superuser)
+        self.assertIn(self.org, tech.vitrine_orgs.all())
+        page = self.client.get(response["Location"])
+        password = page.context["new_password"]["password"]
+        self.assertTrue(tech.check_password(password))
+        self.assertIsNone(self.client.get(response["Location"]).context["new_password"])  # shown once
+        self.client.post(f"/manage/team/{tech.pk}/", {"action": "update", "email": "x@example.org", "orgs": []})
+        tech.refresh_from_db()
+        self.assertFalse(tech.is_active)  # "Can sign in" unticked
+        self.assertEqual(tech.vitrine_orgs.count(), 0)
+        # Can't lock yourself out.
+        self.client.post(f"/manage/team/{self.admin.pk}/", {"action": "update"})
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_superuser and self.admin.is_active)
+        self.client.post(f"/manage/team/{self.admin.pk}/", {"action": "delete"})
+        self.assertTrue(User.objects.filter(pk=self.admin.pk).exists())
+        self.client.post(f"/manage/team/{tech.pk}/", {"action": "delete"})
+        self.assertFalse(User.objects.filter(username="tech").exists())
+        # Staff who aren't superusers can't see the team.
+        staff = User.objects.create_user("staff", password="pw-long-enough", is_staff=True)
+        self.org.staff.add(staff)
+        self.client.login(username="staff", password="pw-long-enough")
+        self.assertEqual(self.client.get("/manage/team/").status_code, 404)
+
+    def test_delete_organization_only_when_empty(self):
+        other = Organization.objects.create(name="Other")
+        session = self.client.session
+        session["vitrine_org"] = other.pk
+        session.save()
+        self.client.post("/manage/organization/", {"action": "delete_org", "confirm_name": "Other"})
+        self.assertFalse(Organization.objects.filter(pk=other.pk).exists())
+        session = self.client.session
+        session["vitrine_org"] = self.org.pk
+        session.save()
+        self.client.post("/manage/organization/", {"action": "delete_org", "confirm_name": "Main"})
+        self.assertTrue(Organization.objects.filter(pk=self.org.pk).exists())  # has a location, people, files

@@ -22,7 +22,7 @@
 
   {% if users %}
   <h2>Staff</h2>
-  <p class="muted">Staff accounts that work in this organization. Superusers see every organization. Create accounts in <a href="/admin/auth/user/">Admin → Users</a> (tick “Staff status”).</p>
+  <p class="muted">Staff accounts that work in this organization. Superusers see every organization. Create and edit accounts under <a href="{% url 'manage-team' %}">Team</a>.</p>
   <div class="checks">
     {% for u in users %}<label><input type="checkbox" name="staff" value="{{ u.pk }}"{% if u.pk in staff_ids %} checked{% endif %}> {{ u.get_username }}{% if u.is_superuser %} <span class="muted">(superuser)</span>{% endif %}</label>{% endfor %}
   </div>
@@ -114,6 +114,17 @@
     {% csrf_token %}<input type="hidden" name="action" value="create">
     <label>Name <input name="new_name" placeholder="Geneva team" required></label>
     <button class="btn" type="submit">Create</button>
+  </form>
+</section>
+{% endif %}
+{% if request.user.is_superuser %}
+<section class="card danger-zone" id="delete-org">
+  <h2>Delete {{ org.name }}</h2>
+  <p class="muted">Only an empty organization can be deleted: first delete its locations and people, and its files for good. Staff accounts are kept (see <a href="{% url 'manage-team' %}">Team</a>).</p>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="delete_org">
+    <p><label>Type <strong>{{ org.name }}</strong> to confirm <input name="confirm_name" autocomplete="off" required></label></p>
+    <button class="btn danger" type="submit">Delete organization</button>
   </form>
 </section>
 {% endif %}

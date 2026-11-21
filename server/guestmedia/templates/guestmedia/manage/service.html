@@ -104,4 +104,30 @@
     <p class="muted">Sets appear when people are added.</p>
   {% endfor %}
 </section>
+
+<div class="grid-2">
+<section class="card" id="duplicate">
+  <h2>Duplicate</h2>
+  <p class="muted">A new event with the same location and options, e.g. next year's edition.</p>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="duplicate">
+    <p><label>Name <input name="name" value="{{ service.name }} (copy)" required></label></p>
+    <p><label>From <input type="date" name="starts_on" value="{{ service.starts_on|date:'Y-m-d' }}"></label></p>
+    <p><label>Until <input type="date" name="ends_on" value="{{ service.ends_on|date:'Y-m-d' }}"></label></p>
+    <p><label class="check"><input type="checkbox" name="with_people" checked> With its people ({{ guests|length }})</label></p>
+    <p><label class="check"><input type="checkbox" name="with_files" checked> and the files in their sets</label></p>
+    <button class="btn" type="submit">Duplicate event</button>
+  </form>
+</section>
+
+<section class="card danger-zone" id="delete">
+  <h2>Delete event</h2>
+  <p class="muted">Removes the event and its sets. People keep their links and PINs, and every file stays in the library. To stop it from reaching the vMix PC without deleting it, untick <em>Active</em> instead.</p>
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="delete_event">
+    <p><label>Type <strong>{{ service.name }}</strong> to confirm <input name="confirm_name" autocomplete="off" required></label></p>
+    <button class="btn danger" type="submit">Delete event</button>
+  </form>
+</section>
+</div>
 {% endblock %}

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import agent_api, guest_views, manage_views, tus
+from . import account_views, agent_api, guest_views, manage_views, tus
 
 urlpatterns = [
     # Guest link
@@ -40,6 +40,9 @@ urlpatterns = [
     path("manage/organization/telegram-check", manage_views.telegram_check, name="manage-telegram-check"),
     path("manage/backups/", manage_views.backups, name="manage-backups"),
     path("manage/settings/", manage_views.site_settings, name="manage-settings"),
+    path("manage/account/", account_views.account, name="manage-account"),
+    path("manage/team/", account_views.team, name="manage-team"),
+    path("manage/team/<int:pk>/", account_views.team_member, name="manage-team-member"),
     path("manage/switch-org", manage_views.switch_org, name="manage-switch-org"),
     path("manage/library/", manage_views.library, name="manage-library"),
     path("manage/asset/<int:pk>/", manage_views.asset_detail, name="manage-asset"),

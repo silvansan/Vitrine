@@ -17,14 +17,16 @@
     </select>
   </form>
   {% elif request.org %}<span class="org-name">{{ request.org.name }}</span>{% endif %}
-  {% url 'manage-dashboard' as u_events %}{% url 'manage-people' as u_people %}{% url 'manage-library' as u_library %}{% url 'manage-agents' as u_agents %}{% url 'manage-organization' as u_org %}{% url 'manage-settings' as u_settings %}
+  {% url 'manage-dashboard' as u_events %}{% url 'manage-people' as u_people %}{% url 'manage-library' as u_library %}{% url 'manage-agents' as u_agents %}{% url 'manage-organization' as u_org %}{% url 'manage-settings' as u_settings %}{% url 'manage-team' as u_team %}{% url 'manage-account' as u_account %}
   <nav aria-label="Sections">
     <a href="{{ u_events }}"{% if request.path == u_events or '/manage/event/' in request.path %} aria-current="page"{% endif %}>Events</a>
     <a href="{{ u_people }}"{% if u_people in request.path %} aria-current="page"{% endif %}>People</a>
     <a href="{{ u_library }}"{% if u_library in request.path or '/manage/asset/' in request.path %} aria-current="page"{% endif %}>Library</a>
     <a href="{{ u_agents }}"{% if u_agents in request.path %} aria-current="page"{% endif %}>Locations &amp; tablets</a>
     <a href="{{ u_org }}"{% if u_org in request.path %} aria-current="page"{% endif %}>Organization</a>
-    {% if request.user.is_superuser %}<a href="{{ u_settings }}"{% if u_settings in request.path %} aria-current="page"{% endif %}>Settings</a>{% endif %}
+    {% if request.user.is_superuser %}<a href="{{ u_team }}"{% if u_team in request.path %} aria-current="page"{% endif %}>Team</a>
+    <a href="{{ u_settings }}"{% if u_settings in request.path %} aria-current="page"{% endif %}>Settings</a>{% endif %}
+    <a href="{{ u_account }}"{% if u_account in request.path %} aria-current="page"{% endif %}>My account</a>
     <a href="/admin/">Admin</a>
     <a href="{% url 'docs-home' %}">Docs</a>
   </nav>
