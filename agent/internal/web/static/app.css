@@ -242,3 +242,10 @@ fieldset.box legend { padding: 0 6px; }
 .handoff .row { flex-wrap: nowrap; }
 .handoff input { flex: 1; min-width: 0; height: 48px; font-size: 22px; letter-spacing: .25em; text-align: center; border-radius: 12px; border: 1px solid var(--border2); background: var(--surface); color: var(--text); }
 .handoff-code { font-size: 34px; font-weight: 800; letter-spacing: .2em; font-variant-numeric: tabular-nums; text-align: center; padding: 10px; border-radius: 12px; background: var(--surface2, rgba(127,127,127,.12)); }
+/* Guests controlling from their phone */
+.chip .ctl { display: inline-flex; margin-left: 4px; color: var(--live, #D92D20); }
+.btn.live-ctl { border-color: var(--live, #D92D20); color: var(--live, #D92D20); }
+.nav > .btn { margin-left: 8px; flex-shrink: 0; }
+.access-req { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 28px 0; padding: 10px 14px; border-radius: 12px; background: rgba(217,45,32,.12); border: 1px solid rgba(217,45,32,.45); }
+.access-req span { flex: 1; min-width: 200px; }
+.access-req svg { color: #D92D20; }

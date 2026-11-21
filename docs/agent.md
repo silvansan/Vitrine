@@ -62,6 +62,7 @@ The companion is a page at `http://127.0.0.1:8090/companion`; the back tablet ca
 - **Fade the sound in and out (ms)** (800 by default; 0 = cut): the sound of videos and audio files fades in when they start and fades out when they leave the screen, are replaced or stopped; a jump inside a video crossfades the sound with the picture. Each input's own volume in vMix is kept: Vitrine fades up to it and puts it back afterwards.
 - **Audio files: keep the default input on the projector** (on by default): only the sound plays, through a third List input (`GM_AUDIO`, created if missing; make sure its audio goes to your Master bus in vMix). Untick it to show the audio's cover/title card on the projector like a video.
 - **Go back to default when a video ends**, **jump mode** (crossfade between GM_A/GM_B, or jump in place), input names.
+- **Tablet address**: the address of the tablet view on this PC (`http://<LAN IP>:8090/screen`) with a QR, for tablets that are already paired. The permanent link in the backend (Locations & tablets → *Tablet link*) points here too and keeps working when the IP changes.
 - **Tablets**: the paired list, unpair, and **Show pairing QR** (signed by the server when online, by the agent itself when the server is unreachable).
 - **Integrations (Bitfocus Companion)**: API keys for controllers (only on the vMix PC itself). See below.
 

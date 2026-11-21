@@ -71,6 +71,8 @@ Each file's page has a preview, the original download, the sets it is in, and ma
 
 Either in the backend (**Locations & tablets → Show pairing QR** on the location, choose Pulpit or Back) or in the tray companion (**Pair a tablet…**). Scan the QR with the tablet's camera while it is on the venue network. A code works once, for 15 minutes. Add the page to the home screen; on iPad use **Guided Access**, on Android **screen pinning**, so the pulpit can't leave the page.
 
+**Tablet link** (Locations & tablets, under each location, with a QR and *Copy link*): a permanent address, `https://<server>/t/<code>/`, that opens that location's tablet view on its vMix PC whatever the PC's IP address is at the moment. The pairing link is used once; bookmark this one instead, or add it to the home screen. A tablet that was paired before lands signed in; a new tablet still needs a pairing QR first. If the vMix PC is offline (or hasn't reported its address yet) the link shows a "not reachable" page that retries by itself every 15 seconds.
+
 Unpair from the companion, or **Unpair** next to the code in the backend (takes effect at the agent's next sync).
 
 ## Back tablet
@@ -84,12 +86,22 @@ Unpair from the companion, or **Unpair** next to the code in the backend (takes 
 - **Add marker here**: in the cue panel (at the cued point) or on the playback bar while a video is live (**Marker**, at the current position). Give it a name or leave it empty ("Marker 1:12"). Markers appear on every tablet at once and are saved on the server, also when added offline (they are sent when the connection is back). The back tablet can remove a marker with the × next to it.
 - **Send Maria to pulpit**: the pulpit switches to Maria's set immediately.
 - **Tablets** button (top right): for each pulpit tablet choose the set, **Jump to page 1**, **Mirror my page**, what is visible (Clear button, title, switching sets, connection status, basic video controls, free seeking) and its theme.
+- **Guest control from their own phone or laptop**: when a guest taps *Ask for access* on their tablet view (see below), a red banner appears on every back tablet: **Give control** or **Decline**. A guest with control has a small phone icon on their chip; select the chip to see **Take control back**. Control lasts until you take it back or the end of the day, and only covers that guest's own files. Every action they take shows a short note on the back tablets ("Maria (phone) put … on screen"), and you can take over at any time: tapping a tile or *Back to default* on the back tablet always wins.
 - Sun/moon button: dark or light theme for this tablet.
 - Swipe left/right on the tiles to change pages.
 
 ## Phones
 
 The tablet pages also work on a phone (upright or sideways): the bars get smaller and the tiles scroll instead of shrinking. Use Chrome, Samsung Internet or Safari; Brave's HTTPS upgrade blocks the local address unless you turn its Shields down for it.
+
+## A guest's own tablet view
+
+On their page, guests have **Open my tablet**: their set in the same layout as the pulpit, on their phone, tablet or laptop, from anywhere with internet (it goes through the server, not the venue network).
+
+- A big badge at the top shows where they stand: **Ask for access** (red) → **Waiting for the desk… (cancel)** (amber) → **You control the screen** (green). Grey means the vMix PC is offline or the tablets are on another event; nothing can be sent then.
+- Without access, taps only play a *practice* run on the page itself (nothing reaches the projector), so they can learn the buttons beforehand.
+- With access: tap a tile to put it on screen, **Back to the banner**, and for videos **From start**, ±10 s, pause/play and their markers. They only ever see details of their own files; when someone else's file is live they see "Something else is on screen".
+- If the desk takes control back, the badge turns red again and a note tells them.
 
 ## Pulpit tablet
 

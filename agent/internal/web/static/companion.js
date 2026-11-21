@@ -36,6 +36,14 @@
     var st = data.status;
     var e = st.engine;
     $('agent-line').textContent = 'Version ' + data.agent.version + ' · tablets connect to http://' + data.agent.lan_ip + ':' + data.agent.port + ' · media in ' + data.agent.media_dir;
+    var openUrl = 'http://' + data.agent.lan_ip + ':' + data.agent.port + '/screen';
+    if ($('open-url').textContent !== openUrl) {
+      $('open-url').textContent = openUrl;
+      var oq = qrcode(0, 'M');
+      oq.addData(openUrl);
+      oq.make();
+      $('open-qr').innerHTML = oq.createSvgTag({ cellSize: 4, margin: 2, scalable: false });
+    }
 
     var rows = [
       [st.server_online ? 'ok' : (st.configured ? 'warn' : 'bad'), 'Server', st.server_online ? 'Connected (' + data.agent.server_url + ')' : (st.server_error || 'Not reachable') + (st.configured ? ' — tablets keep working with the files already here' : '')],

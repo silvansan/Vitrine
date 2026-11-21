@@ -711,3 +711,112 @@ class SettingsPageTests(TestCase):
         self.assertEqual(cfg["port"], 465)
         self.assertEqual(config.offline_alert_minutes(), 5)
         self.assertNotContains(self.client.get("/manage/settings/"), "123:abc")
+
+
+class LiveControlTests(TestCase):
+    """A guest's own tablet view: Ask for access, then control the projector through the server."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        org = Organization.objects.create(name="Main")
+        self.agent, _ = Agent.create_with_token("Hall PC")
+        self.agent.lan_ip = "192.168.1.20"
+        self.agent.save()
+        self.location = Location.objects.create(organization=org, name="Hall", agent=self.agent)
+        self.event = Service.objects.create(name="Sunday", location=self.location)
+        self.guest = make_guest(self.event, "Maria")
+        self.other = make_guest(self.event, "John")
+        from .models import SetItem
+
+        self.mine = MediaAsset.objects.create(owner_name="Maria", original_name="a.jpg", kind="photo", status="ready")
+        self.theirs = MediaAsset.objects.create(owner_name="John", original_name="b.jpg", kind="photo", status="ready")
+        SetItem.objects.create(media_set=self.guest.get_set(), asset=self.mine)
+        SetItem.objects.create(media_set=self.other.get_set(), asset=self.theirs)
+        self.base = f"/g/{self.guest.person.token}/"
+        enter_pin(self.client, self.guest)
+
+    def report(self, controls=(), requests=(), on_screen=0, event=None):
+        from django.core.cache import cache
+        from . import relay
+
+        cache.set(relay.live_key(self.agent.pk), {
+            "type": "live", "service_id": (event or self.event).pk,
+            "controls": list(controls), "requests": list(requests),
+            "engine": {"asset_id": on_screen, "kind": "photo"},
+        }, 60)
+
+    def test_screen_page_needs_pin_and_renders(self):
+        self.assertContains(self.client.get(self.base + "screen/"), 'data-token="')
+        other = self.client_class()
+        self.assertNotContains(other.get(self.base + "screen/"), "guest_screen.js", status_code=403)
+
+    def test_offline_and_not_here(self):
+        live = self.client.get(self.base + "api/live").json()
+        self.assertFalse(live["online"])
+        response = self.client.post(self.base + "api/live/request_access", "{}", content_type="application/json")
+        self.assertEqual(response.status_code, 409)
+        self.report(event=Service.objects.create(name="Other", location=self.location))
+        live = self.client.get(self.base + "api/live").json()
+        self.assertTrue(live["online"])
+        self.assertFalse(live["here"])
+
+    def test_other_people_files_stay_private(self):
+        self.report(on_screen=self.theirs.pk)
+        live = self.client.get(self.base + "api/live").json()
+        self.assertIsNone(live["live"])
+        self.assertTrue(live["other_on_screen"])
+        self.report(on_screen=self.mine.pk)
+        self.assertEqual(self.client.get(self.base + "api/live").json()["live"]["asset_id"], self.mine.pk)
+
+    def test_needs_control_before_taking(self):
+        from unittest import mock
+
+        set_id = self.guest.get_set().pk
+        self.report()
+        with mock.patch("guestmedia.relay.send_command", return_value={"ok": True}) as send:
+            take = self.client.post(self.base + "api/live/take", json.dumps({"asset_id": self.mine.pk}), content_type="application/json")
+            self.assertEqual(take.status_code, 403)
+            ask = self.client.post(self.base + "api/live/request_access", "{}", content_type="application/json")
+            self.assertEqual(ask.status_code, 200)
+            self.assertEqual(send.call_args[0][1]["action"], "request_access")
+            self.assertEqual(send.call_args[0][1]["set_id"], set_id)
+            self.report(requests=[set_id])
+            self.assertTrue(self.client.get(self.base + "api/live").json()["requested"])
+            # The desk gives control.
+            self.report(controls=[set_id])
+            self.assertTrue(self.client.get(self.base + "api/live").json()["control"])
+            not_mine = self.client.post(self.base + "api/live/take", json.dumps({"asset_id": self.theirs.pk}), content_type="application/json")
+            self.assertEqual(not_mine.status_code, 403)
+            take = self.client.post(self.base + "api/live/take", json.dumps({"asset_id": self.mine.pk}), content_type="application/json")
+            self.assertEqual(take.status_code, 200)
+            self.assertEqual(send.call_args[0][1]["asset_id"], self.mine.pk)
+            self.assertEqual(send.call_args[0][1]["by"], "Maria")
+        self.assertEqual(self.client.post(self.base + "api/live/reboot").status_code, 404)
+
+    def test_relay_round_trip(self):
+        from unittest import mock
+        from django.core.cache import cache
+        from . import relay
+
+        def fake_send(group, message):
+            self.assertEqual(group, relay.agent_group(self.agent.pk))
+            cache.set(relay.result_key(message["command"]["id"]), {"ok": True, "error": ""}, 60)
+
+        layer = mock.Mock()
+        layer.group_send = mock.AsyncMock(side_effect=fake_send)
+        with mock.patch("guestmedia.relay.get_channel_layer", return_value=layer):
+            self.assertTrue(relay.send_command(self.agent, {"action": "clear"})["ok"])
+        layer.group_send = mock.AsyncMock()
+        with mock.patch("guestmedia.relay.get_channel_layer", return_value=layer):
+            self.assertFalse(relay.send_command(self.agent, {"action": "clear"}, wait=0.3)["ok"])
+
+    def test_permanent_tablet_link(self):
+        response = self.client.get(f"/t/{self.location.tablet_slug}/")
+        self.assertRedirects(response, "http://192.168.1.20:8090/screen", fetch_redirect_response=False)
+        self.agent.lan_ip = ""
+        self.agent.save()
+        self.assertEqual(self.client.get(f"/t/{self.location.tablet_slug}/").status_code, 503)
+        self.assertEqual(self.client.get("/t/nope/").status_code, 404)
+        self.assertNotEqual(self.location.tablet_slug, Location.objects.create(organization=self.location.organization, name="B").tablet_slug)

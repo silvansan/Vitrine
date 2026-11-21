@@ -22,6 +22,10 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 
+def new_tablet_slug():
+    return secrets.token_urlsafe(9)
+
+
 def new_pin():
     """A 6-digit PIN for a person's link."""
     return f"{secrets.randbelow(10**6):06d}"
@@ -81,6 +85,8 @@ class Location(models.Model):
         "Agent", null=True, blank=True, on_delete=models.SET_NULL, related_name="location",
         help_text="The vMix PC at this location.",
     )
+    # /t/<slug>/ always leads paired tablets to this location's vMix PC, whatever its IP.
+    tablet_slug = models.CharField(max_length=24, unique=True, default=new_tablet_slug)
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:

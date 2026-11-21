@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -26,6 +27,29 @@ type Client struct {
 	HTTP    *http.Client
 	// Download HTTP client: no overall timeout, big files take a while.
 	Bulk *http.Client
+	// OnCommand receives commands the server relays from a guest's phone (see app.handleRemote).
+	OnCommand func(raw json.RawMessage)
+
+	outMu sync.Mutex
+	out   chan []byte
+}
+
+// Send queues a message for the server over the WebSocket (dropped while disconnected).
+func (c *Client) Send(v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	c.outMu.Lock()
+	out := c.out
+	c.outMu.Unlock()
+	if out == nil {
+		return
+	}
+	select {
+	case out <- data:
+	default:
+	}
 }
 
 func New(baseURL, token string) *Client {
@@ -195,6 +219,25 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, onChange fu
 	defer conn.CloseNow()
 	pingCtx, stopPing := context.WithCancel(ctx)
 	defer stopPing()
+	out := make(chan []byte, 32)
+	c.outMu.Lock()
+	c.out = out
+	c.outMu.Unlock()
+	defer func() {
+		c.outMu.Lock()
+		c.out = nil
+		c.outMu.Unlock()
+	}()
+	go func() {
+		for {
+			select {
+			case <-pingCtx.Done():
+				return
+			case data := <-out:
+				_ = conn.Write(pingCtx, websocket.MessageText, data)
+			}
+		}
+	}()
 	go func() {
 		ticker := time.NewTicker(25 * time.Second)
 		defer ticker.Stop()
@@ -208,17 +251,24 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn, onChange fu
 		}
 	}()
 	for {
-		var msg struct {
-			Type string `json:"type"`
-		}
-		if err := wsjson.Read(ctx, conn, &msg); err != nil {
+		var raw json.RawMessage
+		if err := wsjson.Read(ctx, conn, &raw); err != nil {
 			if ctx.Err() == nil {
 				log.Printf("server websocket closed: %v", err)
 			}
 			return
 		}
-		if msg.Type == "hello" || msg.Type == "manifest" {
+		var msg struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(raw, &msg)
+		switch msg.Type {
+		case "hello", "manifest":
 			onChange()
+		case "command":
+			if c.OnCommand != nil {
+				go c.OnCommand(raw)
+			}
 		}
 	}
 }

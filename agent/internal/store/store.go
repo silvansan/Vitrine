@@ -83,6 +83,9 @@ type State struct {
 	Files       map[int64]*LocalFile `json:"files"`
 	AgentSecret string               `json:"agent_secret"`
 	UsedNonces  map[string]time.Time `json:"used_nonces"`
+	// Guests the back tablet gave control of the projector, by set id, until a time.
+	// They can show their own set's files from their phone (relayed by the server).
+	Controls map[int64]time.Time `json:"controls"`
 	// API keys for integrations such as Bitfocus Companion.
 	IntegrationKeys []*IntegrationKey `json:"integration_keys"`
 	// Markers added on tablets that still have to reach the server.
@@ -149,6 +152,9 @@ func Open(dataDir string) (*Store, error) {
 	}
 	if st.Files == nil {
 		st.Files = map[int64]*LocalFile{}
+	}
+	if st.Controls == nil {
+		st.Controls = map[int64]time.Time{}
 	}
 	if st.UsedNonces == nil {
 		st.UsedNonces = map[string]time.Time{}

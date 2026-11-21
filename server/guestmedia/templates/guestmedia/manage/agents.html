@@ -34,6 +34,16 @@
     <h2>{% if a %}<span class="dot {% if a.is_online %}on{% endif %}"></span> {% endif %}{{ l.name }}</h2>
     {% if a %}<span class="muted">agent {{ a.name }} · token vta_{{ a.token_prefix }}… {% if a.version %}· v{{ a.version }}{% endif %}</span>{% endif %}
   </div>
+  {% url 'location-tablet' l.tablet_slug as tablet_path %}
+  <div class="guest-row">
+    <img class="qr" src="{% url 'manage-qr' %}?d={{ request.scheme }}://{{ request.get_host }}{{ tablet_path|urlencode }}" alt="QR code for the tablet view of {{ l.name }}" width="110" height="110">
+    <div class="grow">
+      <div class="guest-name">Tablet link</div>
+      <p class="muted">Opens the tablet view of {{ l.name }} on any tablet that is already paired, whatever the vMix PC's IP address. Bookmark it or add it to the home screen. A new tablet needs <em>Show pairing QR</em> first.</p>
+      <code class="link">{{ request.scheme }}://{{ request.get_host }}{{ tablet_path }}</code>
+      <div class="actions"><button class="btn small" type="button" data-copy="{{ request.scheme }}://{{ request.get_host }}{{ tablet_path }}">Copy link</button></div>
+    </div>
+  </div>
   {% if not a %}
     <p>No vMix PC yet.</p>
     <div class="actions">

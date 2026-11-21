@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"os"
@@ -89,7 +90,51 @@ func New(cfg *config.Config) (*App, error) {
 		}
 	}
 	a.Engine.OnChange = a.Web.BroadcastState
+	// Guests' phones: the server relays their commands and shows them our live state.
+	a.API.OnCommand = a.handleRemote
+	a.Web.OnControlsChanged = func() { a.API.Send(a.Web.LiveForServer()) }
 	return a, nil
+}
+
+// handleRemote runs a command from a guest's phone and tells the server how it went.
+func (a *App) handleRemote(raw json.RawMessage) {
+	var head struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(raw, &head)
+	result := map[string]any{"type": "command_result", "id": head.ID, "ok": true}
+	if err := a.Web.ExecuteRemote(raw); err != nil {
+		result["ok"] = false
+		result["error"] = err.Error()
+	}
+	a.API.Send(result)
+}
+
+// liveLoop sends the live state to the server when it changes (and every 15 s),
+// for guests' pages and the server's control checks.
+func (a *App) liveLoop(ctx context.Context) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	var last []byte
+	lastSent := time.Time{}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if !a.online.Load() {
+			last = nil
+			continue
+		}
+		data, _ := json.Marshal(a.Web.LiveForServer())
+		if string(data) == string(last) && time.Since(lastSent) < 15*time.Second {
+			continue
+		}
+		last = data
+		lastSent = time.Now()
+		a.API.Send(json.RawMessage(data))
+	}
 }
 
 func (a *App) detectIP() string {
@@ -156,6 +201,7 @@ func (a *App) Run(parent context.Context) error {
 		})
 		go a.manifestLoop(ctx)
 		go a.heartbeatLoop(ctx)
+		go a.liveLoop(ctx)
 	} else {
 		a.srvErr.Store("Not connected yet: enter the server address and agent token under Connection.")
 		log.Printf("server address or token missing; open the settings page to enter them")

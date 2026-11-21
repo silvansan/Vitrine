@@ -359,3 +359,111 @@ def media_file(request, token, asset_id):
     if not asset.visible_to(person) or asset.status != MediaAsset.STATUS_READY:
         raise Http404()
     return serve_field(request, asset.processed, asset.local_name)
+
+
+# ---------- the guest's own tablet view (practice, or live once the desk gives control) ----------
+
+
+def _live_for(guest):
+    """What this guest may know about the projector, and whether they have control."""
+    from . import relay
+
+    event = guest.service
+    agent = event.location.agent if event.location_id else None
+    data = relay.live_state(agent) if agent else None
+    set_id = guest.get_set().pk
+    out = {
+        "set_id": set_id,
+        "online": bool(data),
+        "here": bool(data) and data.get("service_id") == event.pk,
+        "control": False,
+        "requested": False,
+        "live": None,
+        "audio": None,
+        "other_on_screen": False,
+    }
+    if not data:
+        return out
+    out["control"] = out["here"] and set_id in (data.get("controls") or [])
+    out["requested"] = out["here"] and set_id in (data.get("requests") or [])
+    theirs = set(guest.get_set().asset_ids())
+    engine = data.get("engine") or {}
+    for key, src in (("live", engine), ("audio", engine.get("audio") or {})):
+        asset_id = src.get("asset_id") or 0
+        pending = src.get("pending_id") or 0
+        if asset_id in theirs or pending in theirs:
+            out[key] = {
+                "asset_id": asset_id if asset_id in theirs else 0,
+                "pending_id": pending if pending in theirs else 0,
+                "kind": src.get("kind", "audio" if key == "audio" else ""),
+                "position_ms": src.get("position_ms", 0),
+                "duration_ms": src.get("duration_ms", 0),
+                "paused": bool(src.get("paused")),
+            }
+        elif asset_id:
+            out["other_on_screen"] = True  # someone else's file: no details
+    return out
+
+
+@require_GET
+def screen(request, token):
+    """The guest's tablet view: their set in the pulpit layout."""
+    person, guest = load_guest(request, token)
+    return render(request, "guestmedia/guest_screen.html", {"person": person, "guest": guest, "service": guest.service})
+
+
+@require_GET
+def api_live(request, token):
+    person, guest = load_guest(request, token)
+    return JsonResponse(_live_for(guest))
+
+
+LIVE_ACTIONS = {"take", "clear", "pause", "play", "seek", "stop_audio", "request_access", "cancel_request"}
+
+
+@csrf_exempt
+@require_POST
+def api_live_action(request, token, action):
+    from . import relay
+
+    person, guest = load_guest(request, token)
+    if action not in LIVE_ACTIONS:
+        raise Http404()
+    event = guest.service
+    agent = event.location.agent if event.location_id else None
+    if agent is None or relay.live_state(agent) is None:
+        return JsonResponse({"ok": False, "error": "The vMix PC isn't connected right now."}, status=409)
+    state = _live_for(guest)
+    if not state["here"]:
+        return JsonResponse({"ok": False, "error": "The tablets are on another event right now."}, status=409)
+    if action not in ("request_access", "cancel_request") and not state["control"]:
+        return JsonResponse({"ok": False, "error": "Ask for access first: the production desk hasn't given you control."}, status=403)
+    body = read_json(request)
+    payload = {
+        "action": action,
+        "set_id": state["set_id"],
+        "asset_id": int(body.get("asset_id") or 0),
+        "start_ms": int(body.get("start_ms") or 0),
+        "position_ms": int(body.get("position_ms") or 0),
+        "by": person.name,
+    }
+    if action == "take" and payload["asset_id"] not in guest.get_set().asset_ids():
+        return JsonResponse({"ok": False, "error": "That file isn't in your set."}, status=403)
+    result = relay.send_command(agent, payload)
+    return JsonResponse({"ok": bool(result.get("ok")), "error": result.get("error", ""), "live": _live_for(guest)},
+                        status=200 if result.get("ok") else 409)
+
+
+# ---------- permanent tablet link per location ----------
+
+
+@require_GET
+def location_tablet(request, slug):
+    """/t/<slug>/: open this location's tablet view on its vMix PC (paired tablets land signed in)."""
+    from .models import Location
+
+    location = get_object_or_404(Location.objects.select_related("agent"), tablet_slug=slug)
+    agent = location.agent
+    if agent and agent.tablet_base_url:
+        return HttpResponseRedirect(f"{agent.tablet_base_url}/screen")
+    return render(request, "guestmedia/tablet_offline.html", {"location": location}, status=503)

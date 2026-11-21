@@ -127,6 +127,8 @@ if REDIS_URL:
             "CONFIG": {"hosts": [REDIS_URL]},
         }
     }
+    # Live state the agents report (for guests controlling from their phone).
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}}
     CELERY_BROKER_URL = REDIS_URL
     CELERY_RESULT_BACKEND = None
 else:

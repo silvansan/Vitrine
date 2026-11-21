@@ -115,3 +115,8 @@ button,input{font:inherit}
 .pin-card input::placeholder{letter-spacing:normal;font-size:16px}
 .guest-links{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:10px;align-items:center}
 .guest-links a,.guest-links button{font-size:13px;color:var(--subtle)}
+
+/* "Open my tablet" */
+.guest-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:10px}
+.guest-actions .help-link{margin-top:0}
+.open-tablet{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--text);color:var(--bg);font-weight:700;font-size:14px;text-decoration:none}

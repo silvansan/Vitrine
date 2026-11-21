@@ -28,7 +28,10 @@
     {% endif %}
     <h1>Hi {{ person.name }}</h1>
     <p>Pick the pictures and videos for your part.</p>
-    <a class="help-link" href="{% url 'guest-tablet-help' person.token %}">Tips: learn how to use the tablet at the pulpit →</a>
+    <div class="guest-actions">
+      <a class="open-tablet" href="{% url 'guest-screen' person.token %}?e={{ service.pk }}">Open my tablet</a>
+      <a class="help-link" href="{% url 'guest-tablet-help' person.token %}">Tips: learn how to use the tablet at the pulpit →</a>
+    </div>
     {% if on_device %}
     <div class="guest-links">
       <a href="{% url 'guest-change-pin' person.token %}">Change my PIN</a>

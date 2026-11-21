@@ -53,6 +53,8 @@ type Server struct {
 	AddMarker    func(assetID int64, tMs int, label, by string) error
 	DeleteMarker func(id int64) error
 	Version      string
+	// Called when the back tablet gives or takes back a guest's control.
+	OnControlsChanged func()
 
 	hub      *Hub
 	seenMu   sync.Mutex
@@ -60,6 +62,9 @@ type Server struct {
 
 	// Hand-over codes: move a tablet's pairing into its home-screen app (iOS keeps
 	// home-screen apps' cookies apart from Safari's).
+	reqMu    sync.Mutex
+	requests map[int64]accessRequest
+
 	handoffMu    sync.Mutex
 	handoffs     map[string]handoff
 	handoffFails []time.Time
@@ -102,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/audio/stop", s.screenOnly(s.simple(s.Engine.StopAudio)))
 	mux.HandleFunc("POST /api/seek", s.screenOnly(s.handleSeek))
 	mux.HandleFunc("POST /api/handoff/new", s.screenOnly(s.handleHandoffNew))
+	mux.HandleFunc("POST /api/control", s.screenOnly(s.handleControl))
 	mux.HandleFunc("POST /api/handoff", s.handleHandoffUse)
 	mux.HandleFunc("POST /api/screens/{id}", s.screenOnly(s.handleScreenUpdate))
 	mux.HandleFunc("POST /api/screens/{id}/command", s.screenOnly(s.handleScreenCommand))
@@ -577,6 +583,8 @@ func (s *Server) statusMessage() map[string]any {
 		"server_online": online,
 		"server_error":  serverError,
 		"configured":    s.Cfg.Configured(),
+		"controls":      s.controlsView(),
+		"requests":      s.requestsView(),
 	}
 }
 

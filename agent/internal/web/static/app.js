@@ -15,6 +15,7 @@
 
   var ICON = {
     fullscreen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    phone: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>',
     install: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M12 7v7M8.5 10.5L12 14l3.5-3.5M10 18h4"/></svg>',
     exitFullscreen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
     photo: '<svg class="ph-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
@@ -160,6 +161,7 @@
       else if (msg.type === 'screens') onScreens(msg.screens || []);
       else if (msg.type === 'settings') { if (S.boot) { S.boot.settings = msg.settings; render(); } }
       else if (msg.type === 'command') onCommand(msg);
+      else if (msg.type === 'notice') showToast(msg.text);
     };
   }
 
@@ -183,7 +185,9 @@
   function liveKey() {
     var e = eng();
     var au = audioState();
-    return [e.asset_id, e.pending_id, e.paused, e.jumping, e.error, e.vmix_ok, e.default_ok, e.mix, au.asset_id, au.pending_id, au.paused, S.status && S.status.server_online].join('|');
+    return [e.asset_id, e.pending_id, e.paused, e.jumping, e.error, e.vmix_ok, e.default_ok, e.mix, au.asset_id, au.pending_id, au.paused, S.status && S.status.server_online,
+      JSON.stringify((S.status && S.status.controls || []).map(function (c) { return c.set_id; })),
+      JSON.stringify((S.status && S.status.requests || []).map(function (c) { return c.set_id; }))].join('|');
   }
 
   function onStatus(msg) {
@@ -382,15 +386,28 @@
     html += installButton() + fullscreenButton();
     html += '</div></header>';
 
+    ((S.status && S.status.requests) || []).forEach(function (r) {
+      html += '<div class="access-req" role="alert">' + ICON.phone + '<span><strong>' + h(r.guest || r.by) + '</strong> asks to control the screen from their phone (only their own files).</span>' +
+        '<button type="button" class="btn primary" data-act="control" data-set="' + r.set_id + '" data-on="1">Give control</button>' +
+        '<button type="button" class="btn" data-act="control" data-set="' + r.set_id + '" data-on="0">Decline</button></div>';
+    });
     html += '<nav class="nav" aria-label="Filter by guest"><div class="chips">';
     var total = itemsBackAll();
     html += '<button type="button" class="chip" data-act="chip" data-set="all" aria-pressed="' + (ui.set === 'all') + '">All guests <span class="count">' + total + '</span></button>';
     sets().forEach(function (set) {
       var onPulpit = pSet && pSet.id === set.id;
       html += '<button type="button" class="chip" data-act="chip" data-set="' + set.id + '" aria-pressed="' + (ui.set === set.id) + '">' + h(set.guest || set.title) +
-        ' <span class="count">' + set.items.filter(function (id) { return asset(id); }).length + '</span>' + (onPulpit ? ICON.pulpit : '') + '</button>';
+        ' <span class="count">' + set.items.filter(function (id) { return asset(id); }).length + '</span>' + (onPulpit ? ICON.pulpit : '') +
+        (hasControl(set.id) ? '<span class="ctl" title="Controls the screen from their phone">' + ICON.phone + '</span>' : '') + '</button>';
     });
     html += '</div>';
+    if (ui.set !== 'all' && setById(ui.set)) {
+      var g = setById(ui.set).guest || 'this guest';
+      var on = hasControl(ui.set);
+      html += '<button type="button" class="btn ' + (on ? 'live-ctl' : '') + '" data-act="control" data-set="' + ui.set + '" data-on="' + (on ? '0' : '1') + '" title="' +
+        (on ? 'Take back control from ' + h(g) : 'Let ' + h(g) + ' show their own files from their phone, until midnight') + '">' + ICON.phone + ' ' +
+        (on ? 'Take control back' : 'Give control to ' + h(g)) + '</button>';
+    }
     if (pulpits().length) {
       var canSend = ui.set !== 'all' && (!pSet || pSet.id !== ui.set);
       var label = 'Pick a guest to send';
@@ -735,11 +752,17 @@
   document.addEventListener('fullscreenchange', function () { render(); });
   document.addEventListener('webkitfullscreenchange', function () { render(); });
 
+  function hasControl(setId) {
+    var list = (S.status && S.status.controls) || [];
+    return list.some(function (c) { return c.set_id === setId; });
+  }
+
   function act(name, data) {
     var id = data.id ? parseInt(data.id, 10) : 0;
     var e = eng();
     switch (name) {
       case 'fullscreen': toggleFullscreen(); break;
+      case 'control': post('/api/control', { set_id: parseInt(data.set, 10), on: data.on === '1' }); break;
       case 'install': addToHomeScreen(); break;
       case 'install-close': ui.install = false; render(); break;
       case 'tap': tap(id); break;

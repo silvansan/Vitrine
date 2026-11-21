@@ -74,6 +74,17 @@ Companion: `GET /api/companion/state`, `POST /api/companion/settings|pair|sync|t
 
 Integrations (Bitfocus Companion module): API keys `vik_…` created at `GET|POST /api/companion/keys` and revoked at `POST /api/companion/keys/{id}/delete` (loopback only; the hash is kept in `state.json`). A key is accepted as `Authorization: Bearer` or `?key=` and acts as a back screen. `/api/take` also takes `{guest, file, from}` and `/api/pulpit` takes `{guest}`, both 1-based in the order the tablets show.
 
+## Guest control through the server
+
+A guest's tablet view (`/g/<token>/screen/`) is served by the server, so it works off the venue network. The agent's WebSocket to the server (`/ws/agent/`, which also carries sync notices) is used both ways:
+
+- **Live state, agent → server**: every 0.5 s when it changes (at least every 15 s) the agent sends `{"type":"live", engine, controls:[set ids], requests:[set ids], service_id}`. The server keeps it in the cache (`vitrine:live:<agent id>`, 60 s), which is why the server needs `REDIS_URL` with more than one process.
+- **Commands, server → agent**: `POST /g/<token>/api/live/<take|clear|pause|play|seek|stop_audio|request_access|cancel_request>` (PIN-protected like the rest of the guest link) checks that the agent is online, that its active event is the guest's, that the guest has control (except for request/cancel) and that the file is in their set; then it sends `{"type":"command", id, action, set_id, asset_id, start_ms, position_ms, by}` to the channel group `agent-<id>` and waits up to 4 s for `{"type":"command_result", id, ok, error}`.
+- **The agent decides**: grants live in its `state.json` (`controls`: set id → end of day), requests only in memory (10 minutes). It checks the grant again, refuses files outside the set, and refuses clear/pause/seek unless what is live is the guest's own. The back tablet gives or takes control with `POST /api/control {set_id, on}` (back role only); requests and grants are part of the tablet `state` message, and each action is announced with a `notice` message.
+- `GET /g/<token>/api/live` returns `{online, here, control, requested, live, audio, other_on_screen}`; `live`/`audio` are only filled in for the guest's own files.
+
+Permanent tablet link: each location has a random `tablet_slug`; `/t/<slug>/` redirects to `http://<agent lan_ip>:<port>/screen` from the agent's last heartbeat, or answers 503 with a page that refreshes itself.
+
 ## Running the agent elsewhere
 
 Everything vMix-related goes through `vmix_url`, so the agent can run on a second PC. vMix then plays files from a path it must be able to read (a share mapped to the same path as `media_dir`). Local disk on the vMix PC is safer for video, which is why the default is to run the agent on the vMix PC.
