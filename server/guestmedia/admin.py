@@ -51,7 +51,7 @@ class PersonAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    list_display = ["name", "date", "location", "is_active", "auto_approve"]
+    list_display = ["name", "starts_on", "ends_on", "location", "is_active", "auto_approve"]
     list_filter = ["is_active", "location"]
     inlines = [GuestInline]
 

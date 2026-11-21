@@ -346,10 +346,10 @@ class OrganizationTests(TestCase):
         self.geneva = Location.objects.create(organization=self.org, name="Geneva", agent=self.geneva_agent)
         self.zt = {"HTTP_AUTHORIZATION": f"Bearer {zt}"}
         self.gt = {"HTTP_AUTHORIZATION": f"Bearer {gt}"}
-        self.z_today = Service.objects.create(name="Zurich today", date=today, location=self.zurich)
-        self.g_next_week = Service.objects.create(name="Geneva", date=today + timedelta(days=7), location=self.geneva)
-        self.g_far = Service.objects.create(name="Geneva later", date=today + timedelta(days=60), location=self.geneva)
-        self.z_old = Service.objects.create(name="Zurich old", date=today - timedelta(days=10), location=self.zurich)
+        self.z_today = Service.objects.create(name="Zurich today", starts_on=today, ends_on=today, location=self.zurich)
+        self.g_next_week = Service.objects.create(name="Geneva", starts_on=today + timedelta(days=7), ends_on=today + timedelta(days=7), location=self.geneva)
+        self.g_far = Service.objects.create(name="Geneva later", starts_on=today + timedelta(days=60), ends_on=today + timedelta(days=60), location=self.geneva)
+        self.z_old = Service.objects.create(name="Zurich old", starts_on=today - timedelta(days=10), ends_on=today - timedelta(days=10), location=self.zurich)
         self.maria = Person.objects.create(organization=self.org, name="Maria")
         self.photo = MediaAsset.objects.create(
             owner_name="Maria", uploaded_by=self.maria, organization=self.org, original_name="a.jpg", kind="photo",
@@ -428,7 +428,7 @@ class OrganizationTests(TestCase):
         self.client.post(f"/manage/people/{self.maria.pk}/", {"action": "add_event", "event_id": self.g_next_week.pk})
         self.assertTrue(Guest.objects.filter(person=self.maria, service=self.g_next_week).exists())
         # Creating an event needs one of our locations.
-        response = self.client.post("/manage/", {"name": "Youth night", "date": timezone.localdate().isoformat(), "location": self.zurich.pk, "is_active": "on"})
+        response = self.client.post("/manage/", {"name": "Youth night", "starts_on": timezone.localdate().isoformat(), "location": self.zurich.pk, "is_active": "on"})
         self.assertEqual(response.status_code, 302)
 
 
@@ -553,7 +553,7 @@ class AlertTests(TestCase):
         Agent.objects.filter(pk=self.agent.pk).update(last_seen=timezone.now() - timedelta(minutes=30))
         check_agents()
         self.assertEqual(self.sent, [])  # no event soon: stay quiet
-        Service.objects.create(name="Sunday", date=timezone.localdate() + timedelta(days=1), location=self.location)
+        Service.objects.create(name="Sunday", starts_on=timezone.localdate() + timedelta(days=1), ends_on=timezone.localdate() + timedelta(days=1), location=self.location)
         check_agents()
         check_agents()
         self.assertEqual(len(self.sent), 1)
@@ -565,7 +565,7 @@ class AlertTests(TestCase):
     def test_ready_for_tomorrow(self):
         from .tasks import check_sync
 
-        event = Service.objects.create(name="Sunday", date=timezone.localdate() + timedelta(days=1), location=self.location)
+        event = Service.objects.create(name="Sunday", starts_on=timezone.localdate() + timedelta(days=1), ends_on=timezone.localdate() + timedelta(days=1), location=self.location)
         guest = make_guest(event, "Maria")
         asset = MediaAsset.objects.create(owner_name="Maria", organization=self.org, original_name="a.jpg", kind="photo",
                                           status="ready", approval="approved", sha256="x")
@@ -608,3 +608,47 @@ class BackupTests(TransactionTestCase):
         self.assertTrue(run.ok, run.log)
         self.assertTrue((dest / "media" / "library" / "a.jpg").exists())
         self.assertEqual(len(list((dest / "db").iterdir())), 1)
+
+
+class EventPeriodTests(TestCase):
+    """Events can last several days, or have no start and/or no end."""
+
+    def setUp(self):
+        self.org = Organization.objects.create(name="Main")
+        self.agent, raw = Agent.create_with_token("PC")
+        self.auth = {"HTTP_AUTHORIZATION": f"Bearer {raw}"}
+        self.loc = Location.objects.create(organization=self.org, name="Hall", agent=self.agent)
+        self.today = timezone.localdate()
+
+    def names(self):
+        return [s["name"] for s in self.client.get("/api/agent/manifest", **self.auth).json()["services"]]
+
+    def test_periods_in_the_agent_window(self):
+        d = lambda n: self.today + timedelta(days=n)  # noqa: E731
+        Service.objects.create(name="Conference", starts_on=d(-1), ends_on=d(1), location=self.loc)
+        Service.objects.create(name="Always", starts_on=None, ends_on=None, location=self.loc)
+        Service.objects.create(name="Until next week", starts_on=None, ends_on=d(7), location=self.loc)
+        Service.objects.create(name="From next month", starts_on=d(40), ends_on=None, location=self.loc)
+        Service.objects.create(name="Over", starts_on=d(-10), ends_on=d(-3), location=self.loc)
+        Service.objects.create(name="Next week", starts_on=d(5), ends_on=d(5), location=self.loc)
+        names = self.names()
+        self.assertEqual(set(names), {"Conference", "Always", "Until next week", "Next week"})
+        self.assertEqual(names[-1], "Next week")  # events on today come first
+        conf = Service.objects.get(name="Conference")
+        self.assertIn("–", conf.when)
+        self.assertEqual(Service.objects.get(name="Always").when, "ongoing")
+        self.assertTrue(Service.objects.get(name="From next month").when.startswith("from"))
+
+    def test_person_page_and_form(self):
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        self.client.login(username="admin", password="pw")
+        r = self.client.post("/manage/", {"name": "Meetings", "starts_on": self.today.isoformat(),
+                                          "ends_on": (self.today - timedelta(days=1)).isoformat(), "location": self.loc.pk})
+        self.assertContains(r, "The end is before the start")
+        r = self.client.post("/manage/", {"name": "Meetings", "starts_on": self.today.isoformat(),
+                                          "ends_on": (self.today + timedelta(days=2)).isoformat(), "location": self.loc.pk, "is_active": "on"})
+        self.assertEqual(r.status_code, 302)
+        event = Service.objects.get(name="Meetings")
+        guest = make_guest(event, "Maria")
+        self.assertEqual(guest.person.current_participation(), guest)
+        self.assertContains(self.client.get(f"/g/{guest.token}/"), event.short_when)

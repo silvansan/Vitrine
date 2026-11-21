@@ -40,9 +40,19 @@ from .tasks import delete_asset_files, process_asset
 class EventForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ["name", "date", "location", "is_active", "auto_approve"]
-        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
-        labels = {"is_active": "Active"}
+        fields = ["name", "starts_on", "ends_on", "location", "is_active", "auto_approve"]
+        widgets = {
+            "starts_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "ends_on": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+        }
+        labels = {"is_active": "Active", "starts_on": "From", "ends_on": "Until"}
+
+    def clean(self):
+        data = super().clean()
+        start, end = data.get("starts_on"), data.get("ends_on")
+        if start and end and end < start:
+            self.add_error("ends_on", "The end is before the start.")
+        return data
 
     def __init__(self, *args, org=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -63,7 +73,8 @@ def org_events(org):
 
 def upcoming_events(org):
     yesterday = timezone.localdate() - timedelta(days=1)
-    return org_events(org).filter(date__gte=yesterday).order_by("date", "id")
+    today = timezone.localdate()
+    return sorted(org_events(org).not_over(yesterday), key=lambda e: e.sort_key(today))
 
 
 def add_to_event(person, event):
@@ -105,11 +116,20 @@ def dashboard(request):
             messages.success(request, f"Created {event}.")
             return redirect("manage-service", event.pk)
     else:
-        form = EventForm(org=org, initial={"location": org.locations.first()})
+        today = timezone.localdate()
+        form = EventForm(org=org, initial={"location": org.locations.first(), "starts_on": today, "ends_on": today})
     events = org_events(org).annotate(guest_count=Count("guests", distinct=True))
     location = request.GET.get("location", "")
     if location.isdigit():
         events = events.filter(location_id=int(location))
+    today = timezone.localdate()
+    events = list(events[:120])
+    for e in events:
+        e.on_today = e.is_on(today) and e.starts_on is not None
+        e.past = e.is_past(today)
+    # Running and coming events first (today's on top), then past ones, newest first.
+    current = sorted([e for e in events if not e.past], key=lambda e: e.sort_key(today))
+    events = current + [e for e in events if e.past]
     unplaced = Service.objects.filter(location__isnull=True) if request.user.is_superuser else Service.objects.none()
     pending = (
         MediaAsset.objects.filter(approval=MediaAsset.APPROVAL_PENDING, organization=org)
@@ -124,7 +144,7 @@ def dashboard(request):
         {
             "backup_warning": request.user.is_superuser and (not backup.enabled() or backup.is_stale()),
             "backup_enabled": backup.enabled(),
-            "events": events[:80],
+            "events": events,
             "unplaced": unplaced,
             "form": form,
             "pending": pending,
@@ -219,7 +239,10 @@ def people(request):
     yesterday = timezone.localdate() - timedelta(days=1)
     rows = list(everyone[:300])
     upcoming = {}
-    for g in Guest.objects.filter(person__in=rows, service__date__gte=yesterday).select_related("service__location").order_by("service__date"):
+    upcoming_guests = Guest.objects.filter(person__in=rows).filter(
+        Q(service__ends_on__isnull=True) | Q(service__ends_on__gte=yesterday)
+    ).select_related("service__location").order_by("service__starts_on")
+    for g in upcoming_guests:
         upcoming.setdefault(g.person_id, []).append(g.service)
     for person in rows:
         person.upcoming = upcoming.get(person.pk, [])

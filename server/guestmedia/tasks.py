@@ -127,9 +127,8 @@ def _event_soon(location):
     from .models import Service
 
     today = timezone.localdate()
-    return Service.objects.filter(
-        location=location, is_active=True, date__gte=today, date__lte=today + timedelta(days=1)
-    ).order_by("date").first()
+    events = Service.objects.filter(location=location, is_active=True).overlapping(today, today + timedelta(days=1))
+    return min(events, key=lambda e: e.sort_key(today), default=None)
 
 
 @shared_task
@@ -149,7 +148,7 @@ def check_agents():
                     org,
                     f"{location.name}: vMix PC offline",
                     f"The Vitrine agent at {location.name} hasn't been in touch since "
-                    f"{timezone.localtime(agent.last_seen):%H:%M} ({event.name}, {event.date:%a %d %b} is coming up).\n"
+                    f"{timezone.localtime(agent.last_seen):%H:%M} ({event.name}, {event.when}).\n"
                     "Tablets keep working on the local network, but new uploads won't arrive. "
                     "Check that the PC is on and has internet.",
                 )
@@ -175,7 +174,7 @@ def sync_report(location, event):
     pending = MediaAsset.objects.filter(
         set_items__media_set__service=event, approval=MediaAsset.APPROVAL_PENDING
     ).distinct().count()
-    when = f"{event.name}, {event.date:%a %d %b}"
+    when = f"{event.name}, {event.when}"
     if agent is None:
         return False, f"{when}: {location.name} has no vMix PC (agent) yet, so nothing is downloaded."
     if not agent.is_online:
@@ -198,7 +197,8 @@ def check_sync():
     from .models import Service
 
     tomorrow = timezone.localdate() + timedelta(days=1)
-    events = Service.objects.filter(is_active=True, date=tomorrow, location__isnull=False).select_related(
+    # Events that start tomorrow (a several-day event is checked the day before it starts).
+    events = Service.objects.filter(is_active=True, starts_on=tomorrow, location__isnull=False).select_related(
         "location__agent", "location__organization"
     )
     for event in events:

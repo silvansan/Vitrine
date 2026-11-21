@@ -43,13 +43,10 @@ def events_for(agent):
     if location is None:
         return []
     today = timezone.localdate()
-    events = Service.objects.filter(
-        location=location,
-        is_active=True,
-        date__gte=today - timedelta(days=1),
-        date__lte=today + timedelta(days=settings.VITRINE_PRESYNC_DAYS),
-    ).order_by("date", "id")
-    return sorted(events, key=lambda e: (e.date < today, e.date, e.id))
+    events = Service.objects.filter(location=location, is_active=True).overlapping(
+        today - timedelta(days=1), today + timedelta(days=settings.VITRINE_PRESYNC_DAYS)
+    )
+    return sorted(events, key=lambda e: e.sort_key(today))
 
 
 def build_manifest(agent):
@@ -92,7 +89,16 @@ def build_manifest(agent):
         ),
         "pubkey": public_key_b64(),
         "services": [
-            {"id": s.pk, "name": s.name, "date": s.date.isoformat()} for s in services
+            {
+                "id": s.pk,
+                "name": s.name,
+                # "date" is the start, kept for agents before 0.1.9.
+                "date": s.starts_on.isoformat() if s.starts_on else "",
+                "ends_on": s.ends_on.isoformat() if s.ends_on else "",
+                "when": s.when,
+                "short_when": s.short_when,
+            }
+            for s in services
         ],
         "sets": set_entries,
         "assets": [asset_entry(a) for a in assets],

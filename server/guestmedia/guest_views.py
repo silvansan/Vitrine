@@ -54,7 +54,7 @@ def read_json(request):
 
 def event_label(event):
     where = f" · {event.location.name}" if event.location_id else ""
-    return f"{event.name} · {event.date:%d %b}{where}"
+    return f"{event.name} · {event.short_when}{where}"
 
 
 def asset_for_guest(asset, guest):
@@ -112,9 +112,9 @@ def page(request, token):
             "event_label": event_label(guest.service),
             "events": [
                 {"id": g.service_id, "label": event_label(g.service), "current": g.pk == guest.pk}
-                for g in person.participations()
-                if g.service.date >= timezone.localdate() - timedelta(days=1) or g.pk == guest.pk
-            ],
+                for g in person.upcoming_participations()
+            ] + ([] if any(g.pk == guest.pk for g in person.upcoming_participations())
+                 else [{"id": guest.service_id, "label": event_label(guest.service), "current": True}]),
             "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
             "on_device": pins.device_for(request, person) is not None,
         },
@@ -181,7 +181,7 @@ def previous_set(guest):
         .exclude(guest=guest)
         .filter(items__isnull=False)
         .select_related("service")
-        .order_by("-service__date", "-service_id")
+        .order_by("-service__starts_on", "-service_id")
         .distinct()
         .first()
     )
@@ -223,7 +223,13 @@ def api_state(request, token):
     return JsonResponse(
         {
             "guest": {"name": person.name, "can_upload": person.can_upload, "can_browse": person.can_browse},
-            "service": {"id": guest.service_id, "name": guest.service.name, "date": guest.service.date.isoformat()},
+            "service": {
+                "id": guest.service_id,
+                "name": guest.service.name,
+                "starts_on": guest.service.starts_on.isoformat() if guest.service.starts_on else None,
+                "ends_on": guest.service.ends_on.isoformat() if guest.service.ends_on else None,
+                "when": guest.service.when,
+            },
             "set": my_set,
             "library": library,
             "previous_set": (

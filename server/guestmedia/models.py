@@ -188,14 +188,21 @@ class Person(models.Model):
         return self.link_for()
 
     def participations(self):
-        return self.guests.select_related("service", "service__location").order_by("service__date", "service_id")
+        return self.guests.select_related("service", "service__location").order_by("service__starts_on", "service_id")
+
+    def upcoming_participations(self):
+        """Events that aren't over (from yesterday on), today's first."""
+        yesterday = timezone.localdate() - timedelta(days=1)
+        today = timezone.localdate()
+        guests = [g for g in self.participations() if not g.service.is_past(yesterday)]
+        return sorted(guests, key=lambda g: g.service.sort_key(today))
 
     def current_participation(self):
-        """The event to show by default: the next active one from yesterday on, else the latest."""
-        yesterday = timezone.localdate() - timedelta(days=1)
-        upcoming = self.participations().filter(service__is_active=True, service__date__gte=yesterday)
-        today = upcoming.filter(service__date__gte=timezone.localdate()).first()
-        return today or upcoming.first() or self.participations().order_by("-service__date", "-service_id").first()
+        """The event to show by default: one that is on today, else the next one, else the latest."""
+        active = [g for g in self.upcoming_participations() if g.service.is_active]
+        if active:
+            return active[0]
+        return self.participations().order_by("-service__starts_on", "-service_id").first()
 
 
 class PersonDevice(models.Model):
@@ -225,6 +232,19 @@ class PersonAlias(models.Model):
         return f"{self.person.name} ({self.token[:6]}…)"
 
 
+class ServiceQuerySet(models.QuerySet):
+    def not_over(self, day):
+        """Events that haven't ended before this day."""
+        return self.filter(models.Q(ends_on__isnull=True) | models.Q(ends_on__gte=day))
+
+    def overlapping(self, first, last):
+        """Events that are on at some point between first and last (inclusive)."""
+        return self.filter(
+            (models.Q(starts_on__isnull=True) | models.Q(starts_on__lte=last))
+            & (models.Q(ends_on__isnull=True) | models.Q(ends_on__gte=first))
+        )
+
+
 class Service(models.Model):
     """An event: a date at a location (called "service" in code and in the agent protocol)."""
 
@@ -233,11 +253,16 @@ class Service(models.Model):
         help_text="The agent of this location shows the event and downloads its files ahead of time.",
     )
     name = models.CharField(max_length=200)
-    date = models.DateField(default=timezone.localdate)
+    # A single day, several days (e.g. a 3-day conference), open-ended (only a start or
+    # only an end) or ongoing (neither).
+    starts_on = models.DateField(null=True, blank=True, default=timezone.localdate, help_text="Empty: already running.")
+    ends_on = models.DateField(null=True, blank=True, help_text="Empty: no end. Same as the start for a one-day event.")
     is_active = models.BooleanField(
         default=True,
-        help_text="Active events from yesterday to the next days are sent to their location's agent.",
+        help_text="Active events that are on, or start within the next days, are sent to their location's agent.",
     )
+
+    objects = ServiceQuerySet.as_manager()
     auto_approve = models.BooleanField(
         default=False,
         help_text="Skip the approval queue for uploads from this event's people.",
@@ -245,12 +270,58 @@ class Service(models.Model):
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-date", "-id"]
+        ordering = ["-starts_on", "-id"]
         verbose_name = "event"
 
     def __str__(self):
         where = f" · {self.location.name}" if self.location_id else ""
-        return f"{self.name} · {self.date:%d %b %Y}{where}"
+        return f"{self.name} · {self.when}{where}"
+
+    def is_on(self, day):
+        return (self.starts_on is None or self.starts_on <= day) and (self.ends_on is None or self.ends_on >= day)
+
+    def is_past(self, day):
+        return self.ends_on is not None and self.ends_on < day
+
+    @property
+    def when(self):
+        """'Sun 29 Nov 2026', '27–29 Nov 2026', 'from 27 Nov 2026', 'until 29 Nov 2026' or 'ongoing'."""
+        start, end = self.starts_on, self.ends_on
+        if start and end:
+            if start == end:
+                return f"{start:%a} {start.day} {start:%b %Y}"
+            if (start.year, start.month) == (end.year, end.month):
+                return f"{start.day}–{end.day} {end:%b %Y}"
+            if start.year == end.year:
+                return f"{start.day} {start:%b} – {end.day} {end:%b %Y}"
+            return f"{start.day} {start:%b %Y} – {end.day} {end:%b %Y}"
+        if start:
+            return f"from {start.day} {start:%b %Y}"
+        if end:
+            return f"until {end.day} {end:%b %Y}"
+        return "ongoing"
+
+    @property
+    def short_when(self):
+        """Like when, without years: for menus and chips."""
+        start, end = self.starts_on, self.ends_on
+        if start and end:
+            if start == end:
+                return f"{start:%a} {start.day} {start:%b}"
+            if (start.year, start.month) == (end.year, end.month):
+                return f"{start.day}–{end.day} {end:%b}"
+            return f"{start.day} {start:%b} – {end.day} {end:%b}"
+        if start:
+            return f"from {start.day} {start:%b}"
+        if end:
+            return f"until {end.day} {end:%b}"
+        return "ongoing"
+
+    def sort_key(self, today):
+        """Happening today first, then by start (no start counts as already started)."""
+        from datetime import date
+
+        return (not self.is_on(today), self.starts_on or date.min, self.id)
 
     @property
     def organization(self):

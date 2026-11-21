@@ -2,7 +2,7 @@
 {% block title %}{{ service.name }}{% endblock %}
 {% block content %}
 <div class="row-head">
-  <h1>{{ service.name }} <span class="muted">· {{ service.date|date:"D d M Y" }}{% if service.location %} · {{ service.location.name }}{% endif %}</span></h1>
+  <h1>{{ service.name }} <span class="muted">· {{ service.when }}{% if service.location %} · {{ service.location.name }}{% endif %}</span></h1>
 </div>
 {% if not service.location %}<p class="error">This event has no location, so no agent receives it. Choose one below.</p>
 {% elif not service.location.agent %}<p class="error">{{ service.location.name }} has no agent yet: <a href="{% url 'manage-agents' %}">add its vMix PC</a>.</p>{% endif %}

@@ -8,10 +8,10 @@ The tablets show the location's name and the event they are on (e.g. *Vitrine ·
 
 - An **organization** has its staff, people, locations and library. With more than one, pick the one you work in at the top left of `/manage/`.
 - A **location** is a venue or hall with one vMix PC (its agent): **Locations & tablets**.
-- An **event** is a date at a location (it used to be called "service").
+- An **event** happens at a location over a period: **From** and **Until**. One day (both the same, the default), several days (a 3-day conference is *one* event), only a start (runs until you stop it), or neither (an ongoing event, e.g. "Sunday services"). It used to be called "service" and had one date.
 - A **person** has **one permanent link** for every event. Their uploads, markers and library follow them to any location you add them to. Their link opens their next event; if they are in several, they switch at the top of the page.
 
-The agent of a location receives its active events from yesterday up to two weeks ahead (`VITRINE_PRESYNC_DAYS`) and downloads their files **before the day**. Add someone to next month's event in Geneva and their files are on the Geneva vMix PC as soon as that event is within the window.
+The agent of a location receives its active events that are on, ended yesterday, or start within the next two weeks (`VITRINE_PRESYNC_DAYS`), and downloads their files **before the day**. Events that are on today come first, so the tablets open on them. The "ready for tomorrow?" alert runs the day before an event starts. Add someone to next month's event in Geneva and their files are on the Geneva vMix PC as soon as that event is within the window.
 
 ## Links are protected by a PIN
 
@@ -29,7 +29,7 @@ Every person has a 6-digit **PIN** next to their link (event page and person pag
 ## Before an event (backend, `/manage/`)
 
 1. **Locations & tablets → Add a location**, then **Create agent token** for its vMix PC (once per venue).
-2. **Events → New event** (name, date, location). Keep it **active** so the location's agent receives it. Tick **auto-approve** only for events where you trust every person.
+2. **Events → New event** (name, From / Until, location). Clear *Until* for an event without an end, both for an ongoing one. Keep it **active** so the location's agent receives it. Tick **auto-approve** only for events where you trust every person.
 3. **Add people** on the event page: pick someone you already know or create a new person. **Copy link**, or print/show the QR. **Open their set here** lets you fill a set for someone. **People** lists everyone with their upcoming events; a person's page has **New link** (the old one stops working), **Add to** another event, and their uploads.
 4. People open their link on their phone:
    - **Use it**: when their set for this event is empty, they can start from their set of an earlier event.

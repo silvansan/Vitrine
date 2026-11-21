@@ -13,7 +13,7 @@
     {% csrf_token %}
     {{ form.as_p }}
     {% if events %}
-    <p><label>Add to event <select name="event_id"><option value="">Not yet</option>{% for e in events %}<option value="{{ e.pk }}">{{ e.name }} · {{ e.date|date:"d M" }} · {{ e.location.name }}</option>{% endfor %}</select></label></p>
+    <p><label>Add to event <select name="event_id"><option value="">Not yet</option>{% for e in events %}<option value="{{ e.pk }}">{{ e.name }} · {{ e.short_when }} · {{ e.location.name }}</option>{% endfor %}</select></label></p>
     {% endif %}
     <button class="btn primary" type="submit">Create link</button>
   </form>
@@ -26,7 +26,7 @@
     {% for p in people %}
       <tr>
         <td><a href="{% url 'manage-person' p.pk %}">{{ p.name }}</a>{% if p.is_expired %} <span class="pill warn">Expired</span>{% endif %}</td>
-        <td><div class="chips">{% for e in p.upcoming %}<a class="chip" href="{% url 'manage-service' e.pk %}">{{ e.date|date:"d M" }} · {{ e.location.name|default:"no location" }}</a>{% empty %}<span class="muted">—</span>{% endfor %}</div></td>
+        <td><div class="chips">{% for e in p.upcoming %}<a class="chip" href="{% url 'manage-service' e.pk %}">{{ e.short_when }} · {{ e.location.name|default:"no location" }}</a>{% empty %}<span class="muted">—</span>{% endfor %}</div></td>
         <td>{{ p.event_count }}</td>
         <td>{{ p.upload_count }}</td>
       </tr>

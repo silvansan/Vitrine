@@ -83,7 +83,7 @@ C:\ProgramData\Vitrine\thumbs\                     tablet thumbnails and filmstr
 C:\ProgramData\Vitrine\state.json                  settings, tablets, last manifest, positions
 ```
 
-The agent receives the active events of its location from yesterday up to `VITRINE_PRESYNC_DAYS` (14) days ahead and downloads their files ahead of time. Files that leave all of them are removed at the next sync (unless they're on air). Moving this PC to another venue: in the backend, assign its agent to that location (**Locations & tablets**); nothing changes on the PC.
+The agent receives the active events of its location that are on now (a several-day or ongoing event counts every day), ended yesterday, or start within `VITRINE_PRESYNC_DAYS` (14) days, and downloads their files ahead of time. Files that leave all of them are removed at the next sync (unless they're on air). Moving this PC to another venue: in the backend, assign its agent to that location (**Locations & tablets**); nothing changes on the PC.
 
 ## Testing without vMix
 

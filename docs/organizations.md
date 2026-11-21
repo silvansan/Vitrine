@@ -14,7 +14,7 @@ The server becomes the main hub: it keeps the database and the files and convert
 |---|---|---|
 | **Organization** | A team with its own staff accounts, library and people. Not separate customers: organizations can share media with each other. | (none: one implicit organization) |
 | **Location** | One venue or hall. **A location is one agent, which is one vMix PC**, with its default input and transition settings. | the single agent |
-| **Event** | A date at a location, with the sets that will be used there. | "service" |
+| **Event** | A period at a location (one day, several days, open-ended or ongoing), with the sets that will be used there. | "service" (one date) |
 | **Person** | Someone who brings media. Belongs to the organization and **roams**: one permanent link, one library, used at any event and any location. | "guest" (per service) |
 | **Tablet** | A back or pulpit tablet. Stays with its location and talks to that agent over the LAN. Several back tablets per location are fine (e.g. two technicians). | same |
 

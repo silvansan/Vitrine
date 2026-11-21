@@ -51,7 +51,7 @@
 
     if (editing) return;
     $('service').innerHTML = (data.services || []).map(function (sv) {
-      return option(sv.id, sv.name + ' · ' + sv.date, data.service && data.service.id === sv.id);
+      return option(sv.id, sv.name + ' · ' + (sv.short_when || sv.date), data.service && data.service.id === sv.id);
     }).join('') || option(0, 'No active service on the server', true);
 
     $('mix').innerHTML = data.mixes.map(function (m) { return option(m, m === 1 ? 'Main output' : 'Mix ' + m, s.mix === m); }).join('');

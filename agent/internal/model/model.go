@@ -29,7 +29,12 @@ type AgentInfo struct {
 type Service struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
-	Date string `json:"date"`
+	// Start date ("" = already running). Events can last several days.
+	Date   string `json:"date"`
+	EndsOn string `json:"ends_on"`
+	// Ready-made labels from the server: "27–29 Nov 2026" / "27–29 Nov", "ongoing".
+	When      string `json:"when"`
+	ShortWhen string `json:"short_when"`
 }
 
 // Set is one guest's ordered list of files for a service.

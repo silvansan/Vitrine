@@ -67,12 +67,12 @@
 <section class="card">
   <h2>Events</h2>
   <table class="table">
-    <thead><tr><th>Event</th><th>Date</th><th>Location</th><th>Files in set</th><th></th></tr></thead>
+    <thead><tr><th>Event</th><th>When</th><th>Location</th><th>Files in set</th><th></th></tr></thead>
     <tbody>
     {% for g in participations %}
       <tr>
         <td><a href="{% url 'manage-service' g.service.pk %}">{{ g.service.name }}</a></td>
-        <td>{{ g.service.date|date:"D d M Y" }}{% if g.service.date == today %} <span class="pill warn">Today</span>{% endif %}</td>
+        <td>{{ g.service.when }}</td>
         <td>{{ g.service.location.name|default:"—" }}</td>
         <td>{% for s in g.sets.all %}{{ s.items.all|length }}{% empty %}0{% endfor %}</td>
         <td><form method="post" class="inline" onsubmit="return confirm('Remove from this event?')">{% csrf_token %}<input type="hidden" name="action" value="remove_event"><input type="hidden" name="guest_id" value="{{ g.pk }}"><button class="btn small danger" type="submit">Remove</button></form></td>
@@ -85,7 +85,7 @@
   {% if events %}
   <form method="post" class="inline-form" style="margin-top:12px">
     {% csrf_token %}<input type="hidden" name="action" value="add_event">
-    <label>Add to <select name="event_id">{% for e in events %}<option value="{{ e.pk }}">{{ e.name }} · {{ e.date|date:"D d M" }} · {{ e.location.name }}</option>{% endfor %}</select></label>
+    <label>Add to <select name="event_id">{% for e in events %}<option value="{{ e.pk }}">{{ e.name }} · {{ e.short_when }} · {{ e.location.name }}</option>{% endfor %}</select></label>
     <button class="btn primary" type="submit">Add</button>
   </form>
   <p class="muted">That location's agent downloads {{ person.name }}'s files before the day, once they are approved and converted.</p>

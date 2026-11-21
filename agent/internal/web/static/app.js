@@ -344,6 +344,7 @@
   // the server sent; "Automatic" follows today's (or the next) event.
   function eventLabel(s) {
     if (!s) return 'No upcoming event';
+    if (s.short_when) return s.name + ' · ' + s.short_when;
     var d = s.date ? new Date(s.date + 'T12:00:00') : null;
     var when = d && !isNaN(d) ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '';
     return s.name + (when ? ' · ' + when : '');
