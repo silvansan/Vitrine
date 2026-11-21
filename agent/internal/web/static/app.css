@@ -230,3 +230,8 @@ fieldset.box legend { padding: 0 6px; }
 .text-input { height: 48px; border-radius: 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border2); padding: 0 14px; font: inherit; font-size: 16px; }
 .mk-group { display: inline-flex; align-items: center; gap: 2px; }
 .mk-del { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--muted); cursor: pointer; }
+/* Event and location in the headers */
+.head .title .loc { font-weight: 500; color: var(--muted); }
+.event-pick select { margin-top: 2px; max-width: 46vw; font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; }
+.p-sub { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

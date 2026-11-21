@@ -340,6 +340,27 @@
     return { cls: '', text: 'Default · ' + (settings().default_input_title || e.mix_active || 'not set') };
   }
 
+  // "Youth night · Tue 25 Nov". The back tablet can switch between the upcoming events
+  // the server sent; "Automatic" follows today's (or the next) event.
+  function eventLabel(s) {
+    if (!s) return 'No upcoming event';
+    var d = s.date ? new Date(s.date + 'T12:00:00') : null;
+    var when = d && !isNaN(d) ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+    return s.name + (when ? ' · ' + when : '');
+  }
+
+  function eventPicker(service) {
+    var list = S.boot.services || [];
+    if (list.length < 2) return '<div class="sub">' + h(eventLabel(service)) + '</div>';
+    var pinned = S.boot.service_pinned;
+    var html = '<label class="event-pick"><span class="sr-only">Event</span><select data-change="event">';
+    html += '<option value="0"' + (pinned ? '' : ' selected') + '>Automatic: ' + h(eventLabel(pinned ? list[0] : service)) + '</option>';
+    list.forEach(function (s) {
+      html += '<option value="' + s.id + '"' + (pinned && service && service.id === s.id ? ' selected' : '') + '>' + h(eventLabel(s)) + '</option>';
+    });
+    return html + '</select></label>';
+  }
+
   function renderBack() {
     var e = eng();
     var st = S.status || {};
@@ -347,7 +368,7 @@
     var service = S.boot.service;
     var pSet = firstPulpitSet();
     var pOnline = pulpits().some(function (p) { return p.online; });
-    html += '<header class="head"><div><div class="title">Vitrine</div><div class="sub">' + h(service ? service.name : 'No active service') + '</div></div><div class="head-right">';
+    html += '<header class="head"><div><div class="title">Vitrine' + (S.boot.location ? ' <span class="loc">· ' + h(S.boot.location.name) + '</span>' : '') + '</div>' + eventPicker(service) + '</div><div class="head-right">';
     html += '<span class="pill"><span class="dot ' + (st.server_online ? 'ok' : 'warn') + '"></span>' + (st.server_online ? 'Server online' : 'Server offline') + '</span>';
     html += '<span class="pill"><span class="dot ' + (e.vmix_ok ? 'ok' : 'bad') + '"></span>' + (e.vmix_ok ? 'vMix connected' : 'vMix not reachable') + '</span>';
     if (pulpits().length) html += '<span class="pill"><span class="dot ' + (pOnline ? 'ok' : 'warn') + '"></span>' + (pOnline ? 'Pulpit in sync' : 'Pulpit offline') + '</span>';
@@ -410,7 +431,8 @@
     if (audioState().asset_id) status = { cls: 'live', text: 'Audio is playing' };
     if (e.asset_id) status = { cls: 'live', text: e.kind === 'video' ? 'A video is on screen' : e.kind === 'audio' ? 'Audio is playing' : 'A picture is on screen' };
     if (e.pending_id || audioState().pending_id) status = { cls: 'pend', text: 'Sending to the screen…' };
-    html += '<header class="p-head"><div class="title">' + (o.show_title !== false && set ? h(set.title) : '') + '</div>';
+    html += '<header class="p-head"><div class="title">' + (o.show_title !== false && set ? h(set.title) : '') +
+      (o.show_title !== false && S.boot.service ? '<div class="p-sub">' + h(eventLabel(S.boot.service)) + (S.boot.location ? ' · ' + h(S.boot.location.name) : '') + '</div>' : '') + '</div>';
     html += '<div class="row">';
     if (o.show_status) {
       html += '<span class="pill"><span class="dot ' + (e.vmix_ok ? 'ok' : 'bad') + '"></span>' + (e.vmix_ok ? 'vMix' : 'vMix offline') + '</span>';
@@ -686,6 +708,7 @@
     var el = ev.target;
     var kind = el.dataset.change;
     if (!kind) return;
+    if (kind === 'event') { post('/api/companion/settings', { service_id: parseInt(el.value, 10) || 0 }); return; }
     var screen = S.screens.filter(function (s) { return s.id === el.dataset.id; })[0];
     if (!screen) return;
     if (kind === 'screen-set') post('/api/screens/' + screen.id, { current_set_id: parseInt(el.value, 10) });

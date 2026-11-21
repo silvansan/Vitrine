@@ -1,5 +1,9 @@
 # Using Vitrine
 
+## Which event the tablets show
+
+The tablets show the location's name and the event they are on (e.g. *Vitrine · Zurich hall* / *Youth night · Wed 25 Nov*); the pulpit shows it under the guest's name. The vMix PC receives the location's upcoming events, and by default follows **today's or the next event** (*Automatic*). On the back tablet, the event menu under the title switches to another one, e.g. to prepare Sunday on Wednesday; choose *Automatic* again afterwards. All tablets follow the choice.
+
 ## Organizations, locations, events and people
 
 - An **organization** has its staff, people, locations and library. With more than one, pick the one you work in at the top left of `/manage/`.

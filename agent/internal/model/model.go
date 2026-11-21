@@ -3,14 +3,22 @@ package model
 
 // Manifest is what GET /api/agent/manifest returns.
 type Manifest struct {
-	Version        int       `json:"version"`
-	ServerTime     string    `json:"server_time"`
-	Agent          AgentInfo `json:"agent"`
-	PubKey         string    `json:"pubkey"`
-	Services       []Service `json:"services"`
-	Sets           []Set     `json:"sets"`
-	Assets         []Asset   `json:"assets"`
-	RevokedScreens []string  `json:"revoked_screens"`
+	Version    int       `json:"version"`
+	ServerTime string    `json:"server_time"`
+	Agent      AgentInfo `json:"agent"`
+	// The venue this agent serves (server 0.2+; nil from older servers).
+	Location       *LocationInfo `json:"location"`
+	PubKey         string        `json:"pubkey"`
+	Services       []Service     `json:"services"`
+	Sets           []Set         `json:"sets"`
+	Assets         []Asset       `json:"assets"`
+	RevokedScreens []string      `json:"revoked_screens"`
+}
+
+type LocationInfo struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Organization string `json:"organization"`
 }
 
 type AgentInfo struct {

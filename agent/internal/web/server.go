@@ -510,6 +510,11 @@ func (s *Server) catalog(sc *store.Screen) map[string]any {
 		out["assets"] = assets
 		out["service"] = service
 		out["services"] = services
+		// 0 = follow today's (or the next) event automatically.
+		out["service_pinned"] = st.Settings.ServiceID != 0 && service != nil && service.ID == st.Settings.ServiceID
+		if m != nil {
+			out["location"] = m.Location
+		}
 		out["screens"] = s.screensLocked(st)
 		out["settings"] = st.Settings
 		out["positions"] = positionsJSON(st.Positions)
