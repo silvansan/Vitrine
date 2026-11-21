@@ -9,7 +9,9 @@
   <h2>Alerts: how they are sent</h2>
 
   <h3>Telegram</h3>
-  <p class="muted">Create a bot with <strong>@BotFather</strong> in Telegram and paste its token. {% if telegram_from_env %}A token is set in the stack environment.{% endif %}</p>
+  {% if bot %}<p><span class="dot on"></span> Bot <strong>@{{ bot.username }}</strong> is ready{% if telegram_from_env %} (token from the stack environment){% endif %}. Each organization connects its chat under <a href="{% url 'manage-organization' %}#alerts">Organization → Connect Telegram</a>.</p>
+  {% elif bot_error %}<p class="error">Telegram doesn't accept the token: {{ bot_error }}</p>{% endif %}
+  <p class="muted">In Telegram, open <strong>@BotFather</strong>, send <code>/newbot</code>, choose a name (e.g. "Vitrine alerts") and a username ending in <code>bot</code>, and paste the token it gives you here.</p>
   <div class="form-grid">
     <label>Bot token <input type="password" name="telegram_bot_token" autocomplete="off" value="{% if s.telegram_bot_token %}{{ mask }}{% endif %}" placeholder="123456:ABC…"></label>
     {% if s.telegram_bot_token %}<label class="check"><input type="checkbox" name="clear_telegram"> Remove the token</label>{% endif %}
@@ -17,6 +19,15 @@
 
   <h3>Email (SMTP)</h3>
   <p class="muted">Your mail provider's SMTP server. {% if email_from_env %}Email is set up in the stack environment.{% endif %}</p>
+  <div class="form-grid">
+    <label>Provider
+      <select id="email-preset">
+        <option value="">Other / keep as is</option>
+        {% for key, p in email_presets.items %}<option value="{{ key }}">{{ p.label }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="muted" id="email-hint" hidden></p>
   <div class="form-grid">
     <label>SMTP server <input name="email_host" value="{{ s.email_host }}" placeholder="smtp.example.org"></label>
     <label>Port <input name="email_port" inputmode="numeric" value="{{ s.email_port|default_if_none:'' }}" placeholder="587"></label>
@@ -39,7 +50,12 @@
   </div>
   <div class="actions">
     <button class="btn primary" type="submit">Save</button>
-    <button class="btn" type="submit" name="test_email" value="1">Save and email me a test</button>
+  </div>
+  <div class="form-grid">
+    <label>Send a test to <input type="email" name="test_to" value="{{ request.user.email }}" placeholder="you@example.org"></label>
+  </div>
+  <div class="actions">
+    <button class="btn" type="submit" name="test_email" value="1">Save and send a test email</button>
   </div>
 </form>
 
@@ -118,6 +134,31 @@
   </div>
 </section>
 
+{{ email_presets|json_script:"email-presets" }}
+<script>
+(function () {
+  var presets = JSON.parse(document.getElementById('email-presets').textContent);
+  var select = document.getElementById('email-preset');
+  var hint = document.getElementById('email-hint');
+  var form = document.getElementById('alerts');
+  var host = form.querySelector('[name=email_host]');
+  function showHint(key) {
+    var p = presets[key];
+    hint.hidden = !p;
+    hint.textContent = p ? p.hint : '';
+  }
+  for (var key in presets) { if (presets[key].host === host.value) { select.value = key; showHint(key); } }
+  select.addEventListener('change', function () {
+    var p = presets[select.value];
+    showHint(select.value);
+    if (!p) return;
+    host.value = p.host;
+    form.querySelector('[name=email_port]').value = p.port;
+    form.querySelector('[name=email_security]').value = p.security;
+    form.querySelector('[name=email_user]').focus();
+  });
+})();
+</script>
 {{ path_hints|json_script:"path-hints" }}
 <script>
 (function () {

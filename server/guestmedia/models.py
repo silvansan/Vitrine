@@ -57,8 +57,9 @@ class Organization(models.Model):
     )
     # Where staff hear about things that need them (see guestmedia/alerts.py).
     notify_telegram_chat = models.CharField(
-        max_length=64, blank=True, help_text="Telegram chat or group id (needs VITRINE_TELEGRAM_BOT_TOKEN)."
+        max_length=64, blank=True, help_text="Telegram chat or group id (linked from /manage/organization/)."
     )
+    notify_telegram_title = models.CharField(max_length=120, blank=True, help_text="Name of the linked chat.")
     notify_emails = models.TextField(blank=True, help_text="Email addresses, one per line or separated by commas.")
     notify_uploads = models.BooleanField(default=True, help_text="Uploads waiting for approval.")
     notify_offline = models.BooleanField(default=True, help_text="A vMix PC goes offline before or during an event.")

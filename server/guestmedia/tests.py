@@ -698,8 +698,12 @@ class SettingsPageTests(TestCase):
         self.assertIsNone(config.backup_plan())
 
     def test_alert_delivery_settings(self):
+        from unittest import mock
         from . import config
 
+        fake = mock.patch("guestmedia.telegram.api", return_value={"username": "vitrine_test_bot", "first_name": "Vitrine"})
+        fake.start()
+        self.addCleanup(fake.stop)
         self.client.post("/manage/settings/", {
             "action": "alerts", "telegram_bot_token": "123:abc", "email_host": "smtp.example.org",
             "email_port": "465", "email_security": "ssl", "email_user": "me", "email_password": "pw",
@@ -820,3 +824,91 @@ class LiveControlTests(TestCase):
         self.assertEqual(self.client.get(f"/t/{self.location.tablet_slug}/").status_code, 503)
         self.assertEqual(self.client.get("/t/nope/").status_code, 404)
         self.assertNotEqual(self.location.tablet_slug, Location.objects.create(organization=self.location.organization, name="B").tablet_slug)
+
+
+class TelegramLinkTests(TestCase):
+    """Organization → Connect Telegram: no chat ids to look up."""
+
+    def setUp(self):
+        from unittest import mock
+        from django.core.cache import cache
+
+        cache.clear()
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        self.client.login(username="admin", password="pw")
+        self.org = Organization.objects.create(name="Main")
+        from .models import SiteSettings
+
+        site = SiteSettings.load()
+        site.telegram_bot_token = "123:abc"
+        site.save()
+        self.updates = []
+        self.sent = []
+
+        def fake_api(method, token=None, **params):
+            if method == "getMe":
+                return {"username": "vitrine_test_bot", "first_name": "Vitrine"}
+            if method == "getUpdates":
+                if "offset" in params:
+                    self.updates = [u for u in self.updates if u["update_id"] >= params["offset"]]
+                    return []
+                return list(self.updates)
+            if method == "sendMessage":
+                self.sent.append((params["chat_id"], params["text"]))
+                return {}
+            raise AssertionError(method)
+
+        patcher = mock.patch("guestmedia.telegram.api", side_effect=fake_api)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_connect_a_group(self):
+        page = self.client.get("/manage/organization/")
+        self.assertContains(page, "Connect Telegram")
+        self.client.post("/manage/organization/", {"action": "telegram_connect"})
+        page = self.client.get("/manage/organization/")
+        code = self.client.session["vitrine_tg_code"]
+        self.assertContains(page, f"https://t.me/vitrine_test_bot?startgroup={code}")
+        self.assertEqual(self.client.get("/manage/organization/telegram-check").json()["status"], "waiting")
+        # Someone else's /start and a wrong code are ignored; the group's /start@bot <code> links it.
+        self.updates = [
+            {"update_id": 5, "message": {"text": "/start", "chat": {"id": 1, "type": "private", "first_name": "X"}}},
+            {"update_id": 6, "message": {"text": "/start@vitrine_test_bot wrongcode1", "chat": {"id": 2, "type": "group", "title": "Other"}}},
+            {"update_id": 7, "message": {"text": f"/start@vitrine_test_bot {code}", "chat": {"id": -100555, "type": "supergroup", "title": "AV team"}}},
+        ]
+        result = self.client.get("/manage/organization/telegram-check").json()
+        self.assertEqual(result, {"status": "linked", "title": "AV team"})
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.notify_telegram_chat, "-100555")
+        self.assertEqual(self.org.notify_telegram_title, "AV team")
+        self.assertIn("Main", self.sent[-1][1])
+        self.assertEqual(self.updates, [])  # marked as read
+        self.assertContains(self.client.get("/manage/organization/"), "Alerts go to <strong>AV team</strong>")
+        self.client.post("/manage/organization/", {"action": "telegram_disconnect"})
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.notify_telegram_chat, "")
+
+    def test_group_moved_to_supergroup(self):
+        from . import alerts, telegram
+
+        self.org.notify_telegram_chat = "-42"
+        self.org.save()
+        calls = []
+
+        def moved(method, token=None, **params):
+            calls.append(params.get("chat_id"))
+            if params.get("chat_id") == "-42":
+                raise telegram.TelegramError("group chat was upgraded to a supergroup chat", {"migrate_to_chat_id": -100999})
+            return {}
+
+        from unittest import mock
+
+        with mock.patch("guestmedia.telegram.api", side_effect=moved):
+            self.assertEqual(alerts.notify(self.org, "Test", "x"), [])
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.notify_telegram_chat, "-100999")
+
+    def test_settings_show_bot_and_presets(self):
+        page = self.client.get("/manage/settings/")
+        self.assertContains(page, "@vitrine_test_bot")
+        self.assertContains(page, "smtp-relay.brevo.com")

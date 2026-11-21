@@ -30,22 +30,76 @@
   <button class="btn primary" type="submit">Save</button>
 </form>
 
-<form method="post" class="card">
-  {% csrf_token %}<input type="hidden" name="action" value="notifications">
+<section class="card" id="alerts">
   <h2>Alerts to the team</h2>
-  <p class="muted">Vitrine tells you when something needs you. Telegram {% if telegram_ready %}is set up{% else %}needs <code>VITRINE_TELEGRAM_BOT_TOKEN</code> in the stack{% endif %}; email {% if email_ready %}is set up{% else %}needs <code>EMAIL_HOST</code> and friends in the stack{% endif %}.</p>
-  <p><label>Telegram chat id <input name="notify_telegram_chat" value="{{ org.notify_telegram_chat }}" placeholder="-1001234567890"></label><br>
-    <span class="muted">Add the bot to your team's group, send a message there, then open <code>https://api.telegram.org/bot&lt;token&gt;/getUpdates</code> to find the chat id.</span></p>
-  <p><label>Email addresses<br><textarea name="notify_emails" rows="3" cols="50" placeholder="tech@example.org">{{ org.notify_emails }}</textarea></label></p>
-  <div class="checks">
-    <label><input type="checkbox" name="notify_uploads"{% if org.notify_uploads %} checked{% endif %}> Uploads waiting for approval</label>
-    <label><input type="checkbox" name="notify_offline"{% if org.notify_offline %} checked{% endif %}> vMix PC offline around an event</label>
-    <label><input type="checkbox" name="notify_sync"{% if org.notify_sync %} checked{% endif %}> The day before: are all files on the vMix PC?</label>
-    <label><input type="checkbox" name="notify_backup"{% if org.notify_backup %} checked{% endif %}> A backup failed</label>
-  </div>
-  <button class="btn primary" type="submit">Save</button>
-  <button class="btn" type="submit" name="test" value="1">Save and send a test</button>
-</form>
+  <p class="muted">Vitrine tells you when something needs you.{% if request.user.is_superuser %} How messages are sent (bot, email server) is set under <a href="{% url 'manage-settings' %}#alerts">Settings</a>.{% endif %}</p>
+
+  <h3>Telegram</h3>
+  {% if not telegram_ready %}
+    <p class="muted">Not set up yet: {% if request.user.is_superuser %}add a bot token under <a href="{% url 'manage-settings' %}#alerts">Settings</a>{% else %}ask an admin to add a Telegram bot under Settings{% endif %}.</p>
+  {% elif telegram_error %}
+    <p class="error">Telegram doesn't accept the bot: {{ telegram_error }}</p>
+  {% elif tg_code %}
+    <div class="tg-link" id="tg-link" data-check="{% url 'manage-telegram-check' %}">
+      <p><strong>Connect a chat to @{{ bot.username }}</strong>, then come back here: this page notices it by itself.</p>
+      <div class="guest-row">
+        <img class="qr" src="{% url 'manage-qr' %}?d={{ tg_private|urlencode }}" alt="QR code to open the bot in Telegram" width="132" height="132">
+        <div class="grow">
+          <p><strong>A team group</strong> (recommended): <a class="btn small" href="{{ tg_group }}" target="_blank" rel="noopener">Add the bot to a group</a><br><span class="muted">Telegram asks which group; the bot posts a confirmation there.</span></p>
+          <p><strong>Just me</strong>: <a class="btn small" href="{{ tg_private }}" target="_blank" rel="noopener">Open the bot</a> and press <em>Start</em>, or scan the QR code with your phone.</p>
+          <p class="muted" id="tg-status" role="status">Waiting for Telegram… (the link works for 15 minutes)</p>
+        </div>
+      </div>
+      <form method="post" class="actions">{% csrf_token %}<button class="btn small" name="action" value="telegram_cancel">Cancel</button></form>
+    </div>
+  {% elif org.notify_telegram_chat %}
+    <p><span class="dot on"></span> Alerts go to <strong>{{ org.notify_telegram_title|default:org.notify_telegram_chat }}</strong> via @{{ bot.username }}.</p>
+    <form method="post" class="actions">{% csrf_token %}
+      <button class="btn small" name="action" value="telegram_connect">Connect another chat</button>
+      <button class="btn small" name="action" value="telegram_disconnect">Disconnect</button>
+    </form>
+  {% else %}
+    <p class="muted">Not connected. Alerts can go to a team group or to your own chat with @{{ bot.username }}.</p>
+    <form method="post" class="actions">{% csrf_token %}<button class="btn primary" name="action" value="telegram_connect">Connect Telegram</button></form>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}<input type="hidden" name="action" value="notifications">
+    {% if telegram_ready %}
+    <details class="manual"><summary>Enter a chat id by hand</summary>
+      <p><label>Telegram chat id <input name="notify_telegram_chat" value="{{ org.notify_telegram_chat }}" placeholder="-1001234567890"></label></p>
+    </details>
+    {% endif %}
+    <h3>Email</h3>
+    {% if not email_ready %}<p class="muted note">Not set up yet: {% if request.user.is_superuser %}add your mail server (e.g. Brevo) under <a href="{% url 'manage-settings' %}#alerts">Settings</a>{% else %}ask an admin to set up email under Settings{% endif %}. You can already enter the addresses.</p>{% endif %}
+    <p><label>Email addresses<br><textarea name="notify_emails" rows="3" cols="50" placeholder="tech@example.org">{{ org.notify_emails }}</textarea></label></p>
+    <h3>What to send</h3>
+    <div class="checks">
+      <label><input type="checkbox" name="notify_uploads"{% if org.notify_uploads %} checked{% endif %}> Uploads waiting for approval</label>
+      <label><input type="checkbox" name="notify_offline"{% if org.notify_offline %} checked{% endif %}> vMix PC offline around an event</label>
+      <label><input type="checkbox" name="notify_sync"{% if org.notify_sync %} checked{% endif %}> The day before: are all files on the vMix PC?</label>
+      <label><input type="checkbox" name="notify_backup"{% if org.notify_backup %} checked{% endif %}> A backup failed</label>
+    </div>
+    <div class="actions">
+      <button class="btn primary" type="submit">Save</button>
+      <button class="btn" type="submit" name="test" value="1">Save and send a test</button>
+    </div>
+  </form>
+</section>
+<script>
+(function () {
+  var box = document.getElementById('tg-link');
+  if (!box) return;
+  var status = document.getElementById('tg-status');
+  var timer = setInterval(function () {
+    fetch(box.getAttribute('data-check'), { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.status === 'linked' || d.status === 'none') { clearInterval(timer); location.reload(); }
+      else if (d.status === 'expired') { clearInterval(timer); status.textContent = 'The link expired. Press Cancel and connect again.'; }
+      else if (d.status === 'error') { status.textContent = 'Telegram: ' + d.error; }
+    }).catch(function () {});
+  }, 3000);
+})();
+</script>
 
 <section class="card">
   <h2>Shared with us</h2>

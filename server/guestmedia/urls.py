@@ -37,6 +37,7 @@ urlpatterns = [
     path("manage/people/", manage_views.people, name="manage-people"),
     path("manage/people/<int:pk>/", manage_views.person_detail, name="manage-person"),
     path("manage/organization/", manage_views.organization, name="manage-organization"),
+    path("manage/organization/telegram-check", manage_views.telegram_check, name="manage-telegram-check"),
     path("manage/backups/", manage_views.backups, name="manage-backups"),
     path("manage/settings/", manage_views.site_settings, name="manage-settings"),
     path("manage/switch-org", manage_views.switch_org, name="manage-switch-org"),

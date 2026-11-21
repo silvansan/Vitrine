@@ -113,7 +113,26 @@ Vitrine can tell your team when something needs them, by **Telegram** and/or **e
 - at `VITRINE_SYNC_CHECK_TIME` (18:00) the day before an event: are all its files on that location's vMix PC, are some still waiting for approval?
 - a failed backup.
 
-Set up once in **Settings → Alerts: how they are sent** (superusers): a Telegram bot token (create a bot with @BotFather) and/or your SMTP server, with **Save and email me a test**. The stack variables `VITRINE_TELEGRAM_BOT_TOKEN`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` still work and are used when the Settings fields are empty. Then each organization chooses its Telegram chat (group) id, email addresses and which alerts it wants on **Organization → Alerts to the team**; **Save and send a test** checks it works. To find a group's chat id: add the bot to the group, write something, open `https://api.telegram.org/bot<token>/getUpdates` and copy `chat.id` (it starts with `-100`).
+Everything is set up in the web interface; nothing has to go into the stack.
+
+**1. How messages are sent** (superusers, **Settings → Alerts: how they are sent**):
+
+- **Telegram**: in Telegram open **@BotFather**, send `/newbot`, pick a name (e.g. "Vitrine alerts") and a username ending in `bot`, and paste the token. On saving, Vitrine checks it and shows *Bot @… is ready*.
+- **Email**: pick your **Provider** to fill in server, port and security, then enter user, password and sender:
+  - **Brevo**: server `smtp-relay.brevo.com`, port 587, STARTTLS. *User* is the SMTP login from Brevo → Settings → SMTP & API (an address like `123abc@smtp-brevo.com`, or your account email); *Password* is an **SMTP key** from the same page (an API key doesn't work); *From* must be a sender verified in Brevo.
+  - Infomaniak, Gmail / Google Workspace (needs an app password) and Microsoft 365 have presets too; anything else: choose *Other* and enter your provider's SMTP details.
+  - **Save and send a test email** sends to the address you type (your account's email by default).
+- **When**: minutes before a vMix PC counts as offline, and the time of the "ready for tomorrow?" check.
+
+The stack variables `VITRINE_TELEGRAM_BOT_TOKEN`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` still work and are only used when the Settings fields are empty; leaving them empty in the stack is fine.
+
+**2. Who gets them** (each organization, **Organization → Alerts to the team**):
+
+- **Connect Telegram**: shows *Add the bot to a group* (Telegram asks which group) and *Open the bot* (your own chat; also as a QR code for your phone). Once the bot is added or you press *Start*, the page notices within a few seconds, the bot posts "✅ Vitrine alerts for … will arrive in this chat" and the page shows *Alerts go to <group name>*. The link works for 15 minutes. **Disconnect** or **Connect another chat** change it later; a chat id can still be entered by hand under *Enter a chat id by hand*.
+- **Email addresses**, one per line or separated by commas.
+- Which alerts to send, then **Save and send a test**.
+
+How the linking works: the link carries a one-time code (`/start <code>`); the server reads the bot's messages with Telegram's `getUpdates` (no webhook, so nothing has to reach your server from outside) and saves the chat that sent the code. When a group is upgraded to a supergroup its id changes; Vitrine follows the move by itself.
 
 ## Backups
 

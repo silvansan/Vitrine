@@ -132,3 +132,4 @@ textarea{max-width:100%}
 .table td.status-cell{width:1%;text-align:center}
 .legend .dot{vertical-align:middle;margin:0 2px}
 .table{position:relative}
+.card form p.note{display:block}

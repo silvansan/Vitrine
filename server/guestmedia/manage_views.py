@@ -586,8 +586,31 @@ def organization(request):
                 manifest_version=models.F("manifest_version") + 1
             )
             messages.success(request, "Saved.")
+        elif action == "telegram_connect":
+            from . import telegram
+
+            try:
+                telegram.bot_info()
+            except telegram.TelegramError as exc:
+                messages.error(request, f"Telegram isn't ready: {exc}")
+                return redirect(reverse("manage-organization") + "#alerts")
+            request.session["vitrine_tg_code"] = telegram.new_link_code(org)
+            return redirect(reverse("manage-organization") + "#alerts")
+        elif action == "telegram_cancel":
+            request.session.pop("vitrine_tg_code", None)
+            return redirect(reverse("manage-organization") + "#alerts")
+        elif action == "telegram_disconnect":
+            org.notify_telegram_chat = ""
+            org.notify_telegram_title = ""
+            org.save(update_fields=["notify_telegram_chat", "notify_telegram_title"])
+            messages.success(request, "Telegram chat disconnected.")
+            return redirect(reverse("manage-organization") + "#alerts")
         elif action == "notifications":
-            org.notify_telegram_chat = request.POST.get("notify_telegram_chat", "").strip()[:64]
+            if "notify_telegram_chat" in request.POST:  # typed by hand
+                chat = request.POST.get("notify_telegram_chat", "").strip()[:64]
+                if chat != org.notify_telegram_chat:
+                    org.notify_telegram_chat = chat
+                    org.notify_telegram_title = ""
             org.notify_emails = request.POST.get("notify_emails", "").strip()
             for field in ("notify_uploads", "notify_offline", "notify_sync", "notify_backup"):
                 setattr(org, field, request.POST.get(field) == "on")
@@ -629,8 +652,52 @@ def organization(request):
             "staff_ids": set(org.staff.values_list("pk", flat=True)),
             "telegram_ready": bool(vitrine_config.telegram_token()),
             "email_ready": bool(vitrine_config.email_config()),
+            **_telegram_link_context(request, org),
         },
     )
+
+
+def _telegram_link_context(request, org):
+    """The bot's name and, while a link is being made, the t.me links for it."""
+    from . import telegram
+
+    if not vitrine_config.telegram_token():
+        return {}
+    try:
+        bot = telegram.bot_info()
+    except telegram.TelegramError as exc:
+        return {"telegram_error": str(exc)}
+    out = {"bot": bot}
+    code = request.session.get("vitrine_tg_code")
+    if code:
+        out["tg_code"] = code
+        out["tg_private"] = f"https://t.me/{bot['username']}?start={code}"
+        out["tg_group"] = f"https://t.me/{bot['username']}?startgroup={code}"
+        out["tg_qr"] = out["tg_private"]
+    return out
+
+
+@org_view
+def telegram_check(request):
+    """Polled while a Telegram link is open: has the chat sent its /start code yet?"""
+    from django.http import JsonResponse
+
+    from . import telegram
+
+    code = request.session.get("vitrine_tg_code")
+    if not code:
+        return JsonResponse({"status": "none"})
+    try:
+        result = telegram.link_status(code)
+    except telegram.TelegramError as exc:
+        return JsonResponse({"status": "error", "error": str(exc)})
+    if not result:
+        return JsonResponse({"status": "waiting"})
+    request.session.pop("vitrine_tg_code", None)
+    if result.get("expired"):
+        return JsonResponse({"status": "expired"})
+    messages.success(request, f"Telegram connected: alerts go to {result['title']}.")
+    return JsonResponse({"status": "linked", "title": result["title"]})
 
 
 @staff_member_required
@@ -650,6 +717,34 @@ def backups(request):
 
 
 SECRET_MASK = "••••••••"
+
+# Quick-fill for common mail providers on the Settings page (nothing is stored but the fields).
+EMAIL_PRESETS = {
+    "brevo": {"label": "Brevo", "host": "smtp-relay.brevo.com", "port": 587, "security": "starttls",
+              "hint": "User: the SMTP login from Brevo → Settings → SMTP & API (an address like 123abc@smtp-brevo.com, or your account email). "
+                      "Password: an SMTP key from the same page, not an API key. From: a sender you verified in Brevo (Senders, domains & dedicated IPs)."},
+    "infomaniak": {"label": "Infomaniak", "host": "mail.infomaniak.com", "port": 587, "security": "starttls",
+                   "hint": "User: the full email address. Password: that mailbox's password."},
+    "gmail": {"label": "Gmail / Google Workspace", "host": "smtp.gmail.com", "port": 587, "security": "starttls",
+              "hint": "User: the Gmail address. Password: an app password (Google account → Security → 2-Step Verification → App passwords), not the normal password."},
+    "microsoft": {"label": "Microsoft 365 / Outlook", "host": "smtp.office365.com", "port": 587, "security": "starttls",
+                  "hint": "User: the mailbox address. SMTP AUTH must be allowed for it in the Microsoft 365 admin center."},
+}
+
+
+def _bot_status():
+    from . import telegram
+
+    if not config_telegram_token():
+        return {}
+    try:
+        return {"bot": telegram.bot_info()}
+    except telegram.TelegramError as exc:
+        return {"bot_error": str(exc)}
+
+
+def config_telegram_token():
+    return vitrine_config.telegram_token()
 
 
 @org_view
@@ -682,17 +777,26 @@ def site_settings(request):
             s.sync_check_time = P.get("sync_check_time", "").strip()[:5]
             s.save()
             messages.success(request, "Saved.")
+            if s.telegram_bot_token and P.get("telegram_bot_token", "").strip() not in ("", SECRET_MASK):
+                from . import telegram
+
+                try:
+                    bot = telegram.bot_info(s.telegram_bot_token, fresh=True)
+                    messages.success(request, f"Telegram bot @{bot['username']} is ready. Connect your team's chat under Organization.")
+                except telegram.TelegramError as exc:
+                    messages.error(request, f"Telegram doesn't accept this token: {exc}")
             if P.get("test_email") == "1":
                 from . import alerts
 
+                to = P.get("test_to", "").strip() or request.user.email
                 if not config.email_config():
                     messages.error(request, "Email isn't set up yet.")
-                elif not request.user.email:
-                    messages.error(request, "Your account has no email address (Admin → Users).")
+                elif "@" not in to:
+                    messages.error(request, "Enter an address to send the test to.")
                 else:
                     try:
-                        alerts.send_email([request.user.email], "[Vitrine] Test email", "Email from Vitrine works.")
-                        messages.success(request, f"Test email sent to {request.user.email}.")
+                        alerts.send_email([to], "[Vitrine] Test email", "Email from Vitrine works.")
+                        messages.success(request, f"Test email sent to {to}.")
                     except Exception as exc:
                         messages.error(request, f"Test email failed: {exc}")
             return redirect(reverse("manage-settings") + "#alerts")
@@ -762,6 +866,8 @@ def site_settings(request):
             "stale": backup.is_stale(),
             "test": request.session.pop("vitrine_backup_test", None),
             "telegram_from_env": bool(settings.VITRINE_TELEGRAM_BOT_TOKEN) and not s.telegram_bot_token,
+            **_bot_status(),
+            "email_presets": EMAIL_PRESETS,
             "email_from_env": bool(settings.EMAIL_HOST) and not s.email_host,
             "offline_minutes": config.offline_alert_minutes(),
             "sync_time": config.sync_check_time(),

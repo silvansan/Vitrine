@@ -5,11 +5,8 @@
 - The day before an event: are all its files on the vMix PC?
 - A backup failed.
 """
-import json
 import logging
 import re
-import urllib.parse
-import urllib.request
 
 from django.conf import settings
 from django.core.mail import EmailMessage, get_connection
@@ -30,12 +27,10 @@ def can_send(org):
 
 
 def send_telegram(chat_id, text):
-    url = f"https://api.telegram.org/bot{config.telegram_token()}/sendMessage"
-    data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "disable_web_page_preview": "true"}).encode()
-    with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=15) as response:
-        body = json.loads(response.read() or b"{}")
-    if not body.get("ok"):
-        raise RuntimeError(body.get("description", "Telegram refused the message"))
+    """Returns the chat id used (it changes when a group becomes a supergroup)."""
+    from . import telegram
+
+    return telegram.send(chat_id, text)
 
 
 def notify(org, subject, text):
@@ -43,7 +38,10 @@ def notify(org, subject, text):
     errors = []
     if config.telegram_token() and org.notify_telegram_chat:
         try:
-            send_telegram(org.notify_telegram_chat, f"{subject}\n\n{text}")
+            used = send_telegram(org.notify_telegram_chat, f"{subject}\n\n{text}")
+            if used and used != str(org.notify_telegram_chat):
+                org.notify_telegram_chat = used
+                org.save(update_fields=["notify_telegram_chat"])
         except Exception as exc:  # network, wrong chat id, …
             log.warning("telegram alert for %s failed: %s", org, exc)
             errors.append(f"Telegram: {exc}")
