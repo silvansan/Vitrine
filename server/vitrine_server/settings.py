@@ -15,9 +15,18 @@ VITRINE_DOCS_DIR = os.environ.get("VITRINE_DOCS_DIR", "")
 
 def env_bool(name, default=False):
     value = os.environ.get(name)
-    if value is None:
+    if value is None or not value.strip():
         return default
     return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def env_int(name, default):
+    """An empty or missing variable (Portainer keeps empty ones) means the default."""
+    value = os.environ.get(name, "").strip()
+    try:
+        return int(value) if value else default
+    except ValueError:
+        return default
 
 
 def env_list(name, default=""):
@@ -25,8 +34,37 @@ def env_list(name, default=""):
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", False)
+# Where the Ed25519 key used to sign tablet pairing codes is kept.
+VITRINE_KEY_PATH = Path(os.environ.get("VITRINE_KEY_PATH", BASE_DIR / "data" / "keys" / "pairing_ed25519.pem"))
+
+
+def _secret_key():
+    """DJANGO_SECRET_KEY, or one made on first start and kept next to the pairing key (in the data volume)."""
+    value = os.environ.get("DJANGO_SECRET_KEY", "").strip()
+    if value and value not in ("change-me",):
+        return value
+    path = VITRINE_KEY_PATH.parent / "django_secret_key"
+    try:
+        return path.read_text().strip()
+    except OSError:
+        pass
+    import secrets
+
+    value = secrets.token_urlsafe(50)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "x") as f:  # web, worker and scheduler may start at once: first one wins
+            f.write(value)
+        path.chmod(0o600)
+    except FileExistsError:
+        return path.read_text().strip() or value
+    except OSError:
+        pass  # read-only checkout: this process only
+    return value
+
+
+SECRET_KEY = _secret_key()
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "*")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 # Behind Nginx Proxy Manager: trust its forwarded scheme and host.
@@ -39,19 +77,17 @@ VITRINE_PUBLIC_URL = os.environ.get("VITRINE_PUBLIC_URL", "").strip().rstrip("/"
 if "example.org" in VITRINE_PUBLIC_URL or "example.com" in VITRINE_PUBLIC_URL:
     # The value from .env.example was never changed: ignore it.
     VITRINE_PUBLIC_URL = ""
-# Where the Ed25519 key used to sign tablet pairing codes is kept.
-VITRINE_KEY_PATH = Path(os.environ.get("VITRINE_KEY_PATH", BASE_DIR / "data" / "keys" / "pairing_ed25519.pem"))
 # Days a deleted file stays in the trash before it is removed for good.
-VITRINE_TRASH_DAYS = int(os.environ.get("VITRINE_TRASH_DAYS", "30"))
+VITRINE_TRASH_DAYS = env_int("VITRINE_TRASH_DAYS", 30)
 # An agent receives the active events of its location from yesterday up to this
 # many days ahead, and downloads their files before the day.
-VITRINE_PRESYNC_DAYS = int(os.environ.get("VITRINE_PRESYNC_DAYS", "14"))
+VITRINE_PRESYNC_DAYS = env_int("VITRINE_PRESYNC_DAYS", 14)
 # Frame rate of the vMix project; videos are converted to this constant frame rate.
-VITRINE_VIDEO_FPS = int(os.environ.get("VITRINE_VIDEO_FPS", "25"))
+VITRINE_VIDEO_FPS = env_int("VITRINE_VIDEO_FPS", 25)
 # Seconds between filmstrip frames used by the cue panel.
-VITRINE_FILMSTRIP_INTERVAL = int(os.environ.get("VITRINE_FILMSTRIP_INTERVAL", "5"))
+VITRINE_FILMSTRIP_INTERVAL = env_int("VITRINE_FILMSTRIP_INTERVAL", 5)
 # Largest single upload, in megabytes.
-VITRINE_MAX_UPLOAD_MB = int(os.environ.get("VITRINE_MAX_UPLOAD_MB", "4096"))
+VITRINE_MAX_UPLOAD_MB = env_int("VITRINE_MAX_UPLOAD_MB", 4096)
 # When true, nginx serves protected files through X-Accel-Redirect (Docker setup).
 VITRINE_X_ACCEL = env_bool("VITRINE_X_ACCEL", False)
 
@@ -186,15 +222,15 @@ LOGGING = {
 VITRINE_TELEGRAM_BOT_TOKEN = os.environ.get("VITRINE_TELEGRAM_BOT_TOKEN", "")
 # Email (any SMTP server). Leave EMAIL_HOST empty to not send email.
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_PORT = env_int("EMAIL_PORT", 587)
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() in ("1", "true", "yes")
-EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() in ("1", "true", "yes")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "vitrine@localhost")
 EMAIL_TIMEOUT = 15
 # A vMix PC counts as offline after this many minutes without a heartbeat.
-VITRINE_OFFLINE_ALERT_MINUTES = int(os.environ.get("VITRINE_OFFLINE_ALERT_MINUTES", "10"))
+VITRINE_OFFLINE_ALERT_MINUTES = env_int("VITRINE_OFFLINE_ALERT_MINUTES", 10)
 # When to check that tomorrow's files are on each vMix PC (HH:MM, local time).
 VITRINE_SYNC_CHECK_TIME = os.environ.get("VITRINE_SYNC_CHECK_TIME", "18:00")
 
@@ -208,5 +244,5 @@ VITRINE_SYNC_CHECK_TIME = os.environ.get("VITRINE_SYNC_CHECK_TIME", "18:00")
 # Empty: no backups.
 VITRINE_BACKUP_TARGET = os.environ.get("VITRINE_BACKUP_TARGET", "").rstrip("/")
 VITRINE_BACKUP_TIME = os.environ.get("VITRINE_BACKUP_TIME", "03:30")
-VITRINE_BACKUP_KEEP_DAYS = int(os.environ.get("VITRINE_BACKUP_KEEP_DAYS", "14"))
+VITRINE_BACKUP_KEEP_DAYS = env_int("VITRINE_BACKUP_KEEP_DAYS", 14)
 VITRINE_BACKUP_DIR = Path(os.environ.get("VITRINE_BACKUP_DIR", MEDIA_ROOT.parent / "backup-tmp"))

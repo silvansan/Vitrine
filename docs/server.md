@@ -6,13 +6,14 @@ The server runs on your Linux box at home as one Portainer stack: Django (web), 
 
 1. Portainer → **Stacks → Add stack → Repository**.
 2. Repository URL `https://github.com/silvansan/Vitrine`, reference `refs/heads/main`, compose path `deploy/docker-compose.yml`. (Pasting `deploy/docker-compose.yml` into the **Web editor** works too.)
-3. Under **Environment variables**, paste the contents of `deploy/.env.example` and change at least:
-   - `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD`: long random strings.
+3. Under **Environment variables**, use **Load variables from .env file** with `deploy/.env.example` (or paste its uncommented lines) and change:
+   - `POSTGRES_PASSWORD`: a long random string. **Keep it**: the database is created with it on the first start, and a different value later locks Vitrine out of its data.
+   - `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD`: your first login (only used on the first start).
    - `VITRINE_PUBLIC_URL`: optional. Guest links are built from the address you open `/manage/` with; set this (e.g. `https://vitrine.yourdomain.org`) only if you manage Vitrine through another address, such as the Tailscale IP, than the one guests use.
-   - `DJANGO_CSRF_TRUSTED_ORIGINS`: the same address.
-   - `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD`: your first login.
-   - `VITRINE_VIDEO_FPS`: your vMix project frame rate (25 or 50 in Europe).
+   - `VITRINE_PROXY_NETWORK`: your Nginx Proxy Manager network.
    - `VITRINE_BIND`: the server's Tailscale IP (e.g. `100.101.102.103`), so port 8080 is only reachable over Tailscale.
+
+   Telegram, email and backups don't go here: set them in `/manage/` → **Settings** after the first sign-in. The optional variables (frame rate, upload size…) are commented out in the file with their defaults. Empty variables are fine: they mean "use the default". `DJANGO_SECRET_KEY` is optional too; without it Vitrine makes one on the first start and keeps it in the data volume.
 4. Deploy. Portainer pulls `ghcr.io/silvansan/vitrine-server` and `ghcr.io/silvansan/vitrine-nginx`, which GitHub Actions builds on every push to `main`. Nothing is built on the server.
 
 If the pull fails with "denied" or "unauthorized", the packages are private: either make them public on GitHub (your profile → **Packages** → the package → **Package settings** → **Change visibility**), or add `ghcr.io` under Portainer → **Registries** with your GitHub username and a token with `read:packages`.
@@ -63,8 +64,12 @@ Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the 
 
 ## Settings reference
 
+Stack environment variables. Empty or missing means the default. The alert and backup ones are only used when the same setting is left empty in `/manage/` → Settings, which is the easier place for them.
+
 | Variable | Default | Meaning |
 |---|---|---|
+| `POSTGRES_PASSWORD` | required | Database password, fixed after the first start |
+| `DJANGO_SECRET_KEY` | made on first start | Signs staff sessions; changing it signs staff out |
 | `VITRINE_BACKUP_TARGET` | empty | Where nightly backups go (see [Backups](#backups)); empty = off |
 | `VITRINE_BACKUP_TIME` / `VITRINE_BACKUP_KEEP_DAYS` | `03:30` / `14` | When to back up; how many days of database dumps to keep |
 | `VITRINE_TELEGRAM_BOT_TOKEN`, `EMAIL_HOST`… | empty | Alerts to the team (see [Alerts](#alerts-to-the-team)) |

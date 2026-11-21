@@ -1,8 +1,9 @@
 # Vitrine server stack for Portainer.
 #
 # Portainer: Stacks > Add stack, either Repository (URL https://github.com/silvansan/Vitrine,
-# compose path deploy/docker-compose.yml) or Web editor (paste this file), and paste the
-# variables from .env.example.
+# compose path deploy/docker-compose.yml) or Web editor (paste this file), and add the
+# variables from .env.example (only POSTGRES_PASSWORD is required; Telegram, email and
+# backups are set later in /manage/ → Settings).
 # Images are pulled from ghcr.io (built by GitHub Actions on every push to main), so Portainer
 # never builds anything. nginx's config is baked into its image.
 #
@@ -14,11 +15,20 @@
 # stack → Pull and redeploy (tick "Re-pull image and redeploy"). Migrations run on start.
 # Then update the agent on each vMix PC (docs/server.md → Updating).
 
+# Docker keeps container logs forever by default, which can fill the disk (and then Postgres
+# stops). Each Vitrine container keeps at most 3 × 10 MB.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   web:
     image: ghcr.io/silvansan/vitrine-server:latest
     command: web
     restart: unless-stopped
+    logging: *logging
     env_file: stack.env
     environment:
       POSTGRES_HOST: db
@@ -33,6 +43,7 @@ services:
     image: ghcr.io/silvansan/vitrine-server:latest
     command: worker
     restart: unless-stopped
+    logging: *logging
     env_file: stack.env
     environment:
       POSTGRES_HOST: db
@@ -47,15 +58,16 @@ services:
     image: ghcr.io/silvansan/vitrine-server:latest
     command: scheduler
     restart: unless-stopped
+    logging: *logging
     env_file: stack.env
     environment:
       POSTGRES_HOST: db
       REDIS_URL: redis://redis:6379/0
     volumes:
       - vitrine-data:/data
-      # Backup to a folder on this server (USB disk, NAS mounted on the host): uncomment
-      # and set VITRINE_BACKUP_TARGET=/backup. For SMB/NFS without mounting on the host,
-      # use an rclone remote instead (see docs/server.md).
+      # Backup to a folder on this server (USB disk, NAS mounted on the host): uncomment,
+      # then choose "Folder on the server" with /backup in /manage/ → Settings → Backups.
+      # Cloud, FTP, SFTP and SMB targets need nothing here: set them up in Settings.
       # - /mnt/nas/vitrine-backup:/backup
     depends_on: [db, redis]
     networks: [internal]
@@ -64,6 +76,7 @@ services:
     image: ghcr.io/silvansan/vitrine-nginx:latest
     container_name: vitrine-nginx
     restart: unless-stopped
+    logging: *logging
     volumes:
       - vitrine-data:/data:ro
     ports:
@@ -76,6 +89,7 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: vitrine
       POSTGRES_USER: vitrine
@@ -89,6 +103,7 @@ services:
     # (what is on screen, who has control, command results) between web and the agent socket.
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *logging
     networks: [internal]
 
 volumes:
