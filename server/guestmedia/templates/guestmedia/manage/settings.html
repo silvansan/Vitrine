@@ -1,0 +1,139 @@
+{% extends "guestmedia/manage/base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="muted">Server-wide settings. Each organization chooses its own alert recipients under <a href="{% url 'manage-organization' %}">Organization</a>. Anything left empty here falls back to the stack environment.</p>
+
+<form method="post" class="card" id="alerts">
+  {% csrf_token %}<input type="hidden" name="action" value="alerts">
+  <h2>Alerts: how they are sent</h2>
+
+  <h3>Telegram</h3>
+  <p class="muted">Create a bot with <strong>@BotFather</strong> in Telegram and paste its token. {% if telegram_from_env %}A token is set in the stack environment.{% endif %}</p>
+  <div class="form-grid">
+    <label>Bot token <input type="password" name="telegram_bot_token" autocomplete="off" value="{% if s.telegram_bot_token %}{{ mask }}{% endif %}" placeholder="123456:ABC…"></label>
+    {% if s.telegram_bot_token %}<label class="check"><input type="checkbox" name="clear_telegram"> Remove the token</label>{% endif %}
+  </div>
+
+  <h3>Email (SMTP)</h3>
+  <p class="muted">Your mail provider's SMTP server. {% if email_from_env %}Email is set up in the stack environment.{% endif %}</p>
+  <div class="form-grid">
+    <label>SMTP server <input name="email_host" value="{{ s.email_host }}" placeholder="smtp.example.org"></label>
+    <label>Port <input name="email_port" inputmode="numeric" value="{{ s.email_port|default_if_none:'' }}" placeholder="587"></label>
+    <label>Security
+      <select name="email_security">
+        <option value="starttls"{% if s.email_security == 'starttls' or not s.email_security %} selected{% endif %}>STARTTLS (port 587)</option>
+        <option value="ssl"{% if s.email_security == 'ssl' %} selected{% endif %}>SSL/TLS (port 465)</option>
+        <option value="none"{% if s.email_security == 'none' %} selected{% endif %}>None</option>
+      </select>
+    </label>
+    <label>User <input name="email_user" value="{{ s.email_user }}" autocomplete="off"></label>
+    <label>Password <input type="password" name="email_password" autocomplete="new-password" value="{% if s.email_password %}{{ mask }}{% endif %}"></label>
+    <label>From <input name="email_from" value="{{ s.email_from }}" placeholder="Vitrine &lt;vitrine@example.org&gt;"></label>
+  </div>
+
+  <h3>When</h3>
+  <div class="form-grid">
+    <label>vMix PC counts as offline after (minutes) <input name="offline_alert_minutes" inputmode="numeric" value="{{ s.offline_alert_minutes|default_if_none:'' }}" placeholder="{{ offline_minutes }}"></label>
+    <label>"Ready for tomorrow?" check at <input type="time" name="sync_check_time" value="{{ s.sync_check_time|default:sync_time }}"></label>
+  </div>
+  <div class="actions">
+    <button class="btn primary" type="submit">Save</button>
+    <button class="btn" type="submit" name="test_email" value="1">Save and email me a test</button>
+  </div>
+</form>
+
+<form method="post" class="card" id="backups">
+  {% csrf_token %}
+  <div class="row-head">
+    <h2>Backups</h2>
+    {% if plan and plan.target %}<button class="btn primary" type="submit" name="action" value="run" formnovalidate>Back up now</button>{% endif %}
+  </div>
+  <p class="muted">Every night: the database (kept for the number of days below), all media, and the pairing key that signs the tablets' QR codes.</p>
+  {% if stale %}<p class="error">No successful backup in the last 36 hours.</p>{% endif %}
+  {% if last_ok %}<p>Last successful backup: <strong>{{ last_ok.started|date:"D d M Y H:i" }}</strong> to {{ last_ok.target }}.</p>{% endif %}
+
+  <div class="form-grid">
+    <label>Back up to
+      <select name="backup_kind" id="backup-kind">
+        {% if current_kind == 'env' %}<option value="" selected>As set in the stack environment ({{ env_target }})</option>{% endif %}
+        {% for value, label in kinds %}<option value="{{ value }}"{% if value == current_kind %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+
+  <div class="form-grid" id="backup-fields">
+    <label data-kinds="folder s3 azure gdrive opendrive ftp sftp smb custom">Folder / path
+      <input name="backup_path" value="{{ s.backup_path }}" id="backup-path">
+      <span class="hint" id="path-hint"></span>
+    </label>
+    {% for f in fields %}
+      <label data-kinds="{{ f.kind }}"{% if f.checkbox %} class="check"{% endif %}>
+        {% if f.checkbox %}<input type="checkbox" name="{{ f.name }}"{% if f.value %} checked{% endif %}> {{ f.label }}
+        {% else %}{{ f.label }}
+          {% if f.choices %}<select name="{{ f.name }}">{% for c in f.choices %}<option{% if c == f.value %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+          {% elif f.textarea %}<textarea name="{{ f.name }}" rows="4" placeholder="{{ f.hint }}" autocomplete="off">{{ f.value }}</textarea>
+          {% else %}<input {% if f.secret %}type="password" autocomplete="new-password"{% endif %} name="{{ f.name }}" value="{{ f.value }}" placeholder="{{ f.hint }}">{% endif %}
+          {% if f.hint and not f.textarea %}{% endif %}
+        {% endif %}
+      </label>
+    {% endfor %}
+    <p data-kinds="gdrive" class="muted wide">Google Drive needs a one-time sign-in on a computer with a browser: install rclone there, run <code>rclone authorize "drive"</code>, sign in with the Google account the backups should go to, and paste the <code>{"access_token": …}</code> line it prints. For a Google Workspace shared drive you can use a service account key instead.</p>
+    <p data-kinds="folder" class="muted wide">Mount the folder into the <code>scheduler</code> container in the compose file (e.g. <code>/mnt/nas/vitrine:/backup</code>) and enter <code>/backup</code>.</p>
+    <p data-kinds="custom" class="muted wide">Any of rclone's 70+ storage systems (Dropbox, OneDrive, pCloud, Mega, WebDAV, Box…): configure it with <code>rclone config</code> on a computer, copy its section from <code>rclone.conf</code> here, and enter <code>name:folder</code> as the path.</p>
+  </div>
+
+  <div class="form-grid" data-kinds="folder s3 azure gdrive opendrive ftp sftp smb custom">
+    <label>Every night at <input type="time" name="backup_time" value="{{ s.backup_time|default:backup_time }}"></label>
+    <label>Keep database dumps (days) <input name="backup_keep_days" inputmode="numeric" value="{{ s.backup_keep_days|default_if_none:'' }}" placeholder="{{ keep_days }}"></label>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" type="submit" name="action" value="backup">Save</button>
+    <button class="btn" type="submit" name="action" value="backup_test">Save and test the connection</button>
+  </div>
+  {% if test %}<pre class="log {% if test.ok %}ok{% else %}bad{% endif %}">{{ test.log }}</pre>{% endif %}
+</form>
+
+<section class="card">
+  <h2>Backup history</h2>
+  <p class="muted">Restoring is described in the <a href="{% url 'docs-page' 'server' %}#restore-from-a-backup">server docs</a>.</p>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Started</th><th>Result</th><th>Took</th><th>To</th><th></th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td>{{ r.started|date:"D d M H:i" }}</td>
+        <td>{% if not r.finished %}<span class="pill">Running</span>{% elif r.ok %}<span class="pill ok">OK</span>{% else %}<span class="pill warn">Failed</span>{% endif %}</td>
+        <td>{% if r.duration %}{{ r.duration.seconds }} s{% endif %}</td>
+        <td>{{ r.target }}{% if r.database_bytes %} · {{ r.database_bytes|filesizeformat }}{% endif %}</td>
+        <td><details><summary>Log</summary><pre class="log">{{ r.log }}</pre></details></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="muted">No backup yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{{ path_hints|json_script:"path-hints" }}
+<script>
+(function () {
+  var select = document.getElementById('backup-kind');
+  var hints = JSON.parse(document.getElementById('path-hints').textContent);
+  function show() {
+    var kind = select.value;
+    document.querySelectorAll('#backups [data-kinds]').forEach(function (el) {
+      var on = el.getAttribute('data-kinds').split(' ').indexOf(kind) >= 0;
+      el.hidden = !on;
+      el.querySelectorAll('input,select,textarea').forEach(function (i) { i.disabled = !on; });
+    });
+    document.getElementById('path-hint').textContent = hints[kind] || '';
+  }
+  select.addEventListener('change', show);
+  show();
+})();
+</script>
+{% endblock %}

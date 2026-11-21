@@ -690,3 +690,55 @@ class BackupRun(models.Model):
     @property
     def duration(self):
         return (self.finished - self.started) if self.finished else None
+
+
+class SiteSettings(models.Model):
+    """Server-wide settings edited in /manage/settings/ (one row). Empty fields fall back to the stack environment."""
+
+    BACKUP_KINDS = [
+        ("off", "Off"),
+        ("folder", "Folder on the server (USB disk, NAS mounted on the host)"),
+        ("s3", "S3-compatible (Hetzner, AWS, MinIO, Wasabi, Backblaze…)"),
+        ("azure", "Azure Blob Storage"),
+        ("gdrive", "Google Drive"),
+        ("opendrive", "OpenDrive"),
+        ("ftp", "FTP / FTPS"),
+        ("sftp", "SFTP"),
+        ("smb", "SMB / Windows share / NAS"),
+        ("custom", "Other rclone remote (paste its configuration)"),
+    ]
+
+    telegram_bot_token = models.CharField(max_length=200, blank=True)
+    email_host = models.CharField(max_length=200, blank=True)
+    email_port = models.PositiveIntegerField(null=True, blank=True)
+    email_user = models.CharField(max_length=200, blank=True)
+    email_password = models.CharField(max_length=200, blank=True)
+    email_security = models.CharField(
+        max_length=10, blank=True, choices=[("starttls", "STARTTLS"), ("ssl", "SSL/TLS"), ("none", "None")]
+    )
+    email_from = models.CharField(max_length=200, blank=True)
+    offline_alert_minutes = models.PositiveIntegerField(null=True, blank=True)
+    sync_check_time = models.CharField(max_length=5, blank=True, help_text="HH:MM")
+
+    backup_kind = models.CharField(max_length=12, blank=True, choices=BACKUP_KINDS)
+    backup_path = models.CharField(
+        max_length=300, blank=True, help_text="Folder, bucket/folder or share/folder on the target."
+    )
+    backup_options = models.JSONField(default=dict, blank=True, help_text="Connection details of the chosen kind.")
+    backup_time = models.CharField(max_length=5, blank=True, help_text="HH:MM")
+    backup_keep_days = models.PositiveIntegerField(null=True, blank=True)
+    last_backup_day = models.DateField(null=True, blank=True)
+    last_sync_check_day = models.DateField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "settings"
+        verbose_name_plural = "settings"
+
+    def __str__(self):
+        return "Vitrine settings"
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

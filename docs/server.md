@@ -100,11 +100,26 @@ Vitrine can tell your team when something needs them, by **Telegram** and/or **e
 - at `VITRINE_SYNC_CHECK_TIME` (18:00) the day before an event: are all its files on that location's vMix PC, are some still waiting for approval?
 - a failed backup.
 
-Set up once in the stack: `VITRINE_TELEGRAM_BOT_TOKEN` (create a bot with @BotFather) and/or `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL`. Then each organization chooses its Telegram chat (group) id, email addresses and which alerts it wants on **Organization → Alerts to the team**; **Save and send a test** checks it works. To find a group's chat id: add the bot to the group, write something, open `https://api.telegram.org/bot<token>/getUpdates` and copy `chat.id` (it starts with `-100`).
+Set up once in **Settings → Alerts: how they are sent** (superusers): a Telegram bot token (create a bot with @BotFather) and/or your SMTP server, with **Save and email me a test**. The stack variables `VITRINE_TELEGRAM_BOT_TOKEN`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` still work and are used when the Settings fields are empty. Then each organization chooses its Telegram chat (group) id, email addresses and which alerts it wants on **Organization → Alerts to the team**; **Save and send a test** checks it works. To find a group's chat id: add the bot to the group, write something, open `https://api.telegram.org/bot<token>/getUpdates` and copy `chat.id` (it starts with `-100`).
 
 ## Backups
 
-The **scheduler** container backs up every night at `VITRINE_BACKUP_TIME` (03:30) with [rclone](https://rclone.org), so the target can be almost anything:
+The **scheduler** container backs up every night (03:30 by default) with [rclone](https://rclone.org), so the target can be almost anything. Set it up in **Settings → Backups** (superusers): choose where to, fill in the connection details, **Save and test the connection**, and **Back up now** for a first run. Secrets are stored in the database and never shown again; leave a password field as it is to keep it.
+
+| In Settings | What you fill in |
+|---|---|
+| Folder on the server | A path such as `/backup`; mount your USB disk or NAS folder there in the compose file (`scheduler` → `volumes`) |
+| S3-compatible | Endpoint (e.g. `https://fsn1.your-objectstorage.com` for Hetzner), access key, secret key; path `bucket/folder` |
+| Azure Blob Storage | Storage account name and key; path `container/folder` |
+| Google Drive | A token: install rclone on a computer with a browser, run `rclone authorize "drive"`, sign in with the Google account, paste the `{"access_token": …}` it prints. Or a service account key for a Workspace shared drive. Optional folder id |
+| OpenDrive | Username (email) and password |
+| FTP / FTPS, SFTP | Host, port, user, password (FTPS: tick *Use TLS*) |
+| SMB / Windows share / NAS | Host or IP, user, password, optional domain; path `share/folder` |
+| Other rclone remote | Any of rclone's storage systems (Dropbox, OneDrive, pCloud, Mega, WebDAV, Box…): paste its section from `rclone.conf` and enter `name:folder` as the path |
+
+The backup time, how many days of database dumps to keep, and the "ready for tomorrow?" check time are in Settings too.
+
+Instead of Settings you can configure backups in the stack environment, which is used while Settings says *As set in the stack environment*:
 
 | Target | `VITRINE_BACKUP_TARGET` | Remote settings |
 |---|---|---|
@@ -123,7 +138,7 @@ What is copied:
 - `media/`: all uploads, converted files and thumbnails, mirrored; files that leave it go to `media-removed/<date>/` and are kept 30 days,
 - `keys/`: the pairing key that signs the tablets' QR codes.
 
-**Backups** in `/manage/` (superusers) shows the last runs with their logs and has **Back up now**. The Events page warns superusers when backups are off or the last success is older than 36 hours, and the organizations that want it get an alert when one fails.
+**Settings → Backup history** shows the last runs with their logs. The Events page warns superusers when backups are off or the last success is older than 36 hours, and the organizations that want it get an alert when one fails.
 
 ### Restore from a backup
 

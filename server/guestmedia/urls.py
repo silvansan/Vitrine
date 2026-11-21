@@ -34,6 +34,7 @@ urlpatterns = [
     path("manage/people/<int:pk>/", manage_views.person_detail, name="manage-person"),
     path("manage/organization/", manage_views.organization, name="manage-organization"),
     path("manage/backups/", manage_views.backups, name="manage-backups"),
+    path("manage/settings/", manage_views.site_settings, name="manage-settings"),
     path("manage/switch-org", manage_views.switch_org, name="manage-switch-org"),
     path("manage/library/", manage_views.library, name="manage-library"),
     path("manage/asset/<int:pk>/", manage_views.asset_detail, name="manage-asset"),

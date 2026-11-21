@@ -213,7 +213,7 @@ class FlowTests(TestCase):
         for url in ["/manage/", f"/manage/service/{self.service.pk}/", "/manage/library/", "/manage/library/?trash=1",
                     f"/manage/asset/{asset.pk}/", "/manage/agents/", f"/g/{self.maria.token}/", f"/g/{self.maria.token}/tablet/",
                     "/manage/people/", f"/manage/people/{self.maria.person.pk}/", "/manage/organization/",
-                    "/manage/library/?scope=shared"]:
+                    "/manage/library/?scope=shared", "/manage/settings/"]:
             self.assertEqual(self.client.get(url).status_code, 200, url)
         response = self.client.post("/manage/agents/", {"action": "pair", "agent_id": self.agent.pk, "role": "back", "name": "Back"})
         self.assertContains(response, "/pair?t=s1.")
@@ -306,7 +306,7 @@ class LoginPageTests(TestCase):
         self.assertContains(response, 'class="alert"')
         response = self.client.post("/login/", {"username": "admin", "password": "pw", "next": "/manage/"})
         self.assertRedirects(response, "/manage/", fetch_redirect_response=False)
-        self.assertContains(self.client.get("/manage/"), "Sign out admin")
+        self.assertContains(self.client.get("/manage/"), "Signed in as admin")
         self.client.post("/logout/")
         self.assertEqual(self.client.get("/manage/").status_code, 302)
 
@@ -583,7 +583,7 @@ class AlertTests(TestCase):
         self.client.post("/manage/organization/", {"action": "notifications", "notify_telegram_chat": "-100",
                                                     "notify_uploads": "on", "test": "1"})
         self.assertIn("Test message", self.sent[-1])
-        self.assertContains(self.client.get("/manage/backups/"), "Backups are off")
+        self.assertContains(self.client.get("/manage/settings/"), "Back up to")
         self.assertContains(self.client.get("/manage/"), "Backups are off")
 
 
@@ -652,3 +652,62 @@ class EventPeriodTests(TestCase):
         guest = make_guest(event, "Maria")
         self.assertEqual(guest.person.current_participation(), guest)
         self.assertContains(self.client.get(f"/g/{guest.token}/"), event.short_when)
+
+
+class SettingsPageTests(TestCase):
+    """Backups and alert delivery can be set in /manage/settings/ instead of the stack."""
+
+    def setUp(self):
+        User.objects.create_superuser("admin", "a@example.org", "pw")
+        self.client.login(username="admin", password="pw")
+
+    def test_backup_settings_build_rclone_config(self):
+        from . import config
+
+        self.client.post("/manage/settings/", {
+            "action": "backup", "backup_kind": "s3", "backup_path": "my-bucket/vitrine",
+            "s3__provider": "Other", "s3__endpoint": "https://fsn1.your-objectstorage.com",
+            "s3__access_key_id": "AK", "s3__secret_access_key": "SECRET", "backup_time": "02:15",
+        })
+        plan = config.backup_plan()
+        self.assertEqual(plan["target"], "vitrine:my-bucket/vitrine")
+        self.assertIn("type = s3", plan["config"])
+        self.assertIn("secret_access_key = SECRET", plan["config"])
+        self.assertEqual(config.backup_time(), "02:15")
+        # The secret isn't shown again, and saving without retyping keeps it.
+        page = self.client.get("/manage/settings/")
+        self.assertNotContains(page, "SECRET")
+        self.client.post("/manage/settings/", {
+            "action": "backup", "backup_kind": "s3", "backup_path": "my-bucket/vitrine",
+            "s3__provider": "Other", "s3__endpoint": "https://fsn1.your-objectstorage.com",
+            "s3__access_key_id": "AK", "s3__secret_access_key": "••••••••",
+        })
+        self.assertIn("secret_access_key = SECRET", config.backup_plan()["config"])
+
+    def test_google_drive_token_and_off(self):
+        from . import config
+
+        self.client.post("/manage/settings/", {
+            "action": "backup", "backup_kind": "gdrive", "backup_path": "Vitrine backups",
+            "gdrive__token": '{"access_token": "x",\n "expiry": "2026"}', "gdrive__root_folder_id": "",
+        })
+        plan = config.backup_plan()
+        self.assertIn("type = drive", plan["config"])
+        self.assertIn('token = {"access_token":"x","expiry":"2026"}', plan["config"])
+        self.client.post("/manage/settings/", {"action": "backup", "backup_kind": "off"})
+        self.assertIsNone(config.backup_plan())
+
+    def test_alert_delivery_settings(self):
+        from . import config
+
+        self.client.post("/manage/settings/", {
+            "action": "alerts", "telegram_bot_token": "123:abc", "email_host": "smtp.example.org",
+            "email_port": "465", "email_security": "ssl", "email_user": "me", "email_password": "pw",
+            "offline_alert_minutes": "5", "sync_check_time": "17:30",
+        })
+        self.assertEqual(config.telegram_token(), "123:abc")
+        cfg = config.email_config()
+        self.assertTrue(cfg["use_ssl"])
+        self.assertEqual(cfg["port"], 465)
+        self.assertEqual(config.offline_alert_minutes(), 5)
+        self.assertNotContains(self.client.get("/manage/settings/"), "123:abc")

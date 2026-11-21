@@ -12,6 +12,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.db import models
 from django.db.models import Count, Q, Sum
 from django.http import Http404, HttpResponse
+from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -31,6 +32,7 @@ from .models import (
     SetItem,
     new_guest_token,
 )
+from . import config as vitrine_config
 from .orgs import check_org, org_view
 from .notify import notify_agents
 from .signing import sign_pairing
@@ -594,7 +596,7 @@ def organization(request):
                 from . import alerts
 
                 if not alerts.can_send(org):
-                    messages.error(request, "Nothing to send to: add a Telegram chat id (with VITRINE_TELEGRAM_BOT_TOKEN set) or an email address (with EMAIL_HOST set).")
+                    messages.error(request, "Nothing to send to: add a Telegram chat id or an email address here, and set up Telegram or email under Settings.")
                 else:
                     errors = alerts.notify(org, "Test message", f"Alerts for {org.name} work.")
                     if errors:
@@ -625,8 +627,8 @@ def organization(request):
             "shared_from": org.shared_from.all(),
             "users": get_user_model().objects.filter(is_staff=True).order_by("username") if request.user.is_superuser else [],
             "staff_ids": set(org.staff.values_list("pk", flat=True)),
-            "telegram_ready": bool(settings.VITRINE_TELEGRAM_BOT_TOKEN),
-            "email_ready": bool(settings.EMAIL_HOST),
+            "telegram_ready": bool(vitrine_config.telegram_token()),
+            "email_ready": bool(vitrine_config.email_config()),
         },
     )
 
@@ -644,29 +646,124 @@ def qr_svg(request):
 
 @org_view
 def backups(request):
-    """Backup status and history; superusers can start one."""
-    from . import backup
-    from .models import BackupRun
+    return redirect(reverse("manage-settings") + "#backups")
+
+
+SECRET_MASK = "••••••••"
+
+
+@org_view
+def site_settings(request):
+    """Server-wide settings (superusers): alert delivery and backups."""
+    from . import backup, config
+    from .models import BackupRun, SiteSettings
 
     if not request.user.is_superuser:
         raise Http404()
-    if request.method == "POST" and request.POST.get("action") == "run":
-        if not backup.enabled():
-            messages.error(request, "Backups are off: set VITRINE_BACKUP_TARGET in the stack.")
-        else:
-            backup.run_backup.delay("started from /manage/")
-            messages.success(request, "Backup started. Refresh this page in a minute.")
-        return redirect("manage-backups")
+    s = SiteSettings.load()
+    if request.method == "POST":
+        action = request.POST.get("action")
+        P = request.POST
+
+        def keep_secret(new, old):
+            return old if new in ("", SECRET_MASK) else new
+
+        if action == "alerts":
+            s.telegram_bot_token = keep_secret(P.get("telegram_bot_token", "").strip(), s.telegram_bot_token)
+            if P.get("clear_telegram") == "on":
+                s.telegram_bot_token = ""
+            s.email_host = P.get("email_host", "").strip()
+            s.email_port = int(P["email_port"]) if P.get("email_port", "").isdigit() else None
+            s.email_user = P.get("email_user", "").strip()
+            s.email_password = keep_secret(P.get("email_password", ""), s.email_password)
+            s.email_security = P.get("email_security", "starttls")
+            s.email_from = P.get("email_from", "").strip()
+            s.offline_alert_minutes = int(P["offline_alert_minutes"]) if P.get("offline_alert_minutes", "").isdigit() else None
+            s.sync_check_time = P.get("sync_check_time", "").strip()[:5]
+            s.save()
+            messages.success(request, "Saved.")
+            if P.get("test_email") == "1":
+                from . import alerts
+
+                if not config.email_config():
+                    messages.error(request, "Email isn't set up yet.")
+                elif not request.user.email:
+                    messages.error(request, "Your account has no email address (Admin → Users).")
+                else:
+                    try:
+                        alerts.send_email([request.user.email], "[Vitrine] Test email", "Email from Vitrine works.")
+                        messages.success(request, f"Test email sent to {request.user.email}.")
+                    except Exception as exc:
+                        messages.error(request, f"Test email failed: {exc}")
+            return redirect(reverse("manage-settings") + "#alerts")
+        if action in ("backup", "backup_test"):
+            kind = P.get("backup_kind", "off")
+            if kind and kind not in dict(SiteSettings.BACKUP_KINDS):
+                kind = "off"  # "" keeps the stack environment's target
+            old = s.backup_options or {}
+            opts = {}
+            for name, _label, _hint, extra in config.BACKUP_FIELDS.get(kind, []):
+                field = f"{kind}__{name}"
+                if extra.get("checkbox"):
+                    opts[name] = P.get(field) == "on"
+                elif extra.get("secret"):
+                    value = P.get(field, "")
+                    opts[name] = old.get(name, "") if (value.strip() in ("", SECRET_MASK) and s.backup_kind == kind) else value.strip()
+                else:
+                    opts[name] = P.get(field, "").strip()
+            s.backup_kind = kind
+            s.backup_options = opts
+            s.backup_path = P.get("backup_path", "").strip()
+            s.backup_time = P.get("backup_time", "").strip()[:5]
+            s.backup_keep_days = int(P["backup_keep_days"]) if P.get("backup_keep_days", "").isdigit() else None
+            s.save()
+            if action == "backup_test":
+                ok, log = backup.test_connection()
+                request.session["vitrine_backup_test"] = {"ok": ok, "log": log}
+            else:
+                messages.success(request, "Saved.")
+            return redirect(reverse("manage-settings") + "#backups")
+        if action == "run":
+            if not backup.enabled():
+                messages.error(request, "Choose where backups go first.")
+            else:
+                backup.run_backup.delay("started from /manage/")
+                messages.success(request, "Backup started. Refresh this page in a minute.")
+            return redirect(reverse("manage-settings") + "#backups")
+    try:
+        plan = config.backup_plan()
+    except Exception as exc:
+        plan = {"label": f"(problem: {exc})"}
+    fields = []
+    for kind, rows in config.BACKUP_FIELDS.items():
+        for name, label, hint, extra in rows:
+            value = (s.backup_options or {}).get(name, "") if s.backup_kind == kind else ""
+            if extra.get("secret") and value:
+                value = SECRET_MASK
+            fields.append({"kind": kind, "name": f"{kind}__{name}", "label": label, "hint": hint, "value": value,
+                           "secret": extra.get("secret"), "textarea": extra.get("textarea"),
+                           "checkbox": extra.get("checkbox"), "choices": extra.get("choices")})
     return render(
         request,
-        "guestmedia/manage/backups.html",
+        "guestmedia/manage/settings.html",
         {
-            "enabled": backup.enabled(),
-            "target": settings.VITRINE_BACKUP_TARGET,
-            "when": settings.VITRINE_BACKUP_TIME,
-            "keep": settings.VITRINE_BACKUP_KEEP_DAYS,
-            "runs": BackupRun.objects.all()[:30],
+            "s": s,
+            "mask": SECRET_MASK,
+            "kinds": SiteSettings.BACKUP_KINDS,
+            "current_kind": s.backup_kind or ("env" if config.env_backup_target() else "off"),
+            "env_target": config.env_backup_target(),
+            "fields": fields,
+            "path_hints": config.PATH_HINT,
+            "plan": plan,
+            "backup_time": config.backup_time(),
+            "keep_days": config.backup_keep_days(),
+            "runs": BackupRun.objects.all()[:20],
             "last_ok": backup.last_success(),
             "stale": backup.is_stale(),
+            "test": request.session.pop("vitrine_backup_test", None),
+            "telegram_from_env": bool(settings.VITRINE_TELEGRAM_BOT_TOKEN) and not s.telegram_bot_token,
+            "email_from_env": bool(settings.EMAIL_HOST) and not s.email_host,
+            "offline_minutes": config.offline_alert_minutes(),
+            "sync_time": config.sync_check_time(),
         },
     )

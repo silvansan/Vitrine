@@ -12,7 +12,9 @@ import urllib.parse
 import urllib.request
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, get_connection
+
+from . import config
 
 log = logging.getLogger(__name__)
 
@@ -22,13 +24,13 @@ def emails_of(org):
 
 
 def can_send(org):
-    telegram = bool(settings.VITRINE_TELEGRAM_BOT_TOKEN and org.notify_telegram_chat)
-    email = bool(settings.EMAIL_HOST and emails_of(org))
+    telegram = bool(config.telegram_token() and org.notify_telegram_chat)
+    email = bool(config.email_config() and emails_of(org))
     return telegram or email
 
 
 def send_telegram(chat_id, text):
-    url = f"https://api.telegram.org/bot{settings.VITRINE_TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{config.telegram_token()}/sendMessage"
     data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "disable_web_page_preview": "true"}).encode()
     with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=15) as response:
         body = json.loads(response.read() or b"{}")
@@ -39,20 +41,33 @@ def send_telegram(chat_id, text):
 def notify(org, subject, text):
     """Send to the organization's Telegram chat and email addresses. Returns a list of errors."""
     errors = []
-    if settings.VITRINE_TELEGRAM_BOT_TOKEN and org.notify_telegram_chat:
+    if config.telegram_token() and org.notify_telegram_chat:
         try:
             send_telegram(org.notify_telegram_chat, f"{subject}\n\n{text}")
         except Exception as exc:  # network, wrong chat id, …
             log.warning("telegram alert for %s failed: %s", org, exc)
             errors.append(f"Telegram: {exc}")
     recipients = emails_of(org)
-    if settings.EMAIL_HOST and recipients:
+    if config.email_config() and recipients:
         try:
-            send_mail(f"[Vitrine] {subject}", text, settings.DEFAULT_FROM_EMAIL, recipients)
+            send_email(recipients, f"[Vitrine] {subject}", text)
         except Exception as exc:
             log.warning("email alert for %s failed: %s", org, exc)
             errors.append(f"Email: {exc}")
     return errors
+
+
+def send_email(recipients, subject, text):
+    cfg = config.email_config()
+    if settings.EMAIL_BACKEND.endswith("locmem.EmailBackend"):  # tests
+        connection = get_connection()
+    else:
+        connection = get_connection(
+            "django.core.mail.backends.smtp.EmailBackend", host=cfg["host"], port=cfg["port"],
+            username=cfg["username"], password=cfg["password"], use_tls=cfg["use_tls"], use_ssl=cfg["use_ssl"],
+            timeout=15,
+        )
+    EmailMessage(subject, text, cfg["from"], recipients, connection=connection).send()
 
 
 def manage_url(path):

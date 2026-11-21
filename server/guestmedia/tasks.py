@@ -137,7 +137,9 @@ def check_agents():
     from . import alerts
     from .models import Location
 
-    limit = timezone.now() - timedelta(minutes=settings.VITRINE_OFFLINE_ALERT_MINUTES)
+    from . import config
+
+    limit = timezone.now() - timedelta(minutes=config.offline_alert_minutes())
     for location in Location.objects.select_related("agent", "organization").filter(agent__isnull=False):
         agent, org = location.agent, location.organization
         offline = agent.last_seen is not None and agent.last_seen < limit
@@ -207,3 +209,20 @@ def check_sync():
             continue
         ok, text = sync_report(event.location, event)
         alerts.notify(org, f"{event.location.name}: {'ready for' if ok else 'not ready for'} tomorrow", text)
+
+
+@shared_task
+def check_sync_due():
+    """Every few minutes: run the "ready for tomorrow?" check once a day at its time."""
+    from . import config
+    from .models import SiteSettings
+
+    now = timezone.localtime()
+    hour, minute = config.parse_time(config.sync_check_time(), (18, 0))
+    if (now.hour, now.minute) < (hour, minute):
+        return
+    s = SiteSettings.load()
+    if s.last_sync_check_day == now.date():
+        return
+    SiteSettings.objects.filter(pk=s.pk).update(last_sync_check_day=now.date())
+    check_sync()

@@ -41,6 +41,12 @@ Every person has a 6-digit **PIN** next to their link (event page and person pag
 Tip: videos that are already H.264 1920×1080 at your project frame rate (`VITRINE_VIDEO_FPS`) are ready in seconds, because they are copied instead of converted.
 5. **Waiting for approval** on the event page: approve or reject. Rejected files never reach the vMix PC. Converted files appear on the tablets as soon as the agent has downloaded them.
 
+## Settings (superusers)
+
+**Settings** in `/manage/` holds what the whole server shares: how alerts are sent (Telegram bot, email server), when the "ready for tomorrow?" check runs, and where and when backups go (folder/NAS, S3, Azure, Google Drive, OpenDrive, FTP, SFTP, SMB or another rclone remote), with a connection test, **Back up now** and the backup history. Who receives alerts is chosen per organization on **Organization**.
+
+On a phone, `/manage/` shows the sections as a row you swipe sideways, forms one field per line, and wide tables scroll sideways.
+
 ## Sharing between organizations
 
 On **Organization**, tick the organizations that may use your shared files, and either share every approved, non-private file or only those you mark **Shared** (library: select files → **Share with other organizations**, or on a file's page). Their staff see them under **Library → Shared with us**, their people under **Shared** in the guest library. Their agents download a shared file only when one of their events uses it. Superusers create organizations and choose each organization's staff accounts there.

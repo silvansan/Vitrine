@@ -7,7 +7,7 @@
 </div>
 
 {% if backup_warning %}
-<p class="error">{% if backup_enabled %}No successful backup in the last 36 hours.{% else %}Backups are off: uploads and the database exist only on this server.{% endif %} <a href="{% url 'manage-backups' %}">Backups</a></p>
+<p class="error">{% if backup_enabled %}No successful backup in the last 36 hours.{% else %}Backups are off: uploads and the database exist only on this server.{% endif %} <a href="{% url 'manage-settings' %}#backups">Set up backups</a></p>
 {% endif %}
 
 {% if not locations %}

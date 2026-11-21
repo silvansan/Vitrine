@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="{% url 'manage-dashboard' %}">Vitrine</a>
+  <a class="brand" href="{% url 'manage-dashboard' %}"><span class="brand-dot"></span>Vitrine</a>
   {% if request.orgs|length > 1 %}
   <form method="post" action="{% url 'manage-switch-org' %}" class="org-switch">{% csrf_token %}
     <input type="hidden" name="next" value="{{ request.path }}">
@@ -17,17 +17,18 @@
     </select>
   </form>
   {% elif request.org %}<span class="org-name">{{ request.org.name }}</span>{% endif %}
-  <nav>
-    <a href="{% url 'manage-dashboard' %}">Events</a>
-    <a href="{% url 'manage-people' %}">People</a>
-    <a href="{% url 'manage-library' %}">Library</a>
-    <a href="{% url 'manage-agents' %}">Locations &amp; tablets</a>
-    <a href="{% url 'manage-organization' %}">Organization</a>
-    {% if request.user.is_superuser %}<a href="{% url 'manage-backups' %}">Backups</a>{% endif %}
+  {% url 'manage-dashboard' as u_events %}{% url 'manage-people' as u_people %}{% url 'manage-library' as u_library %}{% url 'manage-agents' as u_agents %}{% url 'manage-organization' as u_org %}{% url 'manage-settings' as u_settings %}
+  <nav aria-label="Sections">
+    <a href="{{ u_events }}"{% if request.path == u_events or '/manage/event/' in request.path %} aria-current="page"{% endif %}>Events</a>
+    <a href="{{ u_people }}"{% if u_people in request.path %} aria-current="page"{% endif %}>People</a>
+    <a href="{{ u_library }}"{% if u_library in request.path or '/manage/asset/' in request.path %} aria-current="page"{% endif %}>Library</a>
+    <a href="{{ u_agents }}"{% if u_agents in request.path %} aria-current="page"{% endif %}>Locations &amp; tablets</a>
+    <a href="{{ u_org }}"{% if u_org in request.path %} aria-current="page"{% endif %}>Organization</a>
+    {% if request.user.is_superuser %}<a href="{{ u_settings }}"{% if u_settings in request.path %} aria-current="page"{% endif %}>Settings</a>{% endif %}
     <a href="/admin/">Admin</a>
     <a href="{% url 'docs-home' %}">Docs</a>
   </nav>
-  <form method="post" action="{% url 'logout' %}" class="logout">{% csrf_token %}<button type="submit" class="btn small">Sign out {{ user.get_username }}</button></form>
+  <form method="post" action="{% url 'logout' %}" class="logout">{% csrf_token %}<button type="submit" class="btn small" title="Signed in as {{ user.get_username }}">Sign out<span class="who"> {{ user.get_username }}</span></button></form>
 </header>
 <main class="page">
   {% if messages %}
@@ -38,6 +39,13 @@
   {% block content %}{% endblock %}
 </main>
 <script>
+(function () {
+  // On phones the section bar scrolls sideways: keep the current section in view.
+  var current = document.querySelector('.top nav [aria-current]');
+  if (current && current.parentNode.scrollWidth > current.parentNode.clientWidth) {
+    current.parentNode.scrollLeft = current.offsetLeft - 40;
+  }
+})();
 document.addEventListener('click', function (e) {
   var btn = e.target.closest('[data-copy]');
   if (!btn) return;
