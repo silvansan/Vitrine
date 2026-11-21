@@ -40,22 +40,21 @@
     {% endif %}
   </div>
   <table class="table">
-    <thead><tr><th>Event</th><th>When</th><th>Location</th><th>People</th><th>Sent to the agent</th></tr></thead>
+    <thead><tr><th>Event</th><th>When</th><th>Location</th><th>People</th></tr></thead>
     <tbody>
     {% for s in events %}
       <tr>
-        <td><a href="{% url 'manage-service' s.pk %}">{{ s.name }}</a></td>
+        <td>{% if not s.is_active %}<span class="dot off" title="Off: not sent to the vMix PC"></span><span class="sr-only">Off</span>{% elif s.past %}<span class="dot" title="Past"></span><span class="sr-only">Past</span>{% else %}<span class="dot on" title="Active: sent to the vMix PC"></span><span class="sr-only">Active</span>{% endif %} <a href="{% url 'manage-service' s.pk %}">{{ s.name }}</a></td>
         <td>{{ s.when }}{% if s.on_today %} <span class="pill warn">Today</span>{% endif %}</td>
         <td>{{ s.location.name }}</td>
         <td>{{ s.guest_count }}</td>
-        <td>{% if not s.is_active %}<span class="pill">Off</span>{% elif s.past %}<span class="pill">Past</span>{% else %}<span class="pill ok">Active</span>{% endif %}</td>
       </tr>
     {% empty %}
-      <tr><td colspan="5" class="muted">No events yet.</td></tr>
+      <tr><td colspan="4" class="muted">No events yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
-  <p class="muted">Each agent receives the active events of its location from yesterday up to the next days, and downloads their files ahead of time.</p>
+  <p class="muted legend"><span class="dot on"></span> active · <span class="dot off"></span> off · <span class="dot"></span> past. Each agent receives the active events of its location from yesterday up to the next days, and downloads their files ahead of time.</p>
 </section>
 
 {% if unplaced %}

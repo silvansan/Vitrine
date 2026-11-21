@@ -90,6 +90,8 @@ Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the 
 3. **Each vMix PC**: download `vitrine-agent.exe` (and `vitrine-tray.exe`) from the release and double-click it; it updates the service in place and keeps its settings, pairings and files. Server and agent should run the same version: a newer server with an older agent works, but new features that need the agent (for example guest control) stay off until it is updated.
 4. Check: `/manage/` → Locations & tablets shows each vMix PC online with the new version.
 
+Static files (CSS, JS) get a fingerprint in their name at every start (`manage.3f2a….css`), so phones and tablets pick up a new design right after a redeploy instead of showing a cached old one.
+
 Between releases, every push to `main` also builds `:latest` (the **build** workflow), so *Pull and redeploy* alone picks up server-only fixes.
 
 ### Notes for v0.1.9 (guest control, permanent tablet link)

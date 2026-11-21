@@ -126,3 +126,9 @@ textarea{max-width:100%}
   .bulk .btn{flex:1 1 45%;justify-content:center}
   .form-grid{grid-template-columns:1fr}
 }
+
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.dot.off{background:transparent;border:2px solid #A0A7B2;width:9px;height:9px;box-sizing:border-box}
+.table td.status-cell{width:1%;text-align:center}
+.legend .dot{vertical-align:middle;margin:0 2px}
+.table{position:relative}

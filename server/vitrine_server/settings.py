@@ -156,6 +156,12 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "/static/"
+# Hashed file names (manage.3f2a….css): a new release is never hidden behind a browser's cached
+# copy, although nginx lets browsers keep static files for a week.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "guestmedia.storage.VersionedStaticStorage"},
+}
 STATIC_ROOT = Path(os.environ.get("STATIC_ROOT", BASE_DIR / "data" / "static"))
 MEDIA_URL = "/protected/"
 MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR / "data" / "media"))
