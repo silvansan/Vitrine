@@ -1,0 +1,67 @@
+# One-click release: Actions → release → Run workflow.
+# Picks the next version (patch / minor / major, or the exact one you type), tags main,
+# creates the GitHub release, then builds the agent .exe files and the server images for it.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version goes up
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Or an exact version, e.g. 0.2.0 (leave empty to use the choice above)
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump }}
+          EXACT: ${{ inputs.version }}
+        run: |
+          last=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          last=${last:-v0.0.0}
+          if [ -n "$EXACT" ]; then
+            next="v${EXACT#v}"
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            case "$BUMP" in
+              major) next="v$((major + 1)).0.0" ;;
+              minor) next="v${major}.$((minor + 1)).0" ;;
+              *)     next="v${major}.${minor}.$((patch + 1))" ;;
+            esac
+          fi
+          if git rev-parse -q --verify "refs/tags/$next" >/dev/null; then
+            echo "::error::$next already exists"; exit 1
+          fi
+          echo "Releasing $next (previous: $last)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$next" -m "Vitrine $next"
+          git push origin "$next"
+          gh release create "$next" --title "Vitrine $next" --generate-notes --verify-tag
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: tag
+    uses: ./.github/workflows/build.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    secrets: inherit

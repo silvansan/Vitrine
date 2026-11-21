@@ -70,6 +70,10 @@ How it works inside (data model, vMix control, pairing, offline behaviour, APIs)
 | `agent/internal/web/static/` | Tablet app and companion page (plain HTML/JS, embedded in the agent) |
 | `docs/` | Setup and operating guides |
 
+## Releasing
+
+**Actions → release → Run workflow**, choose *patch*, *minor* or *major* (or type an exact version such as `0.2.0`). It tags `main`, creates the GitHub release, attaches the agent files (`vitrine-agent.exe`, `vitrine-tray.exe`, …) and pushes the server images tagged with the version (`latest` follows `main`). The Companion module has the same button in its own repository.
+
 ## Development
 
 ```bash

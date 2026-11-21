@@ -5,6 +5,16 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  # Called by release.yml with the new version tag.
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+
+env:
+  # The version being released: from release.yml, or a pushed v* tag. Empty for main and pull requests.
+  RELEASE_TAG: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '') }}
 
 permissions:
   contents: write
@@ -15,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -23,12 +35,11 @@ jobs:
       - run: python manage.py test guestmedia
         working-directory: server
       - name: Build and push images
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}
-          TAG=latest
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG=${GITHUB_REF#refs/tags/}; fi
+          TAG=${RELEASE_TAG:-latest}
           # The knowledge base at /docs/ is the repo's docs/ folder plus the README.
           rm -rf server/docs && cp -r docs server/docs && cp README.md server/docs/README.md
           docker build -t $REGISTRY/vitrine-server:$TAG server
@@ -43,6 +54,8 @@ jobs:
         working-directory: agent
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
@@ -51,8 +64,8 @@ jobs:
       - run: go test ./...
       - name: Build Windows binaries
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          [[ "$GITHUB_REF" == refs/tags/* ]] || VERSION=dev-${GITHUB_SHA::7}
+          VERSION=${RELEASE_TAG#v}
+          [[ -n "$RELEASE_TAG" ]] || VERSION=dev-${GITHUB_SHA::7}
           mkdir -p dist
           GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X github.com/silvansan/vitrine/agent/internal/app.Version=$VERSION" -o dist/vitrine-agent.exe ./cmd/vitrine-agent
           GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui" -o dist/vitrine-tray.exe ./cmd/vitrine-tray
@@ -63,7 +76,8 @@ jobs:
           name: vitrine-agent-windows
           path: agent/dist/
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: env.RELEASE_TAG != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: agent/dist/*
