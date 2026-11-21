@@ -249,3 +249,15 @@ fieldset.box legend { padding: 0 6px; }
 .access-req { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 28px 0; padding: 10px 14px; border-radius: 12px; background: rgba(217,45,32,.12); border: 1px solid rgba(217,45,32,.45); }
 .access-req span { flex: 1; min-width: 200px; }
 .access-req svg { color: #D92D20; }
+
+/* Access request pop-up (back tablets) */
+.request-pop { align-items: center; text-align: center; gap: 12px; }
+.request-pop h2 { margin: 0; font-size: 24px; }
+.request-pop p { margin: 0; }
+.req-icon { width: 64px; height: 64px; border-radius: 50%; background: #D93A3A; color: #fff; display: flex; align-items: center; justify-content: center; animation: req-pulse 1.4s ease-in-out infinite; }
+.req-icon svg { width: 30px; height: 30px; }
+.req-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 6px; }
+.req-actions .btn { min-width: 140px; min-height: 52px; font-size: 17px; }
+.btn.ghost { background: transparent; border-color: transparent; }
+@keyframes req-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,58,58,.5); } 50% { box-shadow: 0 0 0 14px rgba(217,58,58,0); } }
+@media (prefers-reduced-motion: reduce) { .req-icon { animation: none; } }

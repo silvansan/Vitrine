@@ -120,3 +120,25 @@ button,input{font:inherit}
 .guest-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:10px}
 .guest-actions .help-link{margin-top:0}
 .open-tablet{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--text);color:var(--bg);font-weight:700;font-size:14px;text-decoration:none}
+
+/* Full-screen viewer */
+.thumb-box{border:0;padding:0;background:none;cursor:zoom-in;color:inherit}
+.thumb-box .zoom{position:absolute;right:4px;bottom:4px;width:24px;height:24px;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center}
+.thumb-box .zoom svg{width:14px;height:14px}
+.pick-wrap{position:relative;display:grid}
+.pick-zoom{position:absolute;top:8px;left:8px;width:36px;height:36px;border-radius:10px;border:0;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;cursor:zoom-in}
+body.viewer-open{overflow:hidden}
+.viewer{position:fixed;inset:0;z-index:1000;background:#000;color:#fff;display:flex;flex-direction:column}
+.viewer-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0}
+.viewer-stage img,.viewer-stage video{max-width:100%;max-height:100%;width:auto;height:auto;aspect-ratio:auto;object-fit:contain;background:#000}
+.viewer-stage video{width:100%;max-height:100%}
+.viewer-audio{display:flex;flex-direction:column;align-items:center;gap:20px;width:min(90vw,520px)}
+.viewer-audio img{max-width:100%;max-height:50vh;border-radius:12px}
+.viewer-audio audio{width:100%}
+.viewer-audio .note{font-size:72px;opacity:.6}
+.viewer-wait{opacity:.8;padding:24px;text-align:center}
+.viewer-caption{padding:12px 64px calc(12px + env(safe-area-inset-bottom));text-align:center;font-size:14px;opacity:.85;overflow-wrap:anywhere}
+.viewer-close{position:absolute;top:calc(10px + env(safe-area-inset-top));right:10px;width:48px;height:48px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.viewer-nav{position:absolute;top:50%;transform:translateY(-50%);width:52px;height:52px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.viewer-nav.prev{left:10px}.viewer-nav.next{right:10px}
+.viewer-nav[hidden]{display:none}

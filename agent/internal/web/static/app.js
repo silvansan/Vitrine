@@ -192,6 +192,7 @@
 
   function onStatus(msg) {
     S.status = msg;
+    noticeRequests(msg.requests || []);
     var e = eng();
     if (e.error && e.error !== ui.lastError) {
       ui.lastError = e.error;
@@ -621,6 +622,7 @@
     html += renderDrawer();
     html += renderMarkerSheet();
     html += renderInstallSheet();
+    html += renderRequestPopup();
     if (ui.toast) html += '<div class="toast" role="alert">' + h(ui.toast) + '</div>';
     if (!S.wsOk) html += '<div class="offline">Reconnecting to the vMix PC…</div>';
     var scroll = {};
@@ -728,6 +730,71 @@
     var ua = navigator.userAgent;
     return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   }
+  /* A guest asked for control (from their own tablet view): pop up on back tablets, with a chime. */
+  function noticeRequests(requests) {
+    if (!isBack()) return;
+    ui.reqSeen = ui.reqSeen || {};
+    var current = {};
+    requests.forEach(function (r) {
+      var key = r.set_id + '@' + r.at;
+      current[key] = true;
+      if (!ui.reqSeen[key]) {
+        ui.reqSeen[key] = true;
+        ui.reqPopup = r;
+        chime();
+        if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
+      }
+    });
+    if (ui.reqPopup && !current[ui.reqPopup.set_id + '@' + ui.reqPopup.at]) ui.reqPopup = null; // answered elsewhere
+  }
+
+  // Browsers only allow sound after a tap: unlock it on the first one.
+  document.addEventListener('pointerdown', function unlock() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx && !ui.audioCtx) ui.audioCtx = new Ctx();
+      if (ui.audioCtx && ui.audioCtx.state === 'suspended') ui.audioCtx.resume();
+    } catch (err) { /* ignore */ }
+    document.removeEventListener('pointerdown', unlock);
+  });
+
+  function chime() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      ui.audioCtx = ui.audioCtx || new Ctx();
+      var ctx = ui.audioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+      [660, 880].forEach(function (freq, i) {
+        var o = ctx.createOscillator();
+        var g = ctx.createGain();
+        var t = ctx.currentTime + i * 0.18;
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+        o.connect(g).connect(ctx.destination);
+        o.start(t);
+        o.stop(t + 0.4);
+      });
+    } catch (err) { /* no sound: the pop-up is enough */ }
+  }
+
+  function renderRequestPopup() {
+    var r = ui.reqPopup;
+    if (!r || !isBack()) return '';
+    var who = h(r.guest || r.by);
+    return '<div class="overlay top"><div class="sheet small request-pop" role="alertdialog" aria-labelledby="req-title" aria-describedby="req-text">' +
+      '<div class="req-icon">' + ICON.phone + '</div>' +
+      '<h2 id="req-title">' + who + ' asks to project</h2>' +
+      '<p id="req-text" class="muted">From their own phone or tablet' + (r.by && r.by !== r.guest ? ' (' + h(r.by) + ')' : '') + '. With control they can put <strong>their own files</strong> on screen, pause, seek and go back to the banner. You can take control back at any time.</p>' +
+      '<div class="req-actions">' +
+      '<button type="button" class="btn primary" data-act="control" data-set="' + r.set_id + '" data-on="1">Give control</button>' +
+      '<button type="button" class="btn" data-act="control" data-set="' + r.set_id + '" data-on="0">Decline</button>' +
+      '<button type="button" class="btn ghost" data-act="req-later">Later</button>' +
+      '</div></div></div>';
+  }
+
   function renderInstallSheet() {
     if (!ui.install) return '';
     var ua = navigator.userAgent;
@@ -762,7 +829,8 @@
     var e = eng();
     switch (name) {
       case 'fullscreen': toggleFullscreen(); break;
-      case 'control': post('/api/control', { set_id: parseInt(data.set, 10), on: data.on === '1' }); break;
+      case 'control': ui.reqPopup = null; post('/api/control', { set_id: parseInt(data.set, 10), on: data.on === '1' }); render(); break;
+      case 'req-later': ui.reqPopup = null; render(); break;
       case 'install': addToHomeScreen(); break;
       case 'install-close': ui.install = false; render(); break;
       case 'tap': tap(id); break;

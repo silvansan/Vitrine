@@ -56,8 +56,77 @@
     down: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
     remove: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     more: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
-    check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>'
+    check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
+    expand: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+    prev: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
+    next: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+    close: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
   };
+
+  /* Full-screen viewer: see a photo or video the way it will look on the 16:9 screen. */
+  var viewer = null;
+  function openViewer(list, index, title) {
+    closeViewer();
+    var last = document.activeElement;
+    var stage = el('div', { class: 'viewer-stage' });
+    var caption = el('div', { class: 'viewer-caption' });
+    var prevBtn = el('button', { type: 'button', class: 'viewer-nav prev', 'aria-label': 'Previous', html: ICON.prev });
+    var nextBtn = el('button', { type: 'button', class: 'viewer-nav next', 'aria-label': 'Next', html: ICON.next });
+    var closeBtn = el('button', { type: 'button', class: 'viewer-close', 'aria-label': 'Close', html: ICON.close });
+    var box = el('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, [stage, prevBtn, nextBtn, closeBtn, caption]);
+    function show(i) {
+      index = (i + list.length) % list.length;
+      var a = list[index];
+      stage.innerHTML = '';
+      var media;
+      if (a.kind === 'video' && a.file) {
+        media = el('video', { src: a.file, controls: '', autoplay: '', playsinline: '', poster: a.thumb || '' });
+      } else if (a.kind === 'audio' && a.file) {
+        media = el('div', { class: 'viewer-audio' }, [
+          a.thumb ? el('img', { src: a.thumb, alt: '' }) : el('div', { class: 'note', text: '\u266A' }),
+          el('audio', { src: a.file, controls: '', autoplay: '' })
+        ]);
+      } else if (a.kind === 'photo' && (a.file || a.thumb)) {
+        media = el('img', { src: a.file || a.thumb, alt: a.name });
+      } else {
+        media = el('div', { class: 'viewer-wait', text: a.status === 'failed' ? 'This file could not be processed.' : 'Still being prepared… try again in a moment.' });
+      }
+      stage.appendChild(media);
+      caption.textContent = (list.length > 1 ? (index + 1) + ' / ' + list.length + ' · ' : '') + a.name + ' · ' + (a.mine ? 'your upload' : 'from ' + a.owner);
+      prevBtn.hidden = nextBtn.hidden = list.length < 2;
+    }
+    function key(e) {
+      if (e.key === 'Escape') closeViewer();
+      else if (e.key === 'ArrowLeft') show(index - 1);
+      else if (e.key === 'ArrowRight') show(index + 1);
+    }
+    var startX = null;
+    stage.addEventListener('touchstart', function (e) { startX = e.touches[0].clientX; }, { passive: true });
+    stage.addEventListener('touchend', function (e) {
+      if (startX === null) return;
+      var dx = e.changedTouches[0].clientX - startX;
+      startX = null;
+      if (Math.abs(dx) > 50 && list.length > 1) show(index + (dx < 0 ? 1 : -1));
+    });
+    stage.addEventListener('click', function (e) { if (e.target === stage) closeViewer(); });
+    prevBtn.addEventListener('click', function () { show(index - 1); });
+    nextBtn.addEventListener('click', function () { show(index + 1); });
+    closeBtn.addEventListener('click', closeViewer);
+    document.addEventListener('keydown', key);
+    document.body.appendChild(box);
+    document.body.classList.add('viewer-open');
+    viewer = { box: box, key: key, last: last };
+    show(index);
+    closeBtn.focus();
+  }
+  function closeViewer() {
+    if (!viewer) return;
+    document.removeEventListener('keydown', viewer.key);
+    viewer.box.remove();
+    document.body.classList.remove('viewer-open');
+    if (viewer.last && viewer.last.focus) viewer.last.focus();
+    viewer = null;
+  }
 
   function post(path, body) {
     return fetch(api + path + eventQuery, {
@@ -91,9 +160,13 @@
     $('#count').textContent = state.set.length;
     $('#set-empty').hidden = state.set.length > 0;
     state.set.forEach(function (asset, index) {
-      var thumbBox = el('div', { class: 'thumb-box' }, [
+      var thumbBox = el('button', {
+        type: 'button', class: 'thumb-box', 'aria-label': 'View ' + asset.name + ' full screen',
+        onclick: function () { openViewer(state.set, index, 'My set'); }
+      }, [
         asset.thumb ? el('img', { class: 'thumb', src: asset.thumb, alt: '' }) : el('div', { class: 'thumb' }),
-        el('span', { class: 'num', text: String(index + 1) })
+        el('span', { class: 'num', text: String(index + 1) }),
+        el('span', { class: 'zoom', html: ICON.expand })
       ]);
       var open = !!ui.openExtras[asset.id];
       var meta = el('button', {
@@ -207,7 +280,11 @@
         el('div', { class: 'who', text: asset.mine ? 'Your upload' : asset.owner }),
         el('div', { class: 'when', text: asset.when })
       ])]);
-      grid.appendChild(card);
+      var zoom = el('button', {
+        type: 'button', class: 'pick-zoom', 'aria-label': 'View ' + asset.name + ' full screen', html: ICON.expand,
+        onclick: function () { openViewer(items, items.indexOf(asset), 'Library'); }
+      });
+      grid.appendChild(el('div', { class: 'pick-wrap' }, [card, zoom]));
     });
   }
 

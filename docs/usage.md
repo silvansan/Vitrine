@@ -99,13 +99,17 @@ Unpair from the companion, or **Unpair** next to the code in the backend (takes 
 - **Add marker here**: in the cue panel (at the cued point) or on the playback bar while a video is live (**Marker**, at the current position). Give it a name or leave it empty ("Marker 1:12"). Markers appear on every tablet at once and are saved on the server, also when added offline (they are sent when the connection is back). The back tablet can remove a marker with the × next to it.
 - **Send Maria to pulpit**: the pulpit switches to Maria's set immediately.
 - **Tablets** button (top right): for each pulpit tablet choose the set, **Jump to page 1**, **Mirror my page**, what is visible (Clear button, title, switching sets, connection status, basic video controls, free seeking) and its theme.
-- **Guest control from their own phone or laptop**: when a guest taps *Ask for access* on their tablet view (see below), a red banner appears on every back tablet: **Give control** or **Decline**. A guest with control has a small phone icon on their chip; select the chip to see **Take control back**. Control lasts until you take it back or the end of the day, and only covers that guest's own files. Every action they take shows a short note on the back tablets ("Maria (phone) put … on screen"), and you can take over at any time: tapping a tile or *Back to default* on the back tablet always wins.
+- **Guest control from their own phone or laptop**: when a guest taps *Ask for access* on their tablet view (see below), every back tablet chimes and shows a pop-up, "Maria asks to project": **Give control**, **Decline** or **Later** (the request then stays as a red banner at the top until you answer; it expires after 10 minutes). A guest with control has a small phone icon on their chip; select the chip to see **Take control back**. Control lasts until you take it back or the end of the day, and only covers that guest's own files. Every action they take shows a short note on the back tablets ("Maria (phone) put … on screen"), and you can take over at any time: tapping a tile or *Back to default* on the back tablet always wins.
 - Sun/moon button: dark or light theme for this tablet.
 - Swipe left/right on the tiles to change pages.
 
 ## Phones
 
 The tablet pages also work on a phone (upright or sideways): the bars get smaller and the tiles scroll instead of shrinking. Use Chrome, Samsung Internet or Safari; Brave's HTTPS upgrade blocks the local address unless you turn its Shields down for it.
+
+## Previewing files on the guest page
+
+On their page, guests tap a picture in **My set** (or the ⤢ button on a picture in the library) to see it full screen on black, as it will fill the 16:9 screen; videos and audio play there too. Arrows, a swipe or the keyboard's ← → go to the next file, Esc or ✕ closes.
 
 ## A guest's own tablet view
 
