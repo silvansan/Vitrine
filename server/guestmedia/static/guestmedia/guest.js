@@ -60,6 +60,7 @@
     expand: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
     prev: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
     next: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+    grip: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg>',
     close: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
   };
 
@@ -178,14 +179,24 @@
         statusBadge(asset),
         el('span', { class: 'more', text: open ? 'Less' : 'Options' })
       ]);
-      var up = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Move ' + asset.name + ' up', html: ICON.up, onclick: function () { move(index, -1); } });
-      var down = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Move ' + asset.name + ' down', html: ICON.down, onclick: function () { move(index, 1); } });
-      up.disabled = index === 0;
-      down.disabled = index === state.set.length - 1;
-      var row = el('div', { class: 'set-row' }, [thumbBox, meta, up, down]);
-      var item = el('li', { class: 'set-item' }, [row]);
+      var grip = el('button', {
+        type: 'button', class: 'grip', title: 'Drag to change the order',
+        'aria-label': 'Move ' + asset.name + ' (position ' + (index + 1) + ' of ' + state.set.length + '): drag, or use the arrow keys',
+        html: ICON.grip,
+        onkeydown: function (e) {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            ui.focusGrip = asset.id;
+            move(index, e.key === 'ArrowUp' ? -1 : 1);
+          }
+        },
+        onpointerdown: function (e) { startDrag(e, item); }
+      });
+      var row = el('div', { class: 'set-row' }, [grip, thumbBox, meta]);
+      var item = el('li', { class: 'set-item', 'data-id': String(asset.id) }, [row]);
       if (open) item.appendChild(renderExtras(asset));
       list.appendChild(item);
+      if (ui.focusGrip === asset.id) { ui.focusGrip = null; setTimeout(function () { grip.focus(); }, 0); }
     });
   }
 
@@ -240,8 +251,84 @@
       cb.addEventListener('change', function () { post('private', { asset_id: asset.id, private: cb.checked }); });
       box.appendChild(el('label', { class: 'private-toggle' }, [cb, el('span', { text: 'Keep private (other guests can’t pick it)' })]));
     }
-    box.appendChild(el('div', {}, [el('button', { type: 'button', class: 'link-btn', text: 'Remove from my set', onclick: function () { post('set/remove', { asset_id: asset.id }); } })]));
+    var at = state.set.indexOf(asset);
+    var moveUp = el('button', { type: 'button', class: 'link-btn', text: 'Move up', onclick: function () { move(at, -1); } });
+    var moveDown = el('button', { type: 'button', class: 'link-btn', text: 'Move down', onclick: function () { move(at, 1); } });
+    if (at <= 0) moveUp.disabled = true;
+    if (at === state.set.length - 1) moveDown.disabled = true;
+    box.appendChild(el('div', { class: 'extra-actions' }, [moveUp, moveDown,
+      el('button', { type: 'button', class: 'link-btn', text: 'Remove from my set', onclick: function () { post('set/remove', { asset_id: asset.id }); } })]));
     return box;
+  }
+
+  /* Drag to reorder (pointer events: mouse, touch and pen). The list moves live under the finger. */
+  function startDrag(e, item) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (state.set.length < 2) return;
+    e.preventDefault();
+    var list = item.parentNode;
+    var handle = e.currentTarget;
+    var before = Array.prototype.map.call(list.children, function (li) { return li.dataset.id; }).join(',');
+    var rect = item.getBoundingClientRect();
+    var grabOffset = e.clientY - rect.top;
+    var pointerY = e.clientY;
+    var scrollTimer = null;
+    ui.dragging = true;
+    item.classList.add('dragging');
+    list.classList.add('sorting');
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* old browsers */ }
+    if (navigator.vibrate) navigator.vibrate(15);
+
+    function place() {
+      item.style.transform = '';
+      var natural = item.getBoundingClientRect().top;
+      var siblings = Array.prototype.filter.call(list.children, function (li) { return li !== item; });
+      var top = pointerY - grabOffset;
+      var mid = top + item.offsetHeight / 2;
+      var target = null;
+      for (var i = 0; i < siblings.length; i++) {
+        var r = siblings[i].getBoundingClientRect();
+        if (mid < r.top + r.height / 2) { target = siblings[i]; break; }
+      }
+      if (target !== item.nextSibling) {
+        list.insertBefore(item, target);
+        natural = item.getBoundingClientRect().top;
+      }
+      item.style.transform = 'translateY(' + (top - natural) + 'px)';
+    }
+    function autoScroll() {
+      var edge = 70;
+      var speed = 0;
+      if (pointerY < edge) speed = -Math.ceil((edge - pointerY) / 6);
+      else if (pointerY > window.innerHeight - edge) speed = Math.ceil((pointerY - (window.innerHeight - edge)) / 6);
+      if (speed) { window.scrollBy(0, speed); place(); }
+    }
+    function moveHandler(ev) { pointerY = ev.clientY; place(); }
+    function end() {
+      handle.removeEventListener('pointermove', moveHandler);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      clearInterval(scrollTimer);
+      item.style.transform = '';
+      item.classList.remove('dragging');
+      list.classList.remove('sorting');
+      ui.dragging = false;
+      var ids = Array.prototype.map.call(list.children, function (li) { return li.dataset.id; });
+      if (ids.join(',') !== before) {
+        var byId = {};
+        state.set.forEach(function (a) { byId[a.id] = a; });
+        state.set = ids.map(function (id) { return byId[id]; });
+        render();
+        post('set/order', { asset_ids: ids.map(Number) });
+      } else {
+        render();
+      }
+    }
+    handle.addEventListener('pointermove', moveHandler);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+    scrollTimer = setInterval(autoScroll, 16);
+    place();
   }
 
   function move(index, delta) {
@@ -322,6 +409,7 @@
   }
 
   function render() {
+    if (ui.dragging) return; // refreshed after the drop
     renderTabs();
     renderSet();
     renderLibrary();

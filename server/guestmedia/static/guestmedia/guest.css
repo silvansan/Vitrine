@@ -142,3 +142,14 @@ body.viewer-open{overflow:hidden}
 .viewer-nav{position:absolute;top:50%;transform:translateY(-50%);width:52px;height:52px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .viewer-nav.prev{left:10px}.viewer-nav.next{right:10px}
 .viewer-nav[hidden]{display:none}
+
+/* Drag to reorder */
+.grip{width:36px;height:52px;flex-shrink:0;border:0;border-radius:10px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;margin-left:-4px}
+.grip:hover{background:rgba(127,127,127,.12);color:var(--text)}
+.grip:active{cursor:grabbing}
+.set-list.sorting{-webkit-user-select:none;user-select:none}
+.set-item.dragging{position:relative;z-index:5;box-shadow:0 12px 30px rgba(0,0,0,.22);border-color:var(--text);transition:none}
+.set-item.dragging .grip{color:var(--text);cursor:grabbing}
+.sorting .set-item:not(.dragging){transition:transform .15s}
+.extra-actions{display:flex;flex-wrap:wrap;gap:6px 18px}.link-btn:disabled{opacity:.4;cursor:default}
+.guest-actions a.open-tablet,.guest-actions a.open-tablet:visited{color:#fff;background:#15181E}

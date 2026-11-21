@@ -107,6 +107,10 @@ Unpair from the companion, or **Unpair** next to the code in the backend (takes 
 
 The tablet pages also work on a phone (upright or sideways): the bars get smaller and the tiles scroll instead of shrinking. Use Chrome, Samsung Internet or Safari; Brave's HTTPS upgrade blocks the local address unless you turn its Shields down for it.
 
+## Ordering a set on the guest page
+
+In **My set**, guests drag a file by its ⠿ handle (left of the picture) to change the order; the list moves under the finger and scrolls near the edges, and the order is saved when they let go. With a keyboard: focus the handle and press ↑ / ↓. *Options* → *Move up* / *Move down* does the same.
+
 ## Previewing files on the guest page
 
 On their page, guests tap a picture in **My set** (or the ⤢ button on a picture in the library) to see it full screen on black, as it will fill the 16:9 screen; videos and audio play there too. Arrows, a swipe or the keyboard's ← → go to the next file, Esc or ✕ closes.
