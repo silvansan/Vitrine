@@ -9,6 +9,10 @@
 # Nginx Proxy Manager forwards your public guest subdomain to vitrine-nginx:80 on the
 # "proxy" network. The agent on the vMix PC talks to the same nginx over Tailscale on
 # port ${VITRINE_TAILSCALE_PORT:-8080} of this server.
+#
+# Updating: Actions → release → Run workflow, wait for it to finish, then Portainer → this
+# stack → Pull and redeploy (tick "Re-pull image and redeploy"). Migrations run on start.
+# Then update the agent on each vMix PC (docs/server.md → Updating).
 
 services:
   web:
@@ -81,6 +85,8 @@ services:
     networks: [internal]
 
   redis:
+    # Needed: Celery queues, and the shared cache that carries guests' live control
+    # (what is on screen, who has control, command results) between web and the agent socket.
     image: redis:7-alpine
     restart: unless-stopped
     networks: [internal]

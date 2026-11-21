@@ -85,7 +85,18 @@ Deleted files stay in the trash for `VITRINE_TRASH_DAYS` (default 30), then the 
 
 ## Updating
 
-Push to `main` and wait for the **build** workflow to finish, then Portainer → the stack → **Pull and redeploy** (tick *Re-pull image and redeploy*). Migrations run on start.
+1. **GitHub → Actions → release → Run workflow** (patch by default). It tags the next version, creates the release with the agent `.exe` files, and publishes the server images as `:latest` and `:vX.Y.Z`. Wait until both the *release* and the *build* run inside it are green (about 5–10 minutes).
+2. **Portainer → the stack → Pull and redeploy** (tick *Re-pull image and redeploy*). Migrations run on start. If you pasted the compose file into the web editor, compare it with `deploy/docker-compose.yml` first and paste the new one if it changed.
+3. **Each vMix PC**: download `vitrine-agent.exe` (and `vitrine-tray.exe`) from the release and double-click it; it updates the service in place and keeps its settings, pairings and files. Server and agent should run the same version: a newer server with an older agent works, but new features that need the agent (for example guest control) stay off until it is updated.
+4. Check: `/manage/` → Locations & tablets shows each vMix PC online with the new version.
+
+Between releases, every push to `main` also builds `:latest` (the **build** workflow), so *Pull and redeploy* alone picks up server-only fixes.
+
+### Notes for v0.1.9 (guest control, permanent tablet link)
+
+- Redis must stay in the stack (it is in the compose file): guests' commands and the live state of each vMix PC go through its cache. Without `REDIS_URL` the server falls back to a per-process cache and guest control only works with a single web process.
+- Nothing to change in Nginx Proxy Manager: the guest tablet view polls over normal HTTPS. The agent's WebSocket (`/ws/agent/`) is the same as before; if your agent reaches the server through NPM rather than Tailscale, *Websockets Support* must be ticked on that proxy host (it already had to be).
+- The migration gives each location a random tablet link (`/t/<code>/`). The link redirects to `http://<vMix PC LAN IP>:8090/screen`, so it only opens on the venue network; that is expected.
 
 To pin a release instead of following `main`, tag it (`v1.2.0`); the workflow publishes both images with that tag, and you change `:latest` to `:v1.2.0` in the stack.
 
