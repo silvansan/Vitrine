@@ -715,6 +715,7 @@ func (s *Server) handleScreenUpdate(w http.ResponseWriter, r *http.Request, sc *
 		CurrentSetID *int64               `json:"current_set_id"`
 		Theme        *string              `json:"theme"`
 		Options      *store.ScreenOptions `json:"options"`
+		PerPage      *int                 `json:"per_page"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad request")
@@ -740,6 +741,10 @@ func (s *Server) handleScreenUpdate(w http.ResponseWriter, r *http.Request, sc *
 				target.Theme = *body.Theme
 			}
 		}
+		// Files per page: each tablet may set its own; the back tablet any tablet's.
+		if body.PerPage != nil && validPerPage(*body.PerPage) {
+			target.Options.PerPage = *body.PerPage
+		}
 		if !isBack {
 			return
 		}
@@ -750,7 +755,11 @@ func (s *Server) handleScreenUpdate(w http.ResponseWriter, r *http.Request, sc *
 			target.CurrentSetID = *body.CurrentSetID
 		}
 		if body.Options != nil {
+			per := target.Options.PerPage
 			target.Options = *body.Options
+			if !validPerPage(target.Options.PerPage) {
+				target.Options.PerPage = per
+			}
 		}
 	})
 	if notFound {
@@ -1301,4 +1310,12 @@ func (s *Server) handleHandoffUse(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode, MaxAge: 5 * 365 * 24 * 3600})
 	log.Printf("screen %s moved to its home-screen app", h.screenID)
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func validPerPage(n int) bool {
+	switch n {
+	case 0, 4, 6, 8, 9, 12, 16:
+		return true
+	}
+	return false
 }

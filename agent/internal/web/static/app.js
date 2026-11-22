@@ -9,7 +9,19 @@
   'use strict';
 
   var app = document.getElementById('app');
-  var PER_PAGE = 6;
+  // Files per page: chosen per tablet (0 = automatic, 6). Layout: [landscape cols, rows], [portrait cols, rows].
+  var PAGE_SIZES = [4, 6, 8, 9, 12, 16];
+  var LAYOUTS = { 4: [[2, 2], [2, 2]], 6: [[3, 2], [2, 3]], 8: [[4, 2], [2, 4]], 9: [[3, 3], [3, 3]], 12: [[4, 3], [3, 4]], 16: [[4, 4], [4, 4]] };
+  function perPage() {
+    var n = parseInt(opts().per_page, 10);
+    return LAYOUTS[n] ? n : 6;
+  }
+  function gridStyle() {
+    var n = perPage();
+    if (n === 6) return ''; // the built-in layout (also the phone layouts in the CSS)
+    var l = LAYOUTS[n][window.innerWidth >= window.innerHeight ? 0 : 1];
+    return ' style="grid-template-columns:repeat(' + l[0] + ',minmax(0,1fr));grid-template-rows:repeat(' + l[1] + ',minmax(0,1fr))" data-dense="' + (n >= 12 ? 'more' : n >= 8 ? 'some' : '') + '"';
+  }
   var S = { boot: null, status: null, screens: [], wsOk: false, renderKey: '' };
   var ui = { install: false, set: 'all', page: 0, localSet: null, cue: null, drawer: false, drawerScreen: null, toast: '', toastTimer: null, lastError: '', marker: null };
 
@@ -108,10 +120,11 @@
     return set.items.filter(function (id) { return asset(id); }).map(function (id) { return { id: id, set: set }; });
   }
   function paged(list) {
-    var count = Math.max(1, Math.ceil(list.length / PER_PAGE));
+    var per = perPage();
+    var count = Math.max(1, Math.ceil(list.length / per));
     if (ui.page > count - 1) ui.page = count - 1;
     if (ui.page < 0) ui.page = 0;
-    return { items: list.slice(ui.page * PER_PAGE, ui.page * PER_PAGE + PER_PAGE), count: count };
+    return { items: list.slice(ui.page * per, ui.page * per + per), count: count };
   }
 
   function theme() {
@@ -251,7 +264,7 @@
     var html = '<div class="' + classes + '">';
     html += '<button type="button" class="thumb" data-act="tap" data-id="' + entry.id + '" aria-pressed="' + (state === 'live') + '" aria-label="' + h(label) + '">';
     html += a.thumb ? '<img src="' + h(a.thumb) + '" alt="" draggable="false">' : (sound ? ICON.note : video ? ICON.video : ICON.photo);
-    if (!back) html += '<span class="ov ov-num">' + (ui.page * PER_PAGE + index + 1) + '</span>';
+    if (!back) html += '<span class="ov ov-num">' + (ui.page * perPage() + index + 1) + '</span>';
     if (!a.ready) html += '<span class="ov ov-wait">Downloading…</span>';
     if (video && state !== 'live') html += '<span class="ov ov-dur">' + fmt(a.duration_ms) + '</span>';
     if (state === 'pending') html += '<span class="ov ov-tag pend"><span class="d"></span>SENDING…</span>';
@@ -294,7 +307,7 @@
 
   function renderGrid(list, emptyText) {
     var page = paged(list);
-    var html = '<main class="grid" id="grid">';
+    var html = '<main class="grid" id="grid"' + gridStyle() + '>';
     if (!list.length) html += '<div class="empty">' + h(emptyText) + '</div>';
     page.items.forEach(function (entry, i) { html += renderTile(entry, i); });
     html += '</main>';
@@ -439,10 +452,38 @@
     return n;
   }
 
+  function setPerPage(id, n) {
+    var first = ui.page * perPage();
+    var mine = me();
+    if (id === 'self' && mine) {
+      mine.options = Object.assign({}, mine.options, { per_page: n });
+      ui.page = Math.floor(first / n); // keep the first file of this page in view
+      render();
+    }
+    post('/api/screens/' + id, { per_page: n });
+  }
+
   function renderPager(count) {
-    return '<div class="pager"><button type="button" class="nav-btn" data-act="page" data-d="-1" aria-label="Previous page"' + (ui.page > 0 ? '' : ' disabled') + '>' + ICON.left + '</button>' +
-      '<span class="n">' + (isBack() ? 'Page ' + (ui.page + 1) + ' of ' + count : (ui.page + 1) + ' / ' + count) + '</span>' +
-      '<button type="button" class="nav-btn" data-act="page" data-d="1" aria-label="Next page"' + (ui.page < count - 1 ? '' : ' disabled') + '>' + ICON.right + '</button></div>';
+    var html = '<div class="pager">';
+    if (count > 1) {
+      html += '<button type="button" class="nav-btn small" data-act="page" data-d="-1" aria-label="Previous page"' + (ui.page > 0 ? '' : ' disabled') + '>' + ICON.left + '</button>';
+      if (count <= 8) {
+        html += '<div class="dots" role="group" aria-label="Pages">';
+        for (var i = 0; i < count; i++) {
+          html += '<button type="button" class="pdot" data-act="page-to" data-page="' + i + '" aria-label="Page ' + (i + 1) + ' of ' + count + '"' + (i === ui.page ? ' aria-current="page"' : '') + '></button>';
+        }
+        html += '</div>';
+      } else {
+        html += '<label class="pslider"><input type="range" min="1" max="' + count + '" value="' + (ui.page + 1) + '" data-change="page-slider" aria-label="Page"><span>' + (ui.page + 1) + ' / ' + count + '</span></label>';
+      }
+      html += '<button type="button" class="nav-btn small" data-act="page" data-d="1" aria-label="Next page"' + (ui.page < count - 1 ? '' : ' disabled') + '>' + ICON.right + '</button>';
+    }
+    if (isBack()) {
+      html += '<select class="per-page" data-change="per-page" aria-label="Files per page on this tablet">';
+      PAGE_SIZES.forEach(function (n) { html += '<option value="' + n + '"' + (n === perPage() ? ' selected' : '') + '>' + n + ' per page</option>'; });
+      html += '</select>';
+    }
+    return html + '</div>';
   }
 
   function renderPulpit() {
@@ -600,6 +641,9 @@
         html += '<label class="check">' + c[1] + '<input type="checkbox" data-change="screen-opt" data-id="' + h(target.id) + '" data-opt="' + c[0] + '"' + (o[c[0]] ? ' checked' : '') + '></label>';
       });
       html += '</fieldset>';
+      html += '<div class="field"><label class="label" for="d-per">Files per page on this pulpit</label><select id="d-per" data-change="screen-per-page" data-id="' + h(target.id) + '">';
+      PAGE_SIZES.forEach(function (n) { html += '<option value="' + n + '"' + (n === (parseInt(o.per_page, 10) || 6) ? ' selected' : '') + '>' + n + '</option>'; });
+      html += '</select><span class="hint">Fewer files = bigger tiles. Guests swipe left and right between pages.</span></div>';
       html += '<div class="field"><label class="label" for="d-theme">Pulpit theme</label><select id="d-theme" data-change="screen-theme" data-id="' + h(target.id) + '">';
       [['dark', 'Dark'], ['light', 'Light'], ['same', 'Same as back tablet']].forEach(function (t) {
         html += '<option value="' + t[0] + '"' + (target.theme === t[0] ? ' selected' : '') + '>' + t[1] + '</option>';
@@ -613,6 +657,7 @@
 
   function render() {
     if (!S.boot) return;
+    if (swipe && swipe.active) { ui.renderAfterSwipe = true; return; } // don't pull the grid from under the finger
     var typing = document.getElementById('marker-name');
     if (ui.marker && typing && document.activeElement === typing) { updateProgress(); return; }
     S.renderKey = liveKey();
@@ -866,7 +911,8 @@
         post('/api/seek', { position_ms: Math.max(0, ((cur && cur.position_ms) || 0) + parseInt(data.d, 10)) });
         break;
       }
-      case 'page': ui.page += parseInt(data.d, 10); render(); break;
+      case 'page': { var d = parseInt(data.d, 10); goToPage(ui.page + d, d); } break;
+      case 'page-to': { var to = parseInt(data.page, 10); goToPage(to, to > ui.page ? 1 : -1); } break;
       case 'chip': ui.set = data.set === 'all' ? 'all' : parseInt(data.set, 10); ui.page = 0; render(); break;
       case 'local-set': ui.localSet = parseInt(data.set, 10); ui.page = 0; render(); break;
       case 'send-pulpit': if (ui.set !== 'all') post('/api/pulpit', { current_set_id: ui.set }); break;
@@ -893,6 +939,9 @@
     var kind = el.dataset.change;
     if (!kind) return;
     if (kind === 'event') { post('/api/companion/settings', { service_id: parseInt(el.value, 10) || 0 }); return; }
+    if (kind === 'page-slider') { goToPage(parseInt(el.value, 10) - 1, 0); return; }
+    if (kind === 'per-page') { setPerPage('self', parseInt(el.value, 10)); return; }
+    if (kind === 'screen-per-page') { setPerPage(el.dataset.id, parseInt(el.value, 10)); return; }
     var screen = S.screens.filter(function (s) { return s.id === el.dataset.id; })[0];
     if (!screen) return;
     if (kind === 'screen-set') post('/api/screens/' + screen.id, { current_set_id: parseInt(el.value, 10) });
@@ -922,28 +971,126 @@
     track.addEventListener('pointerup', function () { track.onpointermove = null; });
   }
 
-  /* swipe between pages */
-  var touchX = null;
-  app.addEventListener('touchstart', function (ev) {
-    if (ev.target.closest('.grid') && ev.touches.length === 1) touchX = ev.touches[0].clientX;
-  }, { passive: true });
-  app.addEventListener('touchend', function (ev) {
-    if (touchX === null) return;
-    var dx = ev.changedTouches[0].clientX - touchX;
-    touchX = null;
-    if (Math.abs(dx) < 80) return;
+  /* Swipe between pages: the grid follows the finger (or mouse), then slides to the next page. */
+  var swipe = null;
+  function pageCount() {
     var list = isBack() ? itemsBack() : itemsPulpit();
-    var count = Math.max(1, Math.ceil(list.length / PER_PAGE));
-    var next = ui.page + (dx < 0 ? 1 : -1);
-    if (next >= 0 && next < count) { ui.page = next; render(); }
-  }, { passive: true });
-
-  // Keep the screen awake where the browser allows it.
-  if (navigator.wakeLock) {
-    var requestWake = function () { navigator.wakeLock.request('screen').catch(function () {}); };
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') requestWake(); });
-    requestWake();
+    return Math.max(1, Math.ceil(list.length / perPage()));
   }
+  function goToPage(next, fromDir) {
+    var count = pageCount();
+    if (next < 0 || next >= count || next === ui.page) return false;
+    ui.page = next;
+    render();
+    var grid = document.getElementById('grid');
+    if (grid && fromDir) {
+      grid.style.transition = 'none';
+      grid.style.transform = 'translateX(' + (fromDir * 40) + 'px)';
+      grid.style.opacity = '0.4';
+      requestAnimationFrame(function () {
+        grid.style.transition = 'transform .22s ease-out, opacity .22s ease-out';
+        grid.style.transform = '';
+        grid.style.opacity = '';
+      });
+    }
+    return true;
+  }
+  app.addEventListener('pointerdown', function (ev) {
+    var grid = ev.target.closest('.grid');
+    if (!grid || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+    swipe = { x: ev.clientX, y: ev.clientY, t: Date.now(), grid: grid, active: false, id: ev.pointerId };
+  });
+  app.addEventListener('pointermove', function (ev) {
+    if (!swipe || ev.pointerId !== swipe.id) return;
+    var dx = ev.clientX - swipe.x;
+    var dy = ev.clientY - swipe.y;
+    if (!swipe.active) {
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.3) {
+        if (Math.abs(dy) > 16) swipe = null; // scrolling up/down
+        return;
+      }
+      swipe.active = true;
+      swipe.grid.style.transition = 'none';
+    }
+    var count = pageCount();
+    var atEdge = (dx > 0 && ui.page === 0) || (dx < 0 && ui.page >= count - 1);
+    swipe.dx = atEdge ? dx * 0.25 : dx; // resist at the first and last page
+    swipe.grid.style.transform = 'translateX(' + swipe.dx + 'px)';
+  });
+  function endSwipe(ev) {
+    if (!swipe || (ev && ev.pointerId !== swipe.id)) return;
+    var s = swipe;
+    swipe = null;
+    if (!s.active) return;
+    var pending = ui.renderAfterSwipe;
+    ui.renderAfterSwipe = false;
+    ui.swiped = Date.now(); // swallow the click that follows the drag
+    var dx = s.dx || 0;
+    var fast = Math.abs(dx) / Math.max(1, Date.now() - s.t) > 0.5;
+    var far = Math.abs(dx) > s.grid.clientWidth * 0.18;
+    if ((fast || far) && Math.abs(dx) > 30) {
+      var dir = dx < 0 ? 1 : -1;
+      s.grid.style.transition = 'transform .15s ease-in';
+      s.grid.style.transform = 'translateX(' + (dx < 0 ? -1 : 1) * s.grid.clientWidth * 0.5 + 'px)';
+      setTimeout(function () {
+        if (!goToPage(ui.page + dir, dir)) { s.grid.style.transition = 'transform .2s'; s.grid.style.transform = ''; }
+      }, 120);
+    } else {
+      s.grid.style.transition = 'transform .2s ease-out';
+      s.grid.style.transform = '';
+      if (pending) setTimeout(render, 220);
+    }
+  }
+  app.addEventListener('pointerup', endSwipe);
+  app.addEventListener('pointercancel', endSwipe);
+  app.addEventListener('click', function (ev) {
+    if (ui.swiped && Date.now() - ui.swiped < 400 && ev.target.closest('.grid')) {
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+  }, true);
+  window.addEventListener('resize', function () {
+    clearTimeout(ui.resizeTimer);
+    ui.resizeTimer = setTimeout(function () { if (perPage() !== 6) render(); }, 150);
+  });
+
+  // Keep the screen on while this page is open. The Wake Lock API only works over https, and the
+  // tablets use the vMix PC's plain http address, so fall back to a tiny silent looping video,
+  // which phones and tablets treat as "something is playing" (started on the first tap).
+  (function keepAwake() {
+    var lock = null;
+    var video = null;
+    function useVideo() {
+      if (!video) {
+        video = document.createElement('video');
+        video.src = '/static/awake.mp4';
+        video.muted = true;
+        video.loop = true;
+        video.setAttribute('muted', '');
+        video.setAttribute('playsinline', '');
+        video.setAttribute('aria-hidden', 'true');
+        video.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1';
+        document.body.appendChild(video);
+      }
+      var p = video.play();
+      if (p && p.catch) p.catch(function () { /* waits for the next tap */ });
+    }
+    function request() {
+      if (window.isSecureContext && navigator.wakeLock) {
+        navigator.wakeLock.request('screen').then(function (l) { lock = l; }).catch(useVideo);
+      } else {
+        useVideo();
+      }
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && (!lock || lock.released)) request();
+    });
+    document.addEventListener('pointerdown', function () {
+      if (video && video.paused) useVideo();
+      else if (!lock && !video) request();
+    });
+    request();
+  })();
 
   connect();
 })();

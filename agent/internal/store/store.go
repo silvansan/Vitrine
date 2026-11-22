@@ -51,6 +51,8 @@ type ScreenOptions struct {
 	VideoBasic      bool `json:"video_basic"`
 	VideoSeek       bool `json:"video_seek"`
 	AllowOverride   bool `json:"allow_override"`
+	// Files per page on this tablet: 4, 6, 8, 9, 12 or 16 (0 = 6).
+	PerPage int `json:"per_page"`
 }
 
 // Screen is one paired tablet.

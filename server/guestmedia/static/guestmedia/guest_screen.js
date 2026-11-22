@@ -11,7 +11,14 @@
   var token = root.dataset.token;
   var q = '?e=' + encodeURIComponent(root.dataset.event);
   var api = '/g/' + token + '/api/';
+  // Files per page, remembered on this device.
+  var PAGE_SIZES = [4, 6, 8, 9, 12, 16];
+  var LAYOUTS = { 4: [[2, 2], [2, 2]], 6: [[3, 2], [2, 3]], 8: [[4, 2], [2, 4]], 9: [[3, 3], [3, 3]], 12: [[4, 3], [3, 4]], 16: [[4, 4], [4, 4]] };
   var PER_PAGE = 6;
+  try { PER_PAGE = parseInt(localStorage.getItem('vitrine_per_page'), 10) || 6; } catch (e) { /* private mode */ }
+  if (!LAYOUTS[PER_PAGE]) PER_PAGE = 6;
+  var swipe = null;
+  var swiped = 0;
 
   var state = null;   // /api/state: set, guest, service
   var live = null;    // /api/live: control, requested, live, audio, …
@@ -67,7 +74,51 @@
     return '<button type="button" class="access red" data-act="request"><span class="d"></span>Ask for access</button>';
   }
 
+  function gridStyle() {
+    if (PER_PAGE === 6 || window.innerWidth < 700) return '';
+    var l = LAYOUTS[PER_PAGE][window.innerWidth >= window.innerHeight ? 0 : 1];
+    return ' style="grid-template-columns:repeat(' + l[0] + ',minmax(0,1fr));grid-template-rows:repeat(' + l[1] + ',minmax(0,1fr));grid-auto-rows:minmax(0,1fr)"';
+  }
+
+  function pager(pages) {
+    var html = '<div class="pager">';
+    if (pages > 1) {
+      html += '<button type="button" data-act="page" data-d="-1"' + (page > 0 ? '' : ' disabled') + ' aria-label="Previous page">‹</button>';
+      if (pages <= 8) {
+        html += '<span class="dots">';
+        for (var i = 0; i < pages; i++) html += '<button type="button" class="pdot" data-act="page-to" data-page="' + i + '" aria-label="Page ' + (i + 1) + ' of ' + pages + '"' + (i === page ? ' aria-current="page"' : '') + '></button>';
+        html += '</span>';
+      } else {
+        html += '<input type="range" class="pslider" min="1" max="' + pages + '" value="' + (page + 1) + '" data-act-change="page" aria-label="Page"><span>' + (page + 1) + ' / ' + pages + '</span>';
+      }
+      html += '<button type="button" data-act="page" data-d="1"' + (page < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">›</button>';
+    }
+    html += '<select class="per-page" data-act-change="per-page" aria-label="Files per page">';
+    PAGE_SIZES.forEach(function (n) { html += '<option value="' + n + '"' + (n === PER_PAGE ? ' selected' : '') + '>' + n + ' per page</option>'; });
+    return html + '</select></div>';
+  }
+
+  function goToPage(next, dir) {
+    var pages = Math.max(1, Math.ceil(items().length / PER_PAGE));
+    if (next < 0 || next >= pages || next === page) return false;
+    page = next;
+    render();
+    var grid = root.querySelector('.grid');
+    if (grid && dir) {
+      grid.style.transition = 'none';
+      grid.style.transform = 'translateX(' + dir * 40 + 'px)';
+      grid.style.opacity = '0.4';
+      requestAnimationFrame(function () {
+        grid.style.transition = 'transform .22s ease-out, opacity .22s ease-out';
+        grid.style.transform = '';
+        grid.style.opacity = '';
+      });
+    }
+    return true;
+  }
+
   function render() {
+    if (swipe && swipe.active) return; // the next poll redraws after the swipe
     if (!state) { root.innerHTML = '<div class="banner">Loading…</div>'; return; }
     var cur = current();
     var list = items();
@@ -92,7 +143,7 @@
     } else if (control() && live.other_on_screen) { status = 'Something else is on screen'; }
     html += '<div class="status ' + cls + '"><span class="d"></span>' + status + '</div>';
 
-    html += '<main class="grid">';
+    html += '<main class="grid"' + gridStyle() + '>';
     var slice = list.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
     if (!slice.length) html += '<div class="empty">Your set is empty. Add files on your page first.</div>';
     slice.forEach(function (a, i) {
@@ -124,8 +175,7 @@
         fmt(Math.max(0, (cur.duration_ms || 0) - (cur.position_ms || 0))) + ' left</div></div>';
     }
 
-    html += '<footer class="foot"><div class="pager"><button type="button" data-act="page" data-d="-1"' + (page > 0 ? '' : ' disabled') + ' aria-label="Previous page">‹</button>' +
-      '<span>' + (page + 1) + ' / ' + pages + '</span><button type="button" data-act="page" data-d="1"' + (page < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">›</button></div>' +
+    html += '<footer class="foot">' + pager(pages) +
       '<button type="button" class="clear" data-act="clear"' + (cur && (cur.asset_id || cur.pending_id) ? '' : ' disabled') + '>Back to the banner</button></footer>';
     root.innerHTML = html;
   }
@@ -163,6 +213,62 @@
     if (sim) { sim.offset = ms; sim.start = Date.now(); render(); }
   }
 
+  root.addEventListener('change', function (ev) {
+    var el = ev.target;
+    if (el.dataset.actChange === 'page') goToPage(parseInt(el.value, 10) - 1, 0);
+    if (el.dataset.actChange === 'per-page') {
+      var first = page * PER_PAGE;
+      PER_PAGE = parseInt(el.value, 10) || 6;
+      try { localStorage.setItem('vitrine_per_page', String(PER_PAGE)); } catch (e) { /* private mode */ }
+      page = Math.floor(first / PER_PAGE);
+      render();
+    }
+  });
+
+  /* Swipe between pages: the grid follows the finger. */
+  root.addEventListener('pointerdown', function (ev) {
+    var grid = ev.target.closest('.grid');
+    if (!grid || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+    swipe = { x: ev.clientX, y: ev.clientY, t: Date.now(), grid: grid, active: false, id: ev.pointerId, dx: 0 };
+  });
+  root.addEventListener('pointermove', function (ev) {
+    if (!swipe || ev.pointerId !== swipe.id) return;
+    var dx = ev.clientX - swipe.x, dy = ev.clientY - swipe.y;
+    if (!swipe.active) {
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.3) { if (Math.abs(dy) > 16) swipe = null; return; }
+      swipe.active = true;
+      swipe.grid.style.transition = 'none';
+    }
+    var pages = Math.max(1, Math.ceil(items().length / PER_PAGE));
+    var atEdge = (dx > 0 && page === 0) || (dx < 0 && page >= pages - 1);
+    swipe.dx = atEdge ? dx * 0.25 : dx;
+    swipe.grid.style.transform = 'translateX(' + swipe.dx + 'px)';
+  });
+  function endSwipe(ev) {
+    if (!swipe || (ev && ev.pointerId !== swipe.id)) return;
+    var s = swipe;
+    swipe = null;
+    if (!s.active) return;
+    swiped = Date.now();
+    var fast = Math.abs(s.dx) / Math.max(1, Date.now() - s.t) > 0.5;
+    var far = Math.abs(s.dx) > s.grid.clientWidth * 0.18;
+    if ((fast || far) && Math.abs(s.dx) > 30) {
+      var dir = s.dx < 0 ? 1 : -1;
+      s.grid.style.transition = 'transform .15s ease-in';
+      s.grid.style.transform = 'translateX(' + (-dir) * s.grid.clientWidth * 0.5 + 'px)';
+      setTimeout(function () { if (!goToPage(page + dir, dir)) render(); }, 120);
+    } else {
+      s.grid.style.transition = 'transform .2s ease-out';
+      s.grid.style.transform = '';
+    }
+  }
+  root.addEventListener('pointerup', endSwipe);
+  root.addEventListener('pointercancel', endSwipe);
+  root.addEventListener('click', function (ev) {
+    if (Date.now() - swiped < 400 && ev.target.closest('.grid')) { ev.stopPropagation(); ev.preventDefault(); }
+  }, true);
+  window.addEventListener('resize', function () { if (PER_PAGE !== 6) render(); });
+
   root.addEventListener('click', function (ev) {
     var el = ev.target.closest('[data-act]');
     if (!el || el.disabled) return;
@@ -172,7 +278,8 @@
       case 'tap': tap(parseInt(el.dataset.id, 10)); break;
       case 'request': send('request_access'); break;
       case 'cancel': send('cancel_request'); break;
-      case 'page': page += parseInt(el.dataset.d, 10); render(); break;
+      case 'page': { var d = parseInt(el.dataset.d, 10); goToPage(page + d, d); } break;
+      case 'page-to': { var to = parseInt(el.dataset.page, 10); goToPage(to, to > page ? 1 : -1); } break;
       case 'clear':
         if (control()) send(cur && cur.audio ? 'stop_audio' : 'clear');
         else { sim = null; render(); }
@@ -203,4 +310,10 @@
 
   get('state').then(function (data) { state = data; render(); poll(); });
   setInterval(function () { if (sim && !sim.paused) render(); }, 500);
+  // Keep the screen on while this view is open (https, so the Wake Lock API works).
+  if (navigator.wakeLock) {
+    var wake = function () { navigator.wakeLock.request('screen').catch(function () {}); };
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') wake(); });
+    wake();
+  }
 })();

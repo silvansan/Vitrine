@@ -52,3 +52,12 @@ button{font:inherit;color:inherit;cursor:pointer}
   .banner,.status,.transport{margin-left:14px;margin-right:14px}
   .foot{padding:10px 14px 14px}
 }
+
+/* Pages: dots, slider, swipe, files per page */
+.grid{touch-action:pan-y;will-change:transform}
+.pager .dots{display:flex;align-items:center;gap:2px}
+.pager .pdot{min-width:0;width:28px;height:28px;padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center}
+.pager .pdot::before{content:"";width:10px;height:10px;border-radius:5px;background:currentColor;opacity:.35;transition:width .2s,opacity .2s}
+.pager .pdot[aria-current="page"]::before{width:24px;opacity:1}
+.pager .pslider{width:140px;accent-color:currentColor}
+.per-page{height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:inherit;font:inherit;font-size:13px;font-weight:700;padding:0 8px}
