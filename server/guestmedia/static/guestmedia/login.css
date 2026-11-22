@@ -24,9 +24,9 @@ body{margin:0;background:var(--bg);color:var(--text);font-size:15px;line-height:
 .stage-text{position:relative;z-index:1;max-width:420px}
 .stage-text p{margin:10px 0 0;font-size:17px;color:#C9CED8}
 .mark{font-weight:800;font-size:40px;letter-spacing:-.03em;display:flex;align-items:center;gap:10px}
-.mark::before{content:"";width:14px;height:14px;border-radius:50%;background:var(--live);box-shadow:0 0 0 5px rgba(217,45,32,.25)}
+.mark img{width:52px;height:52px;display:block}
 .mark.small{font-size:20px;margin-bottom:28px}
-.mark.small::before{width:10px;height:10px;box-shadow:0 0 0 4px rgba(217,45,32,.2)}
+.mark.small img{width:30px;height:30px}
 
 /* right: the form */
 .panel{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px}

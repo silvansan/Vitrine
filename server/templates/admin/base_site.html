@@ -3,11 +3,11 @@
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | Vitrine admin{% endblock %}
 
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'guestmedia/admin.css' %}">{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'guestmedia/admin.css' %}"><link rel="icon" href="{% static 'guestmedia/logo.svg' %}" type="image/svg+xml">{% endblock %}
 
 {% block branding %}
 <div id="site-name">
-  <a href="{% url 'admin:index' %}" class="vt-brand"><span class="vt-dot"></span>Vitrine <span class="vt-sub">admin</span></a>
+  <a href="{% url 'admin:index' %}" class="vt-brand"><img src="{% static 'guestmedia/logo.svg' %}" alt="" width="26" height="26" style="display:block">Vitrine <span class="vt-sub">admin</span></a>
 </div>
 {% if user.is_anonymous %}
   {% include "admin/color_theme_toggle.html" %}

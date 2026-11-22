@@ -56,11 +56,15 @@ button:focus-visible { outline: 3px solid #6E8CFF; outline-offset: 2px; }
 .stack-right strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 
 /* grid */
-/* Six tiles fill the space on a tablet. On a small screen (a phone held sideways) the
-   tiles keep a usable minimum height and the grid scrolls instead of squashing them. */
-.grid { flex: 1; min-height: 0; padding: 18px 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(180px, 1fr)); gap: 18px; overflow-y: auto; touch-action: pan-y; }
-.theme-pulpit .grid { gap: 22px; padding: 6px 28px 18px; }
-@media (orientation: portrait) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(170px, 1fr)); } }
+/* One strip of columns that slides sideways: --cols columns × --rows rows are visible
+   (files per page); it settles on whole columns. */
+.grid { --cols: 3; --rows: 2; --gap: 18px; --pad: 24px; flex: 1; min-height: 0; padding: 18px var(--pad); display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); grid-auto-columns: calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)); gap: var(--gap); overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: var(--pad); touch-action: pan-x; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.grid::-webkit-scrollbar { display: none; }
+.grid > .tile { scroll-snap-align: start; min-height: 0; }
+.grid.dragging { scroll-snap-type: none; cursor: grabbing; }
+.grid.dragging .tile { pointer-events: none; }
+.theme-pulpit .grid { --gap: 22px; --pad: 28px; padding: 6px var(--pad) 18px; }
+.grid.empty-grid { display: flex; overflow: hidden; }
 .empty { grid-column: 1 / -1; grid-row: 1 / -1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; text-align: center; padding: 20px; }
 .tile { display: flex; flex-direction: column; overflow: hidden; border-radius: 14px; background: var(--surface); border: 3px solid var(--tile-border); transition: border-color .15s, box-shadow .15s; }
 .theme-pulpit .tile { border-width: 4px; border-radius: 16px; }
@@ -202,7 +206,7 @@ fieldset.box legend { padding: 0 6px; }
   .nav { height: 52px; padding: 0 16px; }
   .chip { height: 36px; font-size: 13px; }
   .stack-right { display: none; }
-  .grid, .theme-pulpit .grid { padding: 8px 16px; gap: 10px; grid-template-rows: repeat(2, minmax(150px, 1fr)); }
+  .grid, .theme-pulpit .grid { --gap: 10px; --pad: 16px; padding: 8px var(--pad); }
   .caption { height: 50px; padding: 4px 8px 4px 10px; }
   .caption .who { font-size: 13px; }
   .strip { height: 48px; }
@@ -217,7 +221,8 @@ fieldset.box legend { padding: 0 6px; }
 }
 /* Narrow phones held upright. */
 @media (max-width: 600px) {
-  .head, .nav, .grid, .foot, .p-head, .transport { padding-left: 12px; padding-right: 12px; }
+  .head, .nav, .foot, .p-head, .transport { padding-left: 12px; padding-right: 12px; }
+  .grid, .theme-pulpit .grid { --pad: 12px; }
   .head-right .pill { display: none; }
   .foot { grid-template-columns: 1fr auto; }
   .foot .now { display: none; }
@@ -263,7 +268,6 @@ fieldset.box legend { padding: 0 6px; }
 @media (prefers-reduced-motion: reduce) { .req-icon { animation: none; } }
 
 /* Pages: dots or slider, swipe, files per page */
-.grid { will-change: transform; }
 .nav-btn.small { width: 44px; height: 44px; border-radius: 22px; }
 .theme-pulpit .nav-btn.small { width: 48px; height: 48px; border-radius: 24px; }
 .dots { display: flex; align-items: center; gap: 4px; }
@@ -275,8 +279,15 @@ fieldset.box legend { padding: 0 6px; }
 .pslider { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
 .pslider input { width: 160px; accent-color: var(--text); }
 .per-page { height: 40px; border-radius: 10px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); padding: 0 8px; font: inherit; font-size: 13px; font-weight: 600; margin-left: 8px; }
-.grid[data-dense] { gap: 12px; }
-.grid[data-dense="more"] { gap: 10px; padding-top: 10px; padding-bottom: 10px; }
+.grid[data-dense] { --gap: 12px; }
+.grid[data-dense="more"] { --gap: 10px; padding-top: 10px; padding-bottom: 10px; }
 .grid[data-dense="more"] .caption .who { font-size: 13px; }
 .grid[data-dense="more"] .caption .file { font-size: 11px; }
 @media (max-width: 700px) { .per-page { margin-left: 0; } .pslider input { width: 100px; } }
+.grid.empty-grid .empty { flex: 1; }
+
+/* Logo */
+.head .title, .p-head .title { display: flex; align-items: center; gap: 10px; }
+.logo-mark { width: 26px; height: 26px; flex: none; display: block; }
+.p-head .logo-mark { width: 28px; height: 28px; }
+.brand-h1 { display: flex; align-items: center; gap: 10px; }

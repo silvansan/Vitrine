@@ -17,8 +17,12 @@
   var PER_PAGE = 6;
   try { PER_PAGE = parseInt(localStorage.getItem('vitrine_per_page'), 10) || 6; } catch (e) { /* private mode */ }
   if (!LAYOUTS[PER_PAGE]) PER_PAGE = 6;
-  var swipe = null;
   var swiped = 0;
+  var scrolling = 0;
+  var scrollTimer = null;
+  var firstIndex = 0;
+  var scrollToIndex = null;
+  var lastKey = '';
 
   var state = null;   // /api/state: set, guest, service
   var live = null;    // /api/live: control, requested, live, audio, …
@@ -74,10 +78,13 @@
     return '<button type="button" class="access red" data-act="request"><span class="d"></span>Ask for access</button>';
   }
 
-  function gridStyle() {
-    if (PER_PAGE === 6 || window.innerWidth < 700) return '';
+  function layout() {
     var l = LAYOUTS[PER_PAGE][window.innerWidth >= window.innerHeight ? 0 : 1];
-    return ' style="grid-template-columns:repeat(' + l[0] + ',minmax(0,1fr));grid-template-rows:repeat(' + l[1] + ',minmax(0,1fr));grid-auto-rows:minmax(0,1fr)"';
+    var rows = l[1];
+    // fewer rows on a low screen (a phone held sideways)
+    var room = window.innerHeight - 330;
+    while (rows > 1 && room / rows < 120) rows--;
+    return { cols: window.innerWidth < 520 ? Math.min(l[0], 2) : l[0], rows: rows };
   }
 
   function pager(pages) {
@@ -98,32 +105,44 @@
     return html + '</select></div>';
   }
 
-  function goToPage(next, dir) {
-    var pages = Math.max(1, Math.ceil(items().length / PER_PAGE));
-    if (next < 0 || next >= pages || next === page) return false;
-    page = next;
-    render();
+  function metrics(grid) {
+    var gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+    var first = grid.querySelector('.tile');
+    var colW = (first ? first.getBoundingClientRect().width : grid.clientWidth) + gap;
+    var cols = parseInt(grid.style.getPropertyValue('--cols'), 10) || 1;
+    var max = grid.scrollWidth - grid.clientWidth;
+    var step = colW * cols;
+    return { colW: colW, step: step, max: max, count: Math.max(1, Math.round(max / step) + 1) };
+  }
+  function goToPage(p) {
     var grid = root.querySelector('.grid');
-    if (grid && dir) {
-      grid.style.transition = 'none';
-      grid.style.transform = 'translateX(' + dir * 40 + 'px)';
-      grid.style.opacity = '0.4';
-      requestAnimationFrame(function () {
-        grid.style.transition = 'transform .22s ease-out, opacity .22s ease-out';
-        grid.style.transform = '';
-        grid.style.opacity = '';
-      });
-    }
-    return true;
+    if (!grid) return;
+    var m = metrics(grid);
+    p = Math.max(0, Math.min(m.count - 1, p));
+    grid.scrollTo({ left: Math.min(m.max, p * m.step), behavior: 'smooth' });
+  }
+  function syncPager() {
+    var grid = root.querySelector('.grid');
+    if (!grid || !grid.querySelector('.tile')) return;
+    var m = metrics(grid);
+    page = grid.scrollLeft >= m.max - 2 ? m.count - 1 : Math.min(m.count - 1, Math.round(grid.scrollLeft / m.step));
+    firstIndex = Math.round(grid.scrollLeft / m.colW) * (parseInt(grid.style.getPropertyValue('--rows'), 10) || 1);
+    root.querySelectorAll('.pdot').forEach(function (d, i) { if (i === page) d.setAttribute('aria-current', 'page'); else d.removeAttribute('aria-current'); });
+    var slider = root.querySelector('.pslider');
+    if (slider && document.activeElement !== slider) { slider.value = page + 1; slider.nextElementSibling.textContent = (page + 1) + ' / ' + m.count; }
+    var prev = root.querySelector('[data-act=page][data-d="-1"]'), next = root.querySelector('[data-act=page][data-d="1"]');
+    if (prev) prev.disabled = grid.scrollLeft <= 2;
+    if (next) next.disabled = grid.scrollLeft >= m.max - 2;
   }
 
+
   function render() {
-    if (swipe && swipe.active) return; // the next poll redraws after the swipe
+    if (scrolling) return; // the next poll redraws once the strip has settled
     if (!state) { root.innerHTML = '<div class="banner">Loading…</div>'; return; }
     var cur = current();
     var list = items();
-    var pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
-    if (page >= pages) page = pages - 1;
+    var lay = layout();
+    var pages = Math.max(1, Math.ceil(Math.ceil(list.length / lay.rows) / lay.cols));
     var html = '<header class="head"><div class="who"><div class="name">' + h(state.guest.name) + '</div><div class="sub">' +
       h(state.service.name) + ' · ' + h(state.service.when || '') + '</div></div>' +
       '<a class="back" href="' + h(root.dataset.back) + '">← My set</a>' + badge() + '</header>';
@@ -143,11 +162,11 @@
     } else if (control() && live.other_on_screen) { status = 'Something else is on screen'; }
     html += '<div class="status ' + cls + '"><span class="d"></span>' + status + '</div>';
 
-    html += '<main class="grid"' + gridStyle() + '>';
-    var slice = list.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
+    html += '<main class="grid' + (list.length ? '' : ' empty-grid') + '" style="--cols:' + lay.cols + ';--rows:' + lay.rows + '">';
+    var slice = list;
     if (!slice.length) html += '<div class="empty">Your set is empty. Add files on your page first.</div>';
     slice.forEach(function (a, i) {
-      var n = page * PER_PAGE + i + 1;
+      var n = i + 1;
       var isLive = cur && cur.asset_id === a.id;
       var isPend = cur && cur.pending_id === a.id;
       var label = a.kind === 'video' ? 'Video · ' + fmt(a.duration_ms) : a.kind === 'audio' ? 'Audio · ' + fmt(a.duration_ms) : 'Photo';
@@ -177,7 +196,27 @@
 
     html += '<footer class="foot">' + pager(pages) +
       '<button type="button" class="clear" data-act="clear"' + (cur && (cur.asset_id || cur.pending_id) ? '' : ' disabled') + '>Back to the banner</button></footer>';
+    var old = root.querySelector('.grid');
+    var keepLeft = old ? old.scrollLeft : 0;
+    var key = list.map(function (a) { return a.id; }).join(',') + '|' + PER_PAGE;
     root.innerHTML = html;
+    var grid = root.querySelector('.grid');
+    if (grid) {
+      if (scrollToIndex != null) {
+        grid.scrollLeft = Math.floor(scrollToIndex / lay.rows) * metrics(grid).colW;
+        scrollToIndex = null;
+      } else if (key === lastKey) {
+        grid.scrollLeft = keepLeft;
+      }
+      grid.addEventListener('scroll', function () {
+        scrolling = Date.now();
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(function () { scrolling = 0; syncPager(); }, 200);
+        syncPager();
+      }, { passive: true });
+      syncPager();
+    }
+    lastKey = key;
   }
 
   function send(action, body) {
@@ -215,59 +254,43 @@
 
   root.addEventListener('change', function (ev) {
     var el = ev.target;
-    if (el.dataset.actChange === 'page') goToPage(parseInt(el.value, 10) - 1, 0);
+    if (el.dataset.actChange === 'page') goToPage(parseInt(el.value, 10) - 1);
     if (el.dataset.actChange === 'per-page') {
-      var first = page * PER_PAGE;
       PER_PAGE = parseInt(el.value, 10) || 6;
       try { localStorage.setItem('vitrine_per_page', String(PER_PAGE)); } catch (e) { /* private mode */ }
-      page = Math.floor(first / PER_PAGE);
+      scrollToIndex = firstIndex; // keep the first visible file in view
       render();
     }
   });
 
-  /* Swipe between pages: the grid follows the finger. */
+  /* Mouse: drag the strip sideways like a finger (touch scrolls natively). */
+  var drag = null;
   root.addEventListener('pointerdown', function (ev) {
+    if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
     var grid = ev.target.closest('.grid');
-    if (!grid || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
-    swipe = { x: ev.clientX, y: ev.clientY, t: Date.now(), grid: grid, active: false, id: ev.pointerId, dx: 0 };
+    if (grid) drag = { x: ev.clientX, left: grid.scrollLeft, grid: grid, moved: false };
   });
-  root.addEventListener('pointermove', function (ev) {
-    if (!swipe || ev.pointerId !== swipe.id) return;
-    var dx = ev.clientX - swipe.x, dy = ev.clientY - swipe.y;
-    if (!swipe.active) {
-      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.3) { if (Math.abs(dy) > 16) swipe = null; return; }
-      swipe.active = true;
-      swipe.grid.style.transition = 'none';
-    }
-    var pages = Math.max(1, Math.ceil(items().length / PER_PAGE));
-    var atEdge = (dx > 0 && page === 0) || (dx < 0 && page >= pages - 1);
-    swipe.dx = atEdge ? dx * 0.25 : dx;
-    swipe.grid.style.transform = 'translateX(' + swipe.dx + 'px)';
+  window.addEventListener('pointermove', function (ev) {
+    if (!drag) return;
+    var dx = ev.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) < 6) return;
+    if (!drag.moved) { drag.moved = true; drag.grid.classList.add('dragging'); }
+    drag.grid.scrollLeft = drag.left - dx;
   });
-  function endSwipe(ev) {
-    if (!swipe || (ev && ev.pointerId !== swipe.id)) return;
-    var s = swipe;
-    swipe = null;
-    if (!s.active) return;
+  window.addEventListener('pointerup', function () {
+    if (!drag) return;
+    var d = drag;
+    drag = null;
+    if (!d.moved) return;
     swiped = Date.now();
-    var fast = Math.abs(s.dx) / Math.max(1, Date.now() - s.t) > 0.5;
-    var far = Math.abs(s.dx) > s.grid.clientWidth * 0.18;
-    if ((fast || far) && Math.abs(s.dx) > 30) {
-      var dir = s.dx < 0 ? 1 : -1;
-      s.grid.style.transition = 'transform .15s ease-in';
-      s.grid.style.transform = 'translateX(' + (-dir) * s.grid.clientWidth * 0.5 + 'px)';
-      setTimeout(function () { if (!goToPage(page + dir, dir)) render(); }, 120);
-    } else {
-      s.grid.style.transition = 'transform .2s ease-out';
-      s.grid.style.transform = '';
-    }
-  }
-  root.addEventListener('pointerup', endSwipe);
-  root.addEventListener('pointercancel', endSwipe);
+    d.grid.classList.remove('dragging');
+    var m = metrics(d.grid);
+    d.grid.scrollTo({ left: Math.round(d.grid.scrollLeft / m.colW) * m.colW, behavior: 'smooth' });
+  });
   root.addEventListener('click', function (ev) {
-    if (Date.now() - swiped < 400 && ev.target.closest('.grid')) { ev.stopPropagation(); ev.preventDefault(); }
+    if (Date.now() - swiped < 300 && ev.target.closest('.grid')) { ev.stopPropagation(); ev.preventDefault(); }
   }, true);
-  window.addEventListener('resize', function () { if (PER_PAGE !== 6) render(); });
+  window.addEventListener('resize', function () { scrollToIndex = firstIndex; render(); });
 
   root.addEventListener('click', function (ev) {
     var el = ev.target.closest('[data-act]');
@@ -278,8 +301,8 @@
       case 'tap': tap(parseInt(el.dataset.id, 10)); break;
       case 'request': send('request_access'); break;
       case 'cancel': send('cancel_request'); break;
-      case 'page': { var d = parseInt(el.dataset.d, 10); goToPage(page + d, d); } break;
-      case 'page-to': { var to = parseInt(el.dataset.page, 10); goToPage(to, to > page ? 1 : -1); } break;
+      case 'page': goToPage(page + parseInt(el.dataset.d, 10)); break;
+      case 'page-to': goToPage(parseInt(el.dataset.page, 10)); break;
       case 'clear':
         if (control()) send(cur && cur.audio ? 'stop_audio' : 'clear');
         else { sim = null; render(); }

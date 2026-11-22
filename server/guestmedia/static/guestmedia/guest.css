@@ -100,7 +100,7 @@ button,input{font:inherit}
 .pin-app{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
 .pin-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:28px 24px;text-align:center}
 .pin-mark{display:inline-flex;align-items:center;gap:8px;font-weight:800;letter-spacing:-.02em;margin-bottom:18px}
-.pin-mark span{width:9px;height:9px;border-radius:50%;background:#D92D20;box-shadow:0 0 0 3px rgba(217,45,32,.2)}
+.pin-mark img{width:28px;height:28px;display:block}
 .pin-card h1{font-size:24px;margin:0 0 8px}
 .pin-card p{color:var(--subtle);margin:0 0 18px;font-size:15px}
 .pin-card input{width:100%;height:60px;text-align:center;font-size:30px;letter-spacing:.35em;border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);font-variant-numeric:tabular-nums}

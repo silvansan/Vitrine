@@ -54,10 +54,20 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 
 /* Pages: dots, slider, swipe, files per page */
-.grid{touch-action:pan-y;will-change:transform}
 .pager .dots{display:flex;align-items:center;gap:2px}
 .pager .pdot{min-width:0;width:28px;height:28px;padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center}
 .pager .pdot::before{content:"";width:10px;height:10px;border-radius:5px;background:currentColor;opacity:.35;transition:width .2s,opacity .2s}
 .pager .pdot[aria-current="page"]::before{width:24px;opacity:1}
 .pager .pslider{width:140px;accent-color:currentColor}
 .per-page{height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:inherit;font:inherit;font-size:13px;font-weight:700;padding:0 8px}
+
+/* One strip of columns that slides sideways */
+.grid{--cols:3;--rows:2;--gap:14px;grid-auto-flow:column;grid-template-columns:none;grid-template-rows:repeat(var(--rows),minmax(0,1fr));grid-auto-rows:unset;grid-auto-columns:calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols));gap:var(--gap);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding-inline:20px;overscroll-behavior-x:contain;touch-action:pan-x;scrollbar-width:none;min-height:0}
+.grid::-webkit-scrollbar{display:none}
+.grid>.tile{scroll-snap-align:start;min-height:0}
+.grid.dragging{scroll-snap-type:none;cursor:grabbing}
+.grid.dragging .tile{pointer-events:none}
+.grid.empty-grid{display:flex}
+@media (max-width:700px){.grid{--gap:10px;grid-template-columns:none;grid-auto-rows:unset;scroll-padding-inline:14px}}
+.grid.empty-grid .empty{flex:1}
+@media (max-width:520px){.foot{flex-wrap:wrap;gap:8px}.foot .pager{flex:1;justify-content:space-between}.foot .clear{flex:1 0 100%}}

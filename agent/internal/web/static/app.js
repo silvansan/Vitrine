@@ -16,11 +16,9 @@
     var n = parseInt(opts().per_page, 10);
     return LAYOUTS[n] ? n : 6;
   }
-  function gridStyle() {
-    var n = perPage();
-    if (n === 6) return ''; // the built-in layout (also the phone layouts in the CSS)
-    var l = LAYOUTS[n][window.innerWidth >= window.innerHeight ? 0 : 1];
-    return ' style="grid-template-columns:repeat(' + l[0] + ',minmax(0,1fr));grid-template-rows:repeat(' + l[1] + ',minmax(0,1fr))" data-dense="' + (n >= 12 ? 'more' : n >= 8 ? 'some' : '') + '"';
+  function layout() {
+    var l = LAYOUTS[perPage()][window.innerWidth >= window.innerHeight ? 0 : 1];
+    return { cols: l[0], rows: l[1] };
   }
   var S = { boot: null, status: null, screens: [], wsOk: false, renderKey: '' };
   var ui = { install: false, set: 'all', page: 0, localSet: null, cue: null, drawer: false, drawerScreen: null, toast: '', toastTimer: null, lastError: '', marker: null };
@@ -118,13 +116,6 @@
     var set = pulpitSet();
     if (!set) return [];
     return set.items.filter(function (id) { return asset(id); }).map(function (id) { return { id: id, set: set }; });
-  }
-  function paged(list) {
-    var per = perPage();
-    var count = Math.max(1, Math.ceil(list.length / per));
-    if (ui.page > count - 1) ui.page = count - 1;
-    if (ui.page < 0) ui.page = 0;
-    return { items: list.slice(ui.page * per, ui.page * per + per), count: count };
   }
 
   function theme() {
@@ -229,8 +220,8 @@
 
   function onCommand(msg) {
     if (msg.action === 'goto_page' && typeof msg.page === 'number') {
-      ui.page = msg.page;
       ui.localSet = null;
+      ui.scrollToPage = msg.page;
       render();
     }
   }
@@ -263,8 +254,8 @@
     var label = (state === 'live' ? 'Take off ' : 'Show ') + a.name;
     var html = '<div class="' + classes + '">';
     html += '<button type="button" class="thumb" data-act="tap" data-id="' + entry.id + '" aria-pressed="' + (state === 'live') + '" aria-label="' + h(label) + '">';
-    html += a.thumb ? '<img src="' + h(a.thumb) + '" alt="" draggable="false">' : (sound ? ICON.note : video ? ICON.video : ICON.photo);
-    if (!back) html += '<span class="ov ov-num">' + (ui.page * perPage() + index + 1) + '</span>';
+    html += a.thumb ? '<img src="' + h(a.thumb) + '" alt="" draggable="false" loading="lazy">' : (sound ? ICON.note : video ? ICON.video : ICON.photo);
+    if (!back) html += '<span class="ov ov-num">' + (index + 1) + '</span>';
     if (!a.ready) html += '<span class="ov ov-wait">Downloading…</span>';
     if (video && state !== 'live') html += '<span class="ov ov-dur">' + fmt(a.duration_ms) + '</span>';
     if (state === 'pending') html += '<span class="ov ov-tag pend"><span class="d"></span>SENDING…</span>';
@@ -305,13 +296,19 @@
     return html;
   }
 
+  /* The tiles are one strip of columns that scrolls sideways: sliding shows the next column while
+     the first one leaves, and it settles on whole columns. "Files per page" = columns × rows visible. */
   function renderGrid(list, emptyText) {
-    var page = paged(list);
-    var html = '<main class="grid" id="grid"' + gridStyle() + '>';
-    if (!list.length) html += '<div class="empty">' + h(emptyText) + '</div>';
-    page.items.forEach(function (entry, i) { html += renderTile(entry, i); });
+    var l = layout();
+    var rows = Math.min(l.rows, ui.fitRows || l.rows);
+    ui.gridKey = list.map(function (e) { return e.id; }).join(',') + '|' + perPage();
+    if (!list.length) return { html: '<main class="grid empty-grid" id="grid"><div class="empty">' + h(emptyText) + '</div></main>', count: 1 };
+    var html = '<main class="grid" id="grid" style="--cols:' + l.cols + ';--rows:' + rows + '"' +
+      (perPage() >= 12 ? ' data-dense="more"' : perPage() >= 8 ? ' data-dense="some"' : '') + '>';
+    list.forEach(function (entry, i) { html += renderTile(entry, i); });
     html += '</main>';
-    return { html: html, count: page.count };
+    var count = Math.max(1, Math.ceil(Math.ceil(list.length / rows) / l.cols));
+    return { html: html, count: count };
   }
 
   function renderTransport() {
@@ -390,7 +387,7 @@
     var service = S.boot.service;
     var pSet = firstPulpitSet();
     var pOnline = pulpits().some(function (p) { return p.online; });
-    html += '<header class="head"><div><div class="title">Vitrine' + (S.boot.location ? ' <span class="loc">· ' + h(S.boot.location.name) + '</span>' : '') + '</div>' + eventPicker(service) + '</div><div class="head-right">';
+    html += '<header class="head"><div><div class="title"><img class="logo-mark" src="/static/logo.svg" alt="" width="26" height="26">Vitrine' + (S.boot.location ? ' <span class="loc">· ' + h(S.boot.location.name) + '</span>' : '') + '</div>' + eventPicker(service) + '</div><div class="head-right">';
     html += '<span class="pill"><span class="dot ' + (st.server_online ? 'ok' : 'warn') + '"></span>' + (st.server_online ? 'Server online' : 'Server offline') + '</span>';
     html += '<span class="pill"><span class="dot ' + (e.vmix_ok ? 'ok' : 'bad') + '"></span>' + (e.vmix_ok ? 'vMix connected' : 'vMix not reachable') + '</span>';
     if (pulpits().length) html += '<span class="pill"><span class="dot ' + (pOnline ? 'ok' : 'warn') + '"></span>' + (pOnline ? 'Pulpit in sync' : 'Pulpit offline') + '</span>';
@@ -453,11 +450,11 @@
   }
 
   function setPerPage(id, n) {
-    var first = ui.page * perPage();
     var mine = me();
     if (id === 'self' && mine) {
       mine.options = Object.assign({}, mine.options, { per_page: n });
-      ui.page = Math.floor(first / n); // keep the first file of this page in view
+      ui.fitRows = 0;
+      ui.scrollToIndex = ui.firstIndex || 0; // keep the first visible file in view
       render();
     }
     post('/api/screens/' + id, { per_page: n });
@@ -495,7 +492,7 @@
     if (audioState().asset_id) status = { cls: 'live', text: 'Audio is playing' };
     if (e.asset_id) status = { cls: 'live', text: e.kind === 'video' ? 'A video is on screen' : e.kind === 'audio' ? 'Audio is playing' : 'A picture is on screen' };
     if (e.pending_id || audioState().pending_id) status = { cls: 'pend', text: 'Sending to the screen…' };
-    html += '<header class="p-head"><div class="title">' + (o.show_title !== false && set ? h(set.title) : '') +
+    html += '<header class="p-head"><div class="title"><img class="logo-mark" src="/static/logo.svg" alt="" width="28" height="28">' + (o.show_title !== false && set ? h(set.title) : '') +
       (o.show_title !== false && S.boot.service ? '<div class="p-sub">' + h(eventLabel(S.boot.service)) + (S.boot.location ? ' · ' + h(S.boot.location.name) : '') + '</div>' : '') + '</div>';
     html += '<div class="row">';
     if (o.show_status) {
@@ -657,7 +654,7 @@
 
   function render() {
     if (!S.boot) return;
-    if (swipe && swipe.active) { ui.renderAfterSwipe = true; return; } // don't pull the grid from under the finger
+    if (ui.scrolling || drag) { ui.renderAfterScroll = true; return; } // don't redraw under a sliding finger
     var typing = document.getElementById('marker-name');
     if (ui.marker && typing && document.activeElement === typing) { updateProgress(); return; }
     S.renderKey = liveKey();
@@ -672,7 +669,12 @@
     if (!S.wsOk) html += '<div class="offline">Reconnecting to the vMix PC…</div>';
     var scroll = {};
     app.querySelectorAll('.chips, .drawer-body').forEach(function (el, i) { scroll[i] = el.scrollLeft || el.scrollTop; });
+    var oldGrid = gridEl();
+    var prevKey = oldGrid ? ui.renderedGridKey : null;
+    var prevLeft = oldGrid ? oldGrid.scrollLeft : 0;
     app.innerHTML = html;
+    afterGridRender(prevKey, prevLeft);
+    ui.renderedGridKey = ui.gridKey;
     app.querySelectorAll('.chips, .drawer-body').forEach(function (el, i) {
       if (scroll[i]) { if (el.classList.contains('chips')) el.scrollLeft = scroll[i]; else el.scrollTop = scroll[i]; }
     });
@@ -911,8 +913,8 @@
         post('/api/seek', { position_ms: Math.max(0, ((cur && cur.position_ms) || 0) + parseInt(data.d, 10)) });
         break;
       }
-      case 'page': { var d = parseInt(data.d, 10); goToPage(ui.page + d, d); } break;
-      case 'page-to': { var to = parseInt(data.page, 10); goToPage(to, to > ui.page ? 1 : -1); } break;
+      case 'page': goToPage(ui.page + parseInt(data.d, 10)); break;
+      case 'page-to': goToPage(parseInt(data.page, 10)); break;
       case 'chip': ui.set = data.set === 'all' ? 'all' : parseInt(data.set, 10); ui.page = 0; render(); break;
       case 'local-set': ui.localSet = parseInt(data.set, 10); ui.page = 0; render(); break;
       case 'send-pulpit': if (ui.set !== 'all') post('/api/pulpit', { current_set_id: ui.set }); break;
@@ -939,7 +941,7 @@
     var kind = el.dataset.change;
     if (!kind) return;
     if (kind === 'event') { post('/api/companion/settings', { service_id: parseInt(el.value, 10) || 0 }); return; }
-    if (kind === 'page-slider') { goToPage(parseInt(el.value, 10) - 1, 0); return; }
+    if (kind === 'page-slider') { goToPage(parseInt(el.value, 10) - 1); return; }
     if (kind === 'per-page') { setPerPage('self', parseInt(el.value, 10)); return; }
     if (kind === 'screen-per-page') { setPerPage(el.dataset.id, parseInt(el.value, 10)); return; }
     var screen = S.screens.filter(function (s) { return s.id === el.dataset.id; })[0];
@@ -971,87 +973,119 @@
     track.addEventListener('pointerup', function () { track.onpointermove = null; });
   }
 
-  /* Swipe between pages: the grid follows the finger (or mouse), then slides to the next page. */
-  var swipe = null;
-  function pageCount() {
-    var list = isBack() ? itemsBack() : itemsPulpit();
-    return Math.max(1, Math.ceil(list.length / perPage()));
+  /* ---------- sliding strip ---------- */
+  function gridEl() { return document.getElementById('grid'); }
+  function stripMetrics(grid) {
+    var cs = getComputedStyle(grid);
+    var gap = parseFloat(cs.columnGap) || 0;
+    var first = grid.querySelector('.tile');
+    var colW = first ? first.getBoundingClientRect().width : grid.clientWidth;
+    var cols = parseInt(cs.getPropertyValue('--cols'), 10) || 1;
+    var step = (colW + gap) * cols;
+    var max = grid.scrollWidth - grid.clientWidth;
+    var count = Math.max(1, Math.round(max / step) + 1);
+    return { step: step, max: max, count: count, colW: colW + gap };
   }
-  function goToPage(next, fromDir) {
-    var count = pageCount();
-    if (next < 0 || next >= count || next === ui.page) return false;
-    ui.page = next;
-    render();
-    var grid = document.getElementById('grid');
-    if (grid && fromDir) {
-      grid.style.transition = 'none';
-      grid.style.transform = 'translateX(' + (fromDir * 40) + 'px)';
-      grid.style.opacity = '0.4';
-      requestAnimationFrame(function () {
-        grid.style.transition = 'transform .22s ease-out, opacity .22s ease-out';
-        grid.style.transform = '';
-        grid.style.opacity = '';
-      });
+  function currentPage(grid) {
+    var m = stripMetrics(grid);
+    if (grid.scrollLeft >= m.max - 2) return m.count - 1;
+    return Math.min(m.count - 1, Math.round(grid.scrollLeft / m.step));
+  }
+  function goToPage(p) {
+    var grid = gridEl();
+    if (!grid) return;
+    var m = stripMetrics(grid);
+    p = Math.max(0, Math.min(m.count - 1, p));
+    grid.scrollTo({ left: Math.min(m.max, p * m.step), behavior: 'smooth' });
+  }
+  function syncPager() {
+    var grid = gridEl();
+    if (!grid || grid.classList.contains('empty-grid')) return;
+    var m = stripMetrics(grid);
+    var p = currentPage(grid);
+    ui.page = p;
+    ui.firstIndex = Math.round(grid.scrollLeft / m.colW) * (parseInt(getComputedStyle(grid).getPropertyValue('--rows'), 10) || 1);
+    app.querySelectorAll('.pdot').forEach(function (d, i) {
+      if (i === p) d.setAttribute('aria-current', 'page'); else d.removeAttribute('aria-current');
+    });
+    var slider = app.querySelector('[data-change=page-slider]');
+    if (slider && document.activeElement !== slider) { slider.value = p + 1; slider.nextElementSibling.textContent = (p + 1) + ' / ' + m.count; }
+    var prev = app.querySelector('[data-act=page][data-d="-1"]');
+    var next = app.querySelector('[data-act=page][data-d="1"]');
+    if (prev) prev.disabled = grid.scrollLeft <= 2;
+    if (next) next.disabled = grid.scrollLeft >= m.max - 2;
+  }
+  // Fewer rows when the screen is too low for the chosen layout (phones held sideways).
+  function fitRows(grid) {
+    var l = layout();
+    var gap = parseFloat(getComputedStyle(grid).rowGap) || 0;
+    var minRow = window.innerWidth < 900 || window.innerHeight < 600 ? 120 : 150;
+    var fit = Math.max(1, Math.min(l.rows, Math.floor((grid.clientHeight + gap) / (minRow + gap))));
+    if (fit !== (ui.fitRows || l.rows)) { ui.fitRows = fit; return true; }
+    return false;
+  }
+  function afterGridRender(prevKey, prevLeft) {
+    var grid = gridEl();
+    if (!grid || grid.classList.contains('empty-grid')) return;
+    if (fitRows(grid)) { grid.style.setProperty('--rows', Math.min(layout().rows, ui.fitRows)); }
+    if (ui.scrollToPage != null) {
+      var p = ui.scrollToPage;
+      ui.scrollToPage = null;
+      grid.scrollLeft = Math.min(stripMetrics(grid).max, p * stripMetrics(grid).step);
+    } else if (ui.scrollToIndex != null) {
+      var rows = parseInt(getComputedStyle(grid).getPropertyValue('--rows'), 10) || 1;
+      grid.scrollLeft = Math.floor(ui.scrollToIndex / rows) * stripMetrics(grid).colW;
+      ui.scrollToIndex = null;
+    } else if (prevKey === ui.gridKey) {
+      grid.scrollLeft = prevLeft; // same files: stay where you were
     }
-    return true;
+    grid.addEventListener('scroll', function () {
+      ui.scrolling = Date.now();
+      clearTimeout(ui.scrollTimer);
+      ui.scrollTimer = setTimeout(function () {
+        ui.scrolling = 0;
+        syncPager();
+        if (ui.renderAfterScroll) { ui.renderAfterScroll = false; render(); }
+      }, 160);
+      syncPager();
+    }, { passive: true });
+    syncPager();
   }
+
+  // Mouse: drag the strip sideways like a finger (touch scrolls natively).
+  var drag = null;
   app.addEventListener('pointerdown', function (ev) {
+    if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
     var grid = ev.target.closest('.grid');
-    if (!grid || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
-    swipe = { x: ev.clientX, y: ev.clientY, t: Date.now(), grid: grid, active: false, id: ev.pointerId };
+    if (!grid || grid.classList.contains('empty-grid')) return;
+    drag = { x: ev.clientX, left: grid.scrollLeft, grid: grid, moved: false };
   });
-  app.addEventListener('pointermove', function (ev) {
-    if (!swipe || ev.pointerId !== swipe.id) return;
-    var dx = ev.clientX - swipe.x;
-    var dy = ev.clientY - swipe.y;
-    if (!swipe.active) {
-      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.3) {
-        if (Math.abs(dy) > 16) swipe = null; // scrolling up/down
-        return;
-      }
-      swipe.active = true;
-      swipe.grid.style.transition = 'none';
-    }
-    var count = pageCount();
-    var atEdge = (dx > 0 && ui.page === 0) || (dx < 0 && ui.page >= count - 1);
-    swipe.dx = atEdge ? dx * 0.25 : dx; // resist at the first and last page
-    swipe.grid.style.transform = 'translateX(' + swipe.dx + 'px)';
+  window.addEventListener('pointermove', function (ev) {
+    if (!drag) return;
+    var dx = ev.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) < 6) return;
+    if (!drag.moved) { drag.moved = true; drag.grid.classList.add('dragging'); }
+    drag.grid.scrollLeft = drag.left - dx;
   });
-  function endSwipe(ev) {
-    if (!swipe || (ev && ev.pointerId !== swipe.id)) return;
-    var s = swipe;
-    swipe = null;
-    if (!s.active) return;
-    var pending = ui.renderAfterSwipe;
-    ui.renderAfterSwipe = false;
-    ui.swiped = Date.now(); // swallow the click that follows the drag
-    var dx = s.dx || 0;
-    var fast = Math.abs(dx) / Math.max(1, Date.now() - s.t) > 0.5;
-    var far = Math.abs(dx) > s.grid.clientWidth * 0.18;
-    if ((fast || far) && Math.abs(dx) > 30) {
-      var dir = dx < 0 ? 1 : -1;
-      s.grid.style.transition = 'transform .15s ease-in';
-      s.grid.style.transform = 'translateX(' + (dx < 0 ? -1 : 1) * s.grid.clientWidth * 0.5 + 'px)';
-      setTimeout(function () {
-        if (!goToPage(ui.page + dir, dir)) { s.grid.style.transition = 'transform .2s'; s.grid.style.transform = ''; }
-      }, 120);
-    } else {
-      s.grid.style.transition = 'transform .2s ease-out';
-      s.grid.style.transform = '';
-      if (pending) setTimeout(render, 220);
-    }
-  }
-  app.addEventListener('pointerup', endSwipe);
-  app.addEventListener('pointercancel', endSwipe);
+  window.addEventListener('pointerup', function () {
+    if (!drag) return;
+    var d = drag;
+    drag = null;
+    if (!d.moved) return;
+    ui.swiped = Date.now();
+    d.grid.classList.remove('dragging'); // snapping comes back and settles on a column
+    var m = stripMetrics(d.grid);
+    d.grid.scrollTo({ left: Math.round(d.grid.scrollLeft / m.colW) * m.colW, behavior: 'smooth' });
+  });
   app.addEventListener('click', function (ev) {
-    if (ui.swiped && Date.now() - ui.swiped < 400 && ev.target.closest('.grid')) {
+    if (ui.swiped && Date.now() - ui.swiped < 300 && ev.target.closest('.grid')) {
       ev.stopPropagation();
       ev.preventDefault();
     }
   }, true);
   window.addEventListener('resize', function () {
     clearTimeout(ui.resizeTimer);
-    ui.resizeTimer = setTimeout(function () { if (perPage() !== 6) render(); }, 150);
+    ui.resizeTimer = setTimeout(function () { ui.fitRows = 0; ui.scrollToIndex = ui.firstIndex || 0; render(); }, 150);
   });
 
   // Keep the screen on while this page is open. The Wake Lock API only works over https, and the

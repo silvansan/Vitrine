@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Change my PIN · Vitrine</title>
-<link rel="stylesheet" href="{% static 'guestmedia/guest.css' %}">
+<link rel="icon" href="{% static 'guestmedia/logo.svg' %}" type="image/svg+xml"><link rel="stylesheet" href="{% static 'guestmedia/guest.css' %}">
 </head>
 <body>
 <div class="app pin-app">
   {% if done %}
   <div class="pin-card">
-    <div class="pin-mark"><span></span>Vitrine</div>
+    <div class="pin-mark"><img src="{% static 'guestmedia/logo.svg' %}" alt="" width="28" height="28">Vitrine</div>
     <h1>PIN changed</h1>
     <p>Use your new PIN on any other phone. This one stays signed in.</p>
     <a class="primary pin-go pin-link" href="{% url 'guest-page' person.token %}">Back to my set</a>
@@ -19,7 +19,7 @@
   {% else %}
   <form method="post" class="pin-card" autocomplete="off">
     {% csrf_token %}
-    <div class="pin-mark"><span></span>Vitrine</div>
+    <div class="pin-mark"><img src="{% static 'guestmedia/logo.svg' %}" alt="" width="28" height="28">Vitrine</div>
     <h1>Change my PIN</h1>
     <p>Choose {{ min_len }} to {{ max_len }} digits. After this, only you know it; the production team can still reset it if you forget.</p>
     {% if error %}<p class="pin-error" role="alert">{{ error }}</p>{% endif %}

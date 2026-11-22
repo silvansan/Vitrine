@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Sign in · Vitrine</title>
-<link rel="stylesheet" href="{% static 'guestmedia/login.css' %}">
+<link rel="icon" href="{% static 'guestmedia/logo.svg' %}" type="image/svg+xml"><link rel="stylesheet" href="{% static 'guestmedia/login.css' %}">
 </head>
 <body>
 <div class="login">
@@ -15,7 +15,7 @@
       <span class="t t4"></span><span class="t t5 live"><b>ON SCREEN</b></span><span class="t t6"></span>
     </div>
     <div class="stage-text">
-      <div class="mark">Vitrine</div>
+      <div class="mark"><img src="{% static 'guestmedia/logo.svg' %}" alt="" width="52" height="52">Vitrine</div>
       <p>Guest photos, videos and songs, from their phone to your vMix mix.</p>
     </div>
   </aside>
@@ -23,7 +23,7 @@
   <main class="panel">
     <form method="post" class="card" novalidate>
       {% csrf_token %}
-      <div class="mark small">Vitrine</div>
+      <div class="mark small"><img src="{% static 'guestmedia/logo.svg' %}" alt="" width="30" height="30">Vitrine</div>
       <h1>Sign in</h1>
       <p class="sub">Production team only. Guests don't need an account: they use their link.</p>
 

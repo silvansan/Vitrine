@@ -59,3 +59,4 @@ a{color:var(--link)}
   .side.open{display:block}
   .md h1{font-size:28px}
 }
+.logo-mark{width:26px;height:26px;flex:none;display:block}

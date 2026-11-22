@@ -106,7 +106,11 @@
   </div>
 </section>
 
-<form method="post" onsubmit="return confirm('Delete {{ person.name|escapejs }}? Their link stops working; their uploads stay in the library.')">
-  {% csrf_token %}<input type="hidden" name="action" value="delete"><button class="btn danger" type="submit">Delete person</button>
-</form>
+<section class="card danger-zone">
+  <h2>Delete {{ person.name }}</h2>
+  <p class="muted">Their link and PIN stop working and they leave all events. <strong>Their files stay in the library</strong> (shown as from {{ person.name }}), and stay in other people's sets; their own sets go. Files they had marked private become normal library files. To remove files too, use the Library.</p>
+  <form method="post" onsubmit="return confirm('Delete {{ person.name|escapejs }}? Their link stops working; their files stay in the library.')">
+    {% csrf_token %}<input type="hidden" name="action" value="delete"><button class="btn danger" type="submit">Delete person</button>
+  </form>
+</section>
 {% endblock %}

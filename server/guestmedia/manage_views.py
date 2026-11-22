@@ -356,8 +356,16 @@ def person_detail(request, pk):
             messages.success(request, f"Signed out {count} device{'s' if count != 1 else ''}.")
         elif action == "delete":
             name = person.name
+            uploads = MediaAsset.all_objects.filter(uploaded_by=person)
+            count = uploads.count()
+            # Their files stay in the organization's library (banners and the like): files they had
+            # marked private become normal library files, since nobody else could ever pick them.
+            uploads.filter(private=True).update(private=False)
             person.delete()
-            messages.success(request, f"{name} deleted. Their uploads stay in the library.")
+            if count:
+                messages.success(request, f"{name} deleted. Their {count} file{'s' if count != 1 else ''} stay in the library, under the name {name}.")
+            else:
+                messages.success(request, f"{name} deleted.")
             return redirect("manage-people")
         return redirect("manage-person", person.pk)
     participations = person.participations().prefetch_related("sets__items")

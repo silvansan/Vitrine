@@ -1,9 +1,9 @@
 {% load static %}<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ location.name }} · Vitrine</title><link rel="stylesheet" href="{% static 'guestmedia/guest.css' %}">
+<title>{{ location.name }} · Vitrine</title><link rel="icon" href="{% static 'guestmedia/logo.svg' %}" type="image/svg+xml"><link rel="stylesheet" href="{% static 'guestmedia/guest.css' %}">
 <meta http-equiv="refresh" content="15"></head>
 <body><div class="app pin-app"><div class="pin-card">
-  <div class="pin-mark"><span></span>Vitrine</div>
+  <div class="pin-mark"><img src="{% static 'guestmedia/logo.svg' %}" alt="" width="28" height="28">Vitrine</div>
   <h1>{{ location.name }}</h1>
   <p>The vMix PC of this location isn't connected right now, so its tablet view can't be opened. This page tries again every 15 seconds.</p>
   <p class="pin-help">Check that the PC is on and the Vitrine agent runs (tray icon).</p>

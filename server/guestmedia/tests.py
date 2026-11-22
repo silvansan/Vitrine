@@ -1054,3 +1054,27 @@ class EditDeleteTests(TestCase):
         session.save()
         self.client.post("/manage/organization/", {"action": "delete_org", "confirm_name": "Main"})
         self.assertTrue(Organization.objects.filter(pk=self.org.pk).exists())  # has a location, people, files
+
+
+class DeletePersonKeepsFilesTests(TestCase):
+    def test_files_stay_in_the_library(self):
+        User.objects.create_superuser("admin", "a@example.org", "pw-long-enough")
+        self.client.login(username="admin", password="pw-long-enough")
+        org = Organization.objects.create(name="Main")
+        session = self.client.session
+        session["vitrine_org"] = org.pk
+        session.save()
+        loc = Location.objects.create(organization=org, name="Hall")
+        event = Service.objects.create(name="Camp", location=loc)
+        maria = make_guest(event, "Maria")
+        maria.person.organization = org
+        maria.person.save()
+        banner = MediaAsset.objects.create(owner_name="Maria", original_name="banner.jpg", kind="photo", status="ready",
+                                           approval="approved", organization=org, uploaded_by=maria.person, private=True)
+        self.client.post(f"/manage/people/{maria.person.pk}/", {"action": "delete"})
+        self.assertFalse(Person.objects.filter(pk=maria.person.pk).exists())
+        banner.refresh_from_db()
+        self.assertIsNone(banner.uploaded_by)
+        self.assertFalse(banner.private)
+        self.assertEqual(banner.owner_name, "Maria")
+        self.assertIn(banner, MediaAsset.library_for(org))

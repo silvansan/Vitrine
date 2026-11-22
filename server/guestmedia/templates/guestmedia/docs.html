@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ doc.title }} · Vitrine docs</title>
-<link rel="stylesheet" href="{% static 'guestmedia/docs.css' %}">
+<link rel="icon" href="{% static 'guestmedia/logo.svg' %}" type="image/svg+xml"><link rel="stylesheet" href="{% static 'guestmedia/docs.css' %}">
 </head>
 <body>
 <header class="bar">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false" aria-controls="nav">☰</button>
-  <a class="brand" href="{% url 'docs-home' %}"><span class="dot"></span>Vitrine <span class="muted">docs</span></a>
+  <a class="brand" href="{% url 'docs-home' %}"><img class="logo-mark" src="{% static 'guestmedia/logo.svg' %}" alt="" width="26" height="26">Vitrine <span class="muted">docs</span></a>
   <div class="search">
     <input type="search" id="q" placeholder="Search the docs…  ( / )" autocomplete="off" aria-label="Search the docs" aria-controls="results">
     <div class="results" id="results" role="listbox" hidden></div>
