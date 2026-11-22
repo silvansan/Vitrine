@@ -674,6 +674,7 @@
     var prevLeft = oldGrid ? oldGrid.scrollLeft : 0;
     app.innerHTML = html;
     afterGridRender(prevKey, prevLeft);
+    app.querySelectorAll('.chips').forEach(chipEdges);
     ui.renderedGridKey = ui.gridKey;
     app.querySelectorAll('.chips, .drawer-body').forEach(function (el, i) {
       if (scroll[i]) { if (el.classList.contains('chips')) el.scrollLeft = scroll[i]; else el.scrollTop = scroll[i]; }
@@ -1052,14 +1053,29 @@
     syncPager();
   }
 
-  // Mouse: drag the strip sideways like a finger (touch scrolls natively).
+  // Mouse: drag the strip (and the row of guest chips) sideways like a finger (touch scrolls natively).
   var drag = null;
   app.addEventListener('pointerdown', function (ev) {
     if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
-    var grid = ev.target.closest('.grid');
-    if (!grid || grid.classList.contains('empty-grid')) return;
-    drag = { x: ev.clientX, left: grid.scrollLeft, grid: grid, moved: false };
+    var grid = ev.target.closest('.grid, .chips');
+    if (!grid || grid.classList.contains('empty-grid') || grid.scrollWidth <= grid.clientWidth) return;
+    drag = { x: ev.clientX, left: grid.scrollLeft, grid: grid, moved: false, chips: grid.classList.contains('chips') };
   });
+  // A mouse wheel over the chips scrolls them sideways.
+  app.addEventListener('wheel', function (ev) {
+    var row = ev.target.closest('.chips');
+    if (!row || row.scrollWidth <= row.clientWidth || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return;
+    row.scrollLeft += ev.deltaY;
+    ev.preventDefault();
+  }, { passive: false });
+  // Fade the edge where more chips are hidden.
+  function chipEdges(row) {
+    row.classList.toggle('more-left', row.scrollLeft > 2);
+    row.classList.toggle('more-right', row.scrollLeft < row.scrollWidth - row.clientWidth - 2);
+  }
+  app.addEventListener('scroll', function (ev) {
+    if (ev.target.classList && ev.target.classList.contains('chips')) chipEdges(ev.target);
+  }, true);
   window.addEventListener('pointermove', function (ev) {
     if (!drag) return;
     var dx = ev.clientX - drag.x;
@@ -1074,11 +1090,12 @@
     if (!d.moved) return;
     ui.swiped = Date.now();
     d.grid.classList.remove('dragging'); // snapping comes back and settles on a column
+    if (d.chips) return;
     var m = stripMetrics(d.grid);
     d.grid.scrollTo({ left: Math.round(d.grid.scrollLeft / m.colW) * m.colW, behavior: 'smooth' });
   });
   app.addEventListener('click', function (ev) {
-    if (ui.swiped && Date.now() - ui.swiped < 300 && ev.target.closest('.grid')) {
+    if (ui.swiped && Date.now() - ui.swiped < 300 && ev.target.closest('.grid, .chips')) {
       ev.stopPropagation();
       ev.preventDefault();
     }

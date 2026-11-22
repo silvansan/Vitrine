@@ -291,3 +291,12 @@ fieldset.box legend { padding: 0 6px; }
 .logo-mark { width: 26px; height: 26px; flex: none; display: block; }
 .p-head .logo-mark { width: 28px; height: 28px; }
 .brand-h1 { display: flex; align-items: center; gap: 10px; }
+
+/* Guest chips: scroll sideways (finger, mouse drag or wheel); fade where more are hidden */
+.chips { touch-action: pan-x; overscroll-behavior-x: contain; cursor: default; }
+.chips.dragging { cursor: grabbing; }
+.chips.dragging .chip { pointer-events: none; }
+.chips.more-right { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
+.chips.more-left { -webkit-mask-image: linear-gradient(90deg, transparent, #000 48px); mask-image: linear-gradient(90deg, transparent, #000 48px); }
+.chips.more-left.more-right { -webkit-mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
+.chip { flex-shrink: 0; }
