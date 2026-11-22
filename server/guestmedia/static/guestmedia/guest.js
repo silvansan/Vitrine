@@ -60,6 +60,7 @@
     expand: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
     prev: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
     next: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+    trash: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
     grip: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg>',
     close: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
   };
@@ -192,7 +193,12 @@
         },
         onpointerdown: function (e) { startDrag(e, item); }
       });
-      var row = el('div', { class: 'set-row' }, [grip, thumbBox, meta]);
+      var remove = el('button', {
+        type: 'button', class: 'icon-btn remove-btn', title: 'Remove from my set',
+        'aria-label': 'Remove ' + asset.name + ' from my set', html: ICON.trash,
+        onclick: function () { quickRemove(asset); }
+      });
+      var row = el('div', { class: 'set-row' }, [grip, thumbBox, meta, remove]);
       var item = el('li', { class: 'set-item', 'data-id': String(asset.id) }, [row]);
       if (open) item.appendChild(renderExtras(asset));
       list.appendChild(item);
@@ -303,11 +309,23 @@
       else if (pointerY > window.innerHeight - edge) speed = Math.ceil((pointerY - (window.innerHeight - edge)) / 6);
       if (speed) { window.scrollBy(0, speed); place(); }
     }
-    function moveHandler(ev) { pointerY = ev.clientY; place(); }
+    var pointerId = e.pointerId;
+    var ended = false;
+    function moveHandler(ev) {
+      if (ev.pointerId !== pointerId) return;
+      if (ev.pointerType === 'mouse' && ev.buttons === 0) { end(); return; } // released outside the window
+      pointerY = ev.clientY;
+      place();
+    }
+    function upHandler(ev) { if (ev.pointerId === pointerId) end(); }
     function end() {
-      handle.removeEventListener('pointermove', moveHandler);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
+      if (ended) return;
+      ended = true;
+      window.removeEventListener('pointermove', moveHandler);
+      window.removeEventListener('pointerup', upHandler);
+      window.removeEventListener('pointercancel', upHandler);
+      window.removeEventListener('blur', end);
+      handle.removeEventListener('lostpointercapture', end);
       clearInterval(scrollTimer);
       item.style.transform = '';
       item.classList.remove('dragging');
@@ -324,11 +342,41 @@
         render();
       }
     }
-    handle.addEventListener('pointermove', moveHandler);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
+    // On the window, not the handle: moving sideways off the handle must not lose the drag.
+    window.addEventListener('pointermove', moveHandler);
+    window.addEventListener('pointerup', upHandler);
+    window.addEventListener('pointercancel', upHandler);
+    window.addEventListener('blur', end);
+    handle.addEventListener('lostpointercapture', end);
     scrollTimer = setInterval(autoScroll, 16);
     place();
+  }
+
+  /* Remove at once, with Undo (puts it back in the same place). */
+  function quickRemove(asset) {
+    var order = state.set.map(function (a) { return a.id; });
+    state.set = state.set.filter(function (a) { return a.id !== asset.id; });
+    render();
+    post('set/remove', { asset_id: asset.id });
+    showUndo('Removed “' + asset.name + '”', function () {
+      post('set/add', { asset_ids: [asset.id] }).then(function () {
+        var now = state.set.map(function (a) { return a.id; });
+        var wanted = order.filter(function (id) { return now.indexOf(id) !== -1; });
+        if (wanted.join(',') !== now.join(',')) post('set/order', { asset_ids: wanted });
+      });
+    });
+  }
+  var undoTimer = null;
+  function showUndo(text, undo) {
+    var old = document.getElementById('undo-bar');
+    if (old) old.remove();
+    clearTimeout(undoTimer);
+    var bar = el('div', { id: 'undo-bar', class: 'undo-bar', role: 'status' }, [
+      el('span', { text: text }),
+      el('button', { type: 'button', text: 'Undo', onclick: function () { bar.remove(); clearTimeout(undoTimer); undo(); } })
+    ]);
+    document.body.appendChild(bar);
+    undoTimer = setTimeout(function () { bar.remove(); }, 6000);
   }
 
   function move(index, delta) {

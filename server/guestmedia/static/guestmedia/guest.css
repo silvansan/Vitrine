@@ -153,3 +153,10 @@ body.viewer-open{overflow:hidden}
 .sorting .set-item:not(.dragging){transition:transform .15s}
 .extra-actions{display:flex;flex-wrap:wrap;gap:6px 18px}.link-btn:disabled{opacity:.4;cursor:default}
 .guest-actions a.open-tablet,.guest-actions a.open-tablet:visited{color:#fff;background:#15181E}
+
+/* Quick remove + undo */
+.set-row .remove-btn{margin-left:auto;flex-shrink:0;color:var(--muted)}
+.set-row .remove-btn:hover{color:#C4352D;background:rgba(196,53,45,.08)}
+.undo-bar{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:900;display:flex;align-items:center;gap:16px;max-width:calc(100vw - 32px);padding:12px 12px 12px 18px;border-radius:14px;background:#15181E;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.3);font-size:15px}
+.undo-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.undo-bar button{flex:none;height:38px;padding:0 16px;border-radius:10px;border:0;background:#fff;color:#15181E;font-weight:700;cursor:pointer}

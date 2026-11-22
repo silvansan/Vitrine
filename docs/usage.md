@@ -113,6 +113,8 @@ The tablet pages also work on a phone (upright or sideways): the bars get smalle
 
 In **My set**, guests drag a file by its ⠿ handle (left of the picture) to change the order; the list moves under the finger and scrolls near the edges, and the order is saved when they let go. With a keyboard: focus the handle and press ↑ / ↓. *Options* → *Move up* / *Move down* does the same.
 
+The bin button at the right of each file removes it from the set at once (the file stays in their library); **Undo** in the bar at the bottom puts it back in the same place for a few seconds.
+
 ## Previewing files on the guest page
 
 On their page, guests tap a picture in **My set** (or the ⤢ button on a picture in the library) to see it full screen on black, as it will fill the 16:9 screen; videos and audio play there too. Arrows, a swipe or the keyboard's ← → go to the next file, Esc or ✕ closes.
