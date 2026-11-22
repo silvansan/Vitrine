@@ -203,7 +203,7 @@ fieldset.box legend { padding: 0 6px; }
   .head .sub, .pill { font-size: 12px; }
   .pill { height: 30px; padding: 0 10px; }
   .pill.strong, .head .pill:not(.strong) { display: none; }
-  .nav { height: 52px; padding: 0 16px; }
+  .nav { min-height: 52px; padding: 6px 16px; }
   .chip { height: 36px; font-size: 13px; }
   .stack-right { display: none; }
   .grid, .theme-pulpit .grid { --gap: 10px; --pad: 16px; padding: 8px var(--pad); }
@@ -226,7 +226,7 @@ fieldset.box legend { padding: 0 6px; }
   .head-right .pill { display: none; }
   .foot { grid-template-columns: 1fr auto; }
   .foot .now { display: none; }
-  .nav-right { display: none; }
+  .nav-right .btn { height: 40px; font-size: 14px; }
 }
 
 /* markers */
@@ -300,3 +300,14 @@ fieldset.box legend { padding: 0 6px; }
 .chips.more-left { -webkit-mask-image: linear-gradient(90deg, transparent, #000 48px); mask-image: linear-gradient(90deg, transparent, #000 48px); }
 .chips.more-left.more-right { -webkit-mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
 .chip { flex-shrink: 0; }
+
+/* Guest row: the chips always keep room to scroll; the buttons move to a second line when the
+   window is narrow instead of squeezing the chips to nothing. */
+.nav { height: auto; min-height: 64px; flex-wrap: wrap; row-gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+.nav .chips { flex: 1 1 300px; }
+.nav .btn.live-ctl, .nav-right { flex-shrink: 0; }
+@media (max-width: 760px) { .nav .chips { flex-basis: 100%; } .nav-right { margin-left: 0; } }
+@media (max-width: 1000px) { .head-right .pill:not(.strong) { display: none; } }
+.head .title { white-space: nowrap; min-width: 0; }
+@media (max-width: 600px) { .head .title .loc { display: none; } }
+@media (max-width: 600px) { .head-right { gap: 6px; } .head-right .icon-btn { width: 40px; height: 40px; } .head .event-pick select { max-width: 46vw; } }
