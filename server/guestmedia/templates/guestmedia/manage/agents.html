@@ -77,6 +77,7 @@
     <label>Role <select name="role"><option value="pulpit">Pulpit (kiosk)</option><option value="back">Back (full control)</option></select></label>
     <button class="btn primary" type="submit">Show pairing QR</button>
   </form>
+  <p class="muted note">Tablet can't scan QR codes (old camera)? Pair it from the back tablet instead: <em>Tablets → Pair a new tablet</em> shows a 6-digit code to type on the new tablet at the vMix PC's address. The vMix PC's settings page (tray icon → Settings → Pair a tablet) shows one too.</p>
 
   {% with grants=a.grants.all %}
   {% if grants %}

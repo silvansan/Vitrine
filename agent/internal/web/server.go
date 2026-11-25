@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -67,7 +68,15 @@ type Server struct {
 
 	handoffMu    sync.Mutex
 	handoffs     map[string]handoff
+	pairCodes    map[string]pairCode
 	handoffFails []time.Time
+}
+
+// pairCode: a 6-digit code typed on a tablet that can't scan the QR code (old camera).
+// It stands for a normal pairing link, so using it is the same as opening that link.
+type pairCode struct {
+	token   string
+	expires time.Time
 }
 
 type handoff struct {
@@ -118,6 +127,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/companion/state", s.adminOnly(s.handleCompanionState))
 	mux.HandleFunc("POST /api/companion/settings", s.adminOnly(s.handleSettings))
 	mux.HandleFunc("POST /api/companion/pair", s.adminOnly(s.handleCompanionPair))
+	mux.HandleFunc("POST /api/pair-new", s.screenOnly(s.handleBackPair))
 	mux.HandleFunc("POST /api/companion/screens/{id}/delete", s.adminOnly(s.handleScreenDelete))
 	mux.HandleFunc("POST /api/companion/test-default", s.adminOnly(s.simple(s.Engine.ShowDefault)))
 	mux.HandleFunc("GET /api/companion/config", s.localOnly(s.handleConfigGet))
@@ -906,6 +916,15 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request, _ *store
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
+// handleBackPair: a back tablet makes a pairing link + 6-digit code for a new tablet.
+func (s *Server) handleBackPair(w http.ResponseWriter, r *http.Request, sc *store.Screen) {
+	if sc.Role != "back" {
+		writeError(w, http.StatusForbidden, "only a back tablet can pair new tablets")
+		return
+	}
+	s.handleCompanionPair(w, r, sc)
+}
+
 func (s *Server) handleCompanionPair(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
 	var body struct {
 		Role string `json:"role"`
@@ -944,7 +963,37 @@ func (s *Server) handleCompanionPair(w http.ResponseWriter, r *http.Request, _ *
 		source = "agent"
 	}
 	url := fmt.Sprintf("http://%s:%d/pair?t=%s", s.LANIP(), s.Cfg.ListenPort(), token)
-	writeJSON(w, map[string]string{"url": url, "source": source})
+	code := s.newPairCode(token)
+	writeJSON(w, map[string]string{
+		"url": url, "source": source, "code": code,
+		"address": fmt.Sprintf("http://%s:%d", s.LANIP(), s.Cfg.ListenPort()),
+	})
+}
+
+// newPairCode remembers a pairing link under a 6-digit code for 15 minutes.
+func (s *Server) newPairCode(token string) string {
+	s.handoffMu.Lock()
+	defer s.handoffMu.Unlock()
+	if s.pairCodes == nil {
+		s.pairCodes = map[string]pairCode{}
+	}
+	for c, p := range s.pairCodes {
+		if time.Now().After(p.expires) {
+			delete(s.pairCodes, c)
+		}
+	}
+	var code string
+	for {
+		n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
+		code = fmt.Sprintf("%06d", n.Int64())
+		_, taken := s.pairCodes[code]
+		_, taken2 := s.handoffs[code]
+		if !taken && !taken2 {
+			break
+		}
+	}
+	s.pairCodes[code] = pairCode{token: token, expires: time.Now().Add(15 * time.Minute)}
+	return code
 }
 
 func (s *Server) handleScreenDelete(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
@@ -1282,11 +1331,18 @@ func (s *Server) handleHandoffUse(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "Too many wrong codes. Wait a minute.")
 		return
 	}
+	if p, isPair := s.pairCodes[code]; isPair && time.Now().Before(p.expires) {
+		// A pairing code: continue exactly like opening the pairing link.
+		delete(s.pairCodes, code)
+		s.handoffMu.Unlock()
+		writeJSON(w, map[string]string{"pair": "/pair?t=" + url.QueryEscape(p.token)})
+		return
+	}
 	h, ok := s.handoffs[code]
 	if !ok || time.Now().After(h.expires) {
 		s.handoffFails = append(s.handoffFails, time.Now())
 		s.handoffMu.Unlock()
-		writeError(w, http.StatusNotFound, "That code isn't valid (any more). Make a new one on the tablet.")
+		writeError(w, http.StatusNotFound, "That code isn't valid (any more). Make a new one: it works once, for 15 minutes.")
 		return
 	}
 	delete(s.handoffs, code)

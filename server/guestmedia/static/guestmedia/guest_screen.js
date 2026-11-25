@@ -138,6 +138,8 @@
 
   function render() {
     if (scrolling) return; // the next poll redraws once the strip has settled
+    var active = document.activeElement;
+    if (active && active.tagName === 'SELECT' && root.contains(active)) return; // iPad closes an open dropdown when it is redrawn
     if (!state) { root.innerHTML = '<div class="banner">Loading…</div>'; return; }
     var cur = current();
     var list = items();
@@ -254,6 +256,7 @@
 
   root.addEventListener('change', function (ev) {
     var el = ev.target;
+    if (el.tagName === 'SELECT') el.blur();
     if (el.dataset.actChange === 'page') goToPage(parseInt(el.value, 10) - 1);
     if (el.dataset.actChange === 'per-page') {
       PER_PAGE = parseInt(el.value, 10) || 6;

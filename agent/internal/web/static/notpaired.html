@@ -18,11 +18,11 @@
   <p>Open the pairing QR code in the Vitrine backend (Locations &amp; tablets → Show pairing QR) or in the tray companion on the vMix PC (Pair a tablet…), and scan it with this tablet's camera.</p>
   <p class="muted">The tablet must be on the same network as the vMix PC.</p>
   <form id="handoff" class="handoff">
-    <h2>Opened from the home screen?</h2>
-    <p class="muted">On the tablet in the browser, tap <strong>Add to home screen</strong>: it shows a 6-digit code. Enter it here.</p>
+    <h2>Can't scan the QR code? Type the code</h2>
+    <p class="muted">Get a 6-digit code on the <strong>back tablet</strong> (Tablets button → <em>Pair a new tablet</em>) or on the <strong>vMix PC</strong> (tray icon → Settings → <em>Pair a tablet</em>). It works once, for 15 minutes. The code shown by <em>Add to home screen</em> works here too.</p>
     <div class="row">
-      <input id="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" aria-label="Code">
-      <button type="submit" class="btn primary">Continue</button>
+      <input id="code" inputmode="numeric" maxlength="7" autocomplete="one-time-code" placeholder="123 456" aria-label="6-digit code">
+      <button type="submit" class="btn primary">Pair</button>
     </div>
     <p id="msg" class="muted" role="alert"></p>
   </form>
@@ -34,7 +34,10 @@ document.getElementById('handoff').addEventListener('submit', function (ev) {
   fetch('/api/handoff', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code: document.getElementById('code').value.replace(/\D/g, '') }) })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-    .then(function (res) { if (res.ok) { location.href = '/screen'; } else { msg.textContent = res.d.error || 'That didn\'t work.'; } })
+    .then(function (res) {
+      if (res.ok && res.d.pair) { location.href = res.d.pair; return; }
+      if (res.ok) { location.href = '/screen'; } else { msg.textContent = res.d.error || 'That didn\'t work.'; }
+    })
     .catch(function () { msg.textContent = 'The vMix PC can\'t be reached.'; });
 });
 </script>

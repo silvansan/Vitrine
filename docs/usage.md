@@ -86,7 +86,11 @@ Each file's page has a preview, the original download, the sets it is in, and ma
 
 ## Pairing tablets
 
-Either in the backend (**Locations & tablets → Show pairing QR** on the location, choose Pulpit or Back) or in the tray companion (**Pair a tablet…**). Scan the QR with the tablet's camera while it is on the venue network. A code works once, for 15 minutes. Add the page to the home screen; on iPad use **Guided Access**, on Android **screen pinning**, so the pulpit can't leave the page.
+Either in the backend (**Locations & tablets → Show pairing QR** on the location, choose Pulpit or Back) or in the tray companion (**Pair a tablet…**). Scan the QR with the tablet's camera while it is on the venue network. A code works once, for 15 minutes.
+
+**Tablet can't scan QR codes** (old camera): on the back tablet open **Tablets → Pair a new tablet** and choose Pulpit or Back (the vMix PC's settings page, *Pair a tablet*, does the same). It shows a QR code **and a 6-digit code**. On the new tablet open the vMix PC's address shown there (e.g. `http://192.168.1.105:8090`): it says *This tablet isn't paired yet*; type the code and tap **Pair**. The code works once, for 15 minutes.
+
+Add the page to the home screen; on iPad use **Guided Access**, on Android **screen pinning**, so the pulpit can't leave the page.
 
 **Tablet link** (Locations & tablets, under each location, with a QR and *Copy link*): a permanent address, `https://<server>/t/<code>/`, that opens that location's tablet view on its vMix PC whatever the PC's IP address is at the moment. The pairing link is used once; bookmark this one instead, or add it to the home screen. A tablet that was paired before lands signed in; a new tablet still needs a pairing QR first. If the vMix PC is offline (or hasn't reported its address yet) the link shows a "not reachable" page that retries by itself every 15 seconds.
 

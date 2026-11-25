@@ -647,7 +647,18 @@
       });
       html += '</select></div>';
     }
-    html += '<p class="hint">Projector mix, default input and pairing are in the companion: <a href="/companion">open settings</a>.</p>';
+    html += '<fieldset class="box pair-new"><legend class="label">Pair a new tablet</legend>';
+    if (ui.pairNew) {
+      var pn = ui.pairNew;
+      html += '<div class="pair-result">' + (pn.qr || '') + '<div><p>Scan this QR code with the new tablet, <strong>or</strong> open <code>' + h(pn.address) + '</code> on it and type:</p>' +
+        '<p class="pair-code">' + h((pn.code || '').replace(/(\d{3})(\d{3})/, '$1 $2')) + '</p><p class="hint">Works once, for 15 minutes · pairs a ' + (pn.role === 'back' ? 'back' : 'pulpit') + ' tablet.</p></div></div>';
+      html += '<button type="button" class="btn" data-act="pair-new-close">Done</button>';
+    } else {
+      html += '<p class="hint">For a tablet that is on this network. Old tablets that can\u2019t scan QR codes get a 6-digit code to type.</p>';
+      html += '<div class="row"><button type="button" class="btn" data-act="pair-new" data-role="pulpit">Pulpit tablet</button><button type="button" class="btn" data-act="pair-new" data-role="back">Back tablet</button></div>';
+    }
+    html += '</fieldset>';
+    html += '<p class="hint">Projector mix and default input are in the companion: <a href="/companion">open settings</a>.</p>';
     html += '</div></aside>';
     return html;
   }
@@ -655,6 +666,8 @@
   function render() {
     if (!S.boot) return;
     if (ui.scrolling || drag) { ui.renderAfterScroll = true; return; } // don't redraw under a sliding finger
+    var active = document.activeElement;
+    if (active && active.tagName === 'SELECT' && app.contains(active)) { ui.renderAfterSelect = true; return; } // iPad closes an open dropdown when it is redrawn
     var typing = document.getElementById('marker-name');
     if (ui.marker && typing && document.activeElement === typing) { updateProgress(); return; }
     S.renderKey = liveKey();
@@ -879,6 +892,21 @@
       case 'fullscreen': toggleFullscreen(); break;
       case 'control': ui.reqPopup = null; post('/api/control', { set_id: parseInt(data.set, 10), on: data.on === '1' }); render(); break;
       case 'req-later': ui.reqPopup = null; render(); break;
+      case 'pair-new':
+        post('/api/pair-new', { role: data.role, name: data.role === 'back' ? 'Back tablet' : 'Pulpit tablet' }).then(function (res) {
+          if (!res || !res.code) return;
+          var qr = '';
+          if (window.qrcode) {
+            var q = window.qrcode(0, 'M');
+            q.addData(res.url);
+            q.make();
+            qr = '<div class="qr">' + q.createSvgTag({ cellSize: 4, margin: 2, scalable: false }) + '</div>';
+          }
+          ui.pairNew = { code: res.code, address: res.address, qr: qr, role: data.role };
+          render();
+        });
+        break;
+      case 'pair-new-close': ui.pairNew = null; render(); break;
       case 'install': addToHomeScreen(); break;
       case 'install-close': ui.install = false; render(); break;
       case 'tap': tap(id); break;
@@ -938,6 +966,7 @@
   });
 
   app.addEventListener('change', function (ev) {
+    if (ev.target.tagName === 'SELECT') ev.target.blur(); // let the redraw happen (see render)
     var el = ev.target;
     var kind = el.dataset.change;
     if (!kind) return;
@@ -1100,6 +1129,9 @@
       ev.preventDefault();
     }
   }, true);
+  app.addEventListener('focusout', function (ev) {
+    if (ev.target.tagName === 'SELECT' && ui.renderAfterSelect) { ui.renderAfterSelect = false; setTimeout(render, 0); }
+  });
   window.addEventListener('resize', function () {
     clearTimeout(ui.resizeTimer);
     ui.resizeTimer = setTimeout(function () { ui.fitRows = 0; ui.scrollToIndex = ui.firstIndex || 0; render(); }, 150);

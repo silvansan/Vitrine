@@ -202,6 +202,8 @@
       qr.make();
       $('qr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: false });
       $('qr-url').textContent = res.url;
+      $('qr-code').textContent = (res.code || '').replace(/(\d{3})(\d{3})/, '$1 $2');
+      $('qr-address').textContent = res.address || '';
       $('qr-source').textContent = res.source === 'agent'
         ? 'The server was not reachable, so this code was made by the agent itself.'
         : 'Signed by the Vitrine server.';

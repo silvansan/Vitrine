@@ -63,7 +63,7 @@ The companion is a page at `http://127.0.0.1:8090/companion`; the back tablet ca
 - **Audio files: keep the default input on the projector** (on by default): only the sound plays, through a third List input (`GM_AUDIO`, created if missing; make sure its audio goes to your Master bus in vMix). Untick it to show the audio's cover/title card on the projector like a video.
 - **Go back to default when a video ends**, **jump mode** (crossfade between GM_A/GM_B, or jump in place), input names.
 - **Tablet address**: the address of the tablet view on this PC (`http://<LAN IP>:8090/screen`) with a QR, for tablets that are already paired. The permanent link in the backend (Locations & tablets → *Tablet link*) points here too and keeps working when the IP changes.
-- **Tablets**: the paired list, unpair, and **Show pairing QR** (signed by the server when online, by the agent itself when the server is unreachable).
+- **Tablets**: the paired list, unpair, and **Show pairing QR** (signed by the server when online, by the agent itself when the server is unreachable). Each QR also comes with a 6-digit code, for tablets that can't scan: type it on the tablet at the address shown. The back tablet makes the same codes under **Tablets → Pair a new tablet** (`POST /api/pair-new`, back role).
 - **Integrations (Bitfocus Companion)**: API keys for controllers (only on the vMix PC itself). See below.
 
 The tray icon turns red while guest media is live and grey when vMix or the agent isn't reachable. Only one tray icon runs per user; starting `vitrine-tray.exe` again does nothing. **Close tray icon** closes just the icon: the agent keeps running as a service.
