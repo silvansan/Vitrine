@@ -696,7 +696,8 @@ def organization(request):
                     org.notify_telegram_chat = chat
                     org.notify_telegram_title = ""
             org.notify_emails = request.POST.get("notify_emails", "").strip()
-            for field in ("notify_uploads", "notify_offline", "notify_sync", "notify_backup"):
+            for field in ("notify_uploads", "notify_offline", "notify_sync", "notify_backup",
+                          "notify_control", "notify_failed", "notify_first_upload", "notify_summary"):
                 setattr(org, field, request.POST.get(field) == "on")
             org.save()
             if request.POST.get("test") == "1":
@@ -897,6 +898,7 @@ def site_settings(request):
             s.email_from = P.get("email_from", "").strip()
             s.offline_alert_minutes = int(P["offline_alert_minutes"]) if P.get("offline_alert_minutes", "").isdigit() else None
             s.sync_check_time = P.get("sync_check_time", "").strip()[:5]
+            s.summary_time = P.get("summary_time", "").strip()[:5]
             s.save()
             messages.success(request, "Saved.")
             if s.telegram_bot_token and P.get("telegram_bot_token", "").strip() not in ("", SECRET_MASK):
@@ -995,5 +997,6 @@ def site_settings(request):
             "email_from_env": bool(settings.EMAIL_HOST) and not s.email_host,
             "offline_minutes": config.offline_alert_minutes(),
             "sync_time": config.sync_check_time(),
+            "summary_time": config.summary_time(),
         },
     )

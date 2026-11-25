@@ -1221,3 +1221,141 @@ class StorageTests(TestCase):
                 diskusage.check_disk_space()  # not twice within 12 hours
             self.assertEqual(notify.call_count, 1)
             self.assertIn("97 % full", notify.call_args[0][2])
+
+
+class MoreAlertsTests(TestCase):
+    """Approve / Reject buttons in Telegram, and the control / failed / first-upload / morning alerts."""
+
+    def setUp(self):
+        from unittest import mock
+
+        from django.core.cache import cache
+
+        from .models import SiteSettings
+
+        cache.clear()
+        site = SiteSettings.load()
+        site.telegram_bot_token = "123:abc"
+        site.save()
+        self.org = Organization.objects.create(name="Main", notify_telegram_chat="-100")
+        self.agent, _ = Agent.create_with_token("Zurich PC")
+        self.location = Location.objects.create(organization=self.org, name="Zurich hall", agent=self.agent)
+        today = timezone.localdate()
+        self.event = Service.objects.create(name="Sunday", starts_on=today, ends_on=today, location=self.location)
+        self.calls = []
+        self.updates = []
+
+        def fake_api(method, token=None, files=None, **params):
+            self.calls.append((method, params, files))
+            if method == "getUpdates":
+                if "offset" in params:
+                    self.updates = [u for u in self.updates if u["update_id"] >= params["offset"]]
+                    return []
+                return list(self.updates)
+            return {"message_id": 1, "chat": {"id": params.get("chat_id")}}
+
+        patcher = mock.patch("guestmedia.telegram.api", side_effect=fake_api)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def texts(self):
+        return [p.get("text") or p.get("caption") or "" for m, p, _f in self.calls if m in ("sendMessage", "sendPhoto")]
+
+    def test_upload_alert_has_buttons_and_approving_works(self):
+        from .tasks import check_pending_uploads
+        from .telegram import process_updates
+
+        asset = MediaAsset.objects.create(owner_name="Maria", organization=self.org, original_name="a.jpg", kind="photo",
+                                          status="ready", approval="pending")
+        check_pending_uploads()
+        sent = [(m, p) for m, p, _f in self.calls if m == "sendMessage"]
+        self.assertEqual(len(sent), 1)  # one message per upload, no extra plain-text summary
+        buttons = sent[0][1]["reply_markup"]["inline_keyboard"][0]
+        self.assertEqual([b.get("callback_data") for b in buttons[:2]], [f"a:{asset.pk}", f"r:{asset.pk}"])
+        self.assertIn("Maria: a.jpg", sent[0][1]["text"])
+
+        # A press from another chat is refused; from the team chat it approves.
+        message = {"message_id": 9, "chat": {"id": -100}, "text": sent[0][1]["text"]}
+        self.updates = [
+            {"update_id": 1, "callback_query": {"id": "x", "data": f"a:{asset.pk}", "from": {"first_name": "Eve"},
+                                                "message": {**message, "chat": {"id": -555}}}},
+        ]
+        process_updates()
+        asset.refresh_from_db()
+        self.assertEqual(asset.approval, "pending")
+        self.updates = [
+            {"update_id": 2, "callback_query": {"id": "y", "data": f"a:{asset.pk}", "from": {"first_name": "Ana"},
+                                                "message": message}},
+        ]
+        process_updates()
+        asset.refresh_from_db()
+        self.assertEqual(asset.approval, "approved")
+        edits = [p for m, p, _f in self.calls if m == "editMessageText"]
+        self.assertIn("Approved by Ana", edits[-1]["text"])
+        self.assertEqual(edits[-1]["reply_markup"], {"inline_keyboard": []})
+
+        self.updates = [
+            {"update_id": 3, "callback_query": {"id": "z", "data": f"r:{asset.pk}", "from": {"first_name": "Ana"},
+                                                "message": message}},
+        ]
+        process_updates()
+        asset.refresh_from_db()
+        self.assertEqual(asset.approval, "rejected")
+
+    def test_control_request_alert_once(self):
+        from . import alerts
+
+        person = Person.objects.create(organization=self.org, name="Pastor Dan")
+        alerts.control_requested(person, self.event)
+        alerts.control_requested(person, self.event)
+        self.assertEqual(len(self.texts()), 1)
+        self.assertIn("Pastor Dan asks to control Zurich hall", self.texts()[0])
+        self.org.notify_control = False
+        self.org.save()
+        from django.core.cache import cache
+
+        cache.clear()
+        alerts.control_requested(person, self.event)
+        self.assertEqual(len(self.texts()), 1)
+
+    def test_conversion_failed_and_first_upload(self):
+        from . import alerts
+
+        person = Person.objects.create(organization=self.org, name="Maria")
+        asset = MediaAsset.objects.create(owner_name="Maria", organization=self.org, uploaded_by=person, service=self.event,
+                                          original_name="clip.mov", kind="video", status="failed",
+                                          error="Traceback…\nffmpeg: Invalid data found")
+        alerts.conversion_failed(asset)
+        self.assertIn("Couldn't convert clip.mov", self.texts()[-1])
+        self.assertIn("Invalid data found", self.texts()[-1])
+        alerts.first_upload(asset)
+        self.assertIn("First upload from Maria", self.texts()[-1])
+        second = MediaAsset.objects.create(owner_name="Maria", organization=self.org, uploaded_by=person, original_name="b.jpg")
+        count = len(self.texts())
+        from django.core.cache import cache
+
+        cache.clear()
+        alerts.first_upload(second)
+        self.assertEqual(len(self.texts()), count)
+
+    def test_morning_summary(self):
+        from .models import SiteSettings
+        from .tasks import check_summary_due
+
+        maria = make_guest(self.event, "Maria")
+        make_guest(self.event, "Tom")
+        asset = MediaAsset.objects.create(owner_name="Maria", organization=self.org, original_name="a.jpg", kind="photo",
+                                          status="ready", approval="pending")
+        maria.get_set().items.create(asset=asset, position=0)
+        site = SiteSettings.load()
+        site.summary_time = "00:00"
+        site.save()
+        check_summary_due()
+        check_summary_due()
+        texts = [t for t in self.texts() if t.startswith("Today")]
+        self.assertEqual(len(texts), 1)
+        self.assertIn("Sunday · Zurich hall", texts[0])
+        self.assertIn("Maria (1)", texts[0])
+        self.assertIn("No files yet: Tom", texts[0])
+        self.assertIn("1 waiting for approval", texts[0])
+        self.assertIn("offline", texts[0])  # the vMix PC was never seen

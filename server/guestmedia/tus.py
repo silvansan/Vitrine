@@ -283,4 +283,8 @@ def finish_upload(upload):
     upload.asset = asset
     upload.save(update_fields=["completed", "asset"])
     process_asset.delay(asset.pk)
+    if guest is not None:
+        from . import alerts
+
+        alerts.first_upload(asset)
     return asset

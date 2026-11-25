@@ -75,9 +75,13 @@
     <p><label>Email addresses<br><textarea name="notify_emails" rows="3" cols="50" placeholder="tech@example.org">{{ org.notify_emails }}</textarea></label></p>
     <h3>What to send</h3>
     <div class="checks">
-      <label><input type="checkbox" name="notify_uploads"{% if org.notify_uploads %} checked{% endif %}> Uploads waiting for approval</label>
+      <label><input type="checkbox" name="notify_uploads"{% if org.notify_uploads %} checked{% endif %}> Uploads waiting for approval (in Telegram with Approve / Reject buttons)</label>
       <label><input type="checkbox" name="notify_offline"{% if org.notify_offline %} checked{% endif %}> vMix PC offline around an event</label>
       <label><input type="checkbox" name="notify_sync"{% if org.notify_sync %} checked{% endif %}> The day before: are all files on the vMix PC?</label>
+      <label><input type="checkbox" name="notify_summary"{% if org.notify_summary %} checked{% endif %}> Morning summary on event days (people, files, what's missing)</label>
+      <label><input type="checkbox" name="notify_control"{% if org.notify_control %} checked{% endif %}> A guest asks to control the screen</label>
+      <label><input type="checkbox" name="notify_failed"{% if org.notify_failed %} checked{% endif %}> A file couldn't be converted</label>
+      <label><input type="checkbox" name="notify_first_upload"{% if org.notify_first_upload %} checked{% endif %}> Someone uploads for the first time</label>
       <label><input type="checkbox" name="notify_backup"{% if org.notify_backup %} checked{% endif %}> A backup failed, or the server's disk is nearly full</label>
     </div>
     <div class="actions">

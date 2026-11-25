@@ -113,10 +113,20 @@ For local development, build the images yourself: `docker build -t ghcr.io/silva
 
 Vitrine can tell your team when something needs them, by **Telegram** and/or **email**:
 
-- uploads waiting for approval (one message for several files, about every 2 minutes),
-- a vMix PC offline for `VITRINE_OFFLINE_ALERT_MINUTES` (10) while its location has an event today or tomorrow, and when it is back,
-- at `VITRINE_SYNC_CHECK_TIME` (18:00) the day before an event: are all its files on that location's vMix PC, are some still waiting for approval?
-- a failed backup.
+| Alert | When |
+|---|---|
+| **Uploads waiting for approval** | About every 2 minutes. In Telegram, each upload comes as its own message (thumbnail, who, file name, length, event) with **✅ Approve**, **❌ Reject** and **Open** buttons; after 10 files the rest is one link. By email: one summary with a link. |
+| **Someone asks to control the screen** | A guest presses *Ask for access* on their own tablet view (at most once per person and event every 10 minutes). Accept or refuse it on the back tablet. |
+| **A file couldn't be converted** | Right after the conversion fails: file, who sent it, the error, and a link. Try again with Library → select it → *Process again*. |
+| **First upload from someone** | The first file a person ever uploads (handy to know a new link works). |
+| **Morning summary** | On days with an event, at the *morning summary* time (08:00): per event the vMix PC status, who has files in their set and how many, who has none yet, what waits for approval and what failed. |
+| **vMix PC offline** | Offline for `VITRINE_OFFLINE_ALERT_MINUTES` (10) while its location has an event today or tomorrow, and when it is back. |
+| **Ready for tomorrow?** | At `VITRINE_SYNC_CHECK_TIME` (18:00) the day before an event: are all its files on that location's vMix PC, are some still waiting for approval? |
+| **Backup failed / disk nearly full** | When it happens (disk: at most every 12 hours). |
+
+Each organization chooses which of these it wants on **Organization → Alerts to the team**.
+
+**Approving from Telegram**: anyone in the linked chat can press Approve or Reject; the message then shows *✅ Approved by Ana* (or *❌ Rejected by …*) and its buttons go away, so the others see it was handled. Presses from any other chat are refused. The scheduler reads the presses every few seconds (with `getUpdates`, so no webhook and nothing reachable from outside is needed); without the scheduler running, the buttons don't react.
 
 Everything is set up in the web interface; nothing has to go into the stack.
 
@@ -127,7 +137,7 @@ Everything is set up in the web interface; nothing has to go into the stack.
   - **Brevo**: server `smtp-relay.brevo.com`, port 587, STARTTLS. *User* is the SMTP login from Brevo → Settings → SMTP & API (an address like `123abc@smtp-brevo.com`, or your account email); *Password* is an **SMTP key** from the same page (an API key doesn't work); *From* must be a sender verified in Brevo.
   - Infomaniak, Gmail / Google Workspace (needs an app password) and Microsoft 365 have presets too; anything else: choose *Other* and enter your provider's SMTP details.
   - **Save and send a test email** sends to the address you type (your account's email by default).
-- **When**: minutes before a vMix PC counts as offline, and the time of the "ready for tomorrow?" check.
+- **When**: minutes before a vMix PC counts as offline, the time of the "ready for tomorrow?" check, and the time of the morning summary on event days.
 
 The stack variables `VITRINE_TELEGRAM_BOT_TOKEN`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` still work and are only used when the Settings fields are empty; leaving them empty in the stack is fine.
 

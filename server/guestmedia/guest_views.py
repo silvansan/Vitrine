@@ -461,6 +461,10 @@ def api_live_action(request, token, action):
     if action == "take" and payload["asset_id"] not in guest.get_set().asset_ids():
         return JsonResponse({"ok": False, "error": "That file isn't in your set."}, status=403)
     result = relay.send_command(agent, payload)
+    if action == "request_access" and result.get("ok"):
+        from . import alerts
+
+        alerts.control_requested(person, event)
     return JsonResponse({"ok": bool(result.get("ok")), "error": result.get("error", ""), "live": _live_for(guest)},
                         status=200 if result.get("ok") else 409)
 

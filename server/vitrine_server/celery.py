@@ -10,6 +10,8 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 app.autodiscover_tasks(["guestmedia"], related_name="backup")
+app.autodiscover_tasks(["guestmedia"], related_name="telegram")
+app.autodiscover_tasks(["guestmedia"], related_name="diskusage")
 
 
 @app.on_after_finalize.connect
@@ -22,5 +24,8 @@ def setup_schedule(sender, **kwargs):
         "vmix-pcs-offline": {"task": "guestmedia.tasks.check_agents", "schedule": 120.0},
         "files-ready-for-tomorrow": {"task": "guestmedia.tasks.check_sync_due", "schedule": 300.0},
         "backup": {"task": "guestmedia.backup.check_backup_due", "schedule": 300.0},
+        "morning-summary": {"task": "guestmedia.tasks.check_summary_due", "schedule": 300.0},
+        # Approve / Reject buttons in Telegram: read the presses (no public webhook needed).
+        "telegram-buttons": {"task": "guestmedia.telegram.poll_updates", "schedule": 3.0},
         "disk-space": {"task": "guestmedia.diskusage.check_disk_space", "schedule": 1800.0},
     }

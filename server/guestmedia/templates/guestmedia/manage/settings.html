@@ -47,6 +47,7 @@
   <div class="form-grid">
     <label>vMix PC counts as offline after (minutes) <input name="offline_alert_minutes" inputmode="numeric" value="{{ s.offline_alert_minutes|default_if_none:'' }}" placeholder="{{ offline_minutes }}"></label>
     <label>"Ready for tomorrow?" check at <input type="time" name="sync_check_time" value="{{ s.sync_check_time|default:sync_time }}"></label>
+    <label>Morning summary on event days at <input type="time" name="summary_time" value="{{ s.summary_time|default:summary_time }}"></label>
   </div>
   <div class="actions">
     <button class="btn primary" type="submit">Save</button>

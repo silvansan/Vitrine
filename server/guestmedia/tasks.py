@@ -1,3 +1,4 @@
+from collections import defaultdict
 import logging
 import shutil
 from datetime import timedelta
@@ -35,6 +36,9 @@ def process_asset(self, asset_id):
         asset.status = MediaAsset.STATUS_FAILED
         asset.error = str(exc)[-2000:]
         asset.save(update_fields=["status", "error"])
+        from . import alerts
+
+        alerts.conversion_failed(asset)
         return
 
     try:
@@ -115,12 +119,40 @@ def check_pending_uploads():
             for a in assets:
                 people[a.owner_name] += 1
             lines = [f"- {name}: {count} file{'s' if count != 1 else ''}" for name, count in people.items()]
+            subject = f"{len(assets)} upload{'s' if len(assets) != 1 else ''} waiting for approval"
+            link = alerts.manage_url('/manage/library/?approval=pending')
+            buttons_sent = _send_upload_buttons(org, assets)
             alerts.notify(
-                org,
-                f"{len(assets)} upload{'s' if len(assets) != 1 else ''} waiting for approval",
-                "\n".join(lines) + f"\n\nApprove them: {alerts.manage_url('/manage/library/?approval=pending')}",
+                org, subject, "\n".join(lines) + f"\n\nApprove them: {link}", telegram=not buttons_sent,
             )
         MediaAsset.objects.filter(pk__in=[a.pk for a in assets]).update(pending_notified=True)
+
+
+TELEGRAM_BUTTONS_MAX = 10
+
+
+def _send_upload_buttons(org, assets):
+    """In Telegram, one message per upload with Approve / Reject buttons (the first 10; then a link
+    for the rest). Returns False when Telegram isn't set up or failed, so the caller sends plain text."""
+    from . import alerts, config, telegram
+
+    if not (config.telegram_token() and org.notify_telegram_chat):
+        return False
+    try:
+        for asset in assets[:TELEGRAM_BUTTONS_MAX]:
+            telegram.send_upload(org.notify_telegram_chat, asset)
+        rest = len(assets) - TELEGRAM_BUTTONS_MAX
+        if rest > 0:
+            telegram.send(
+                org.notify_telegram_chat,
+                f"…and {rest} more waiting: {alerts.manage_url('/manage/library/?approval=pending')}",
+            )
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning("telegram upload buttons for %s failed: %s", org, exc)
+        return False
+    return True
 
 
 def _event_soon(location):
@@ -226,3 +258,72 @@ def check_sync_due():
         return
     SiteSettings.objects.filter(pk=s.pk).update(last_sync_check_day=now.date())
     check_sync()
+
+
+@shared_task
+def check_summary_due():
+    """Every few minutes: send the morning summary once a day at its time."""
+    from . import config
+    from .models import SiteSettings
+
+    now = timezone.localtime()
+    hour, minute = config.parse_time(config.summary_time(), (8, 0))
+    if (now.hour, now.minute) < (hour, minute):
+        return
+    s = SiteSettings.load()
+    if s.last_summary_day == now.date():
+        return
+    SiteSettings.objects.filter(pk=s.pk).update(last_summary_day=now.date())
+    morning_summary()
+
+
+def summary_text(event):
+    """The summary of one event today: vMix PC, who has a set, what waits, what failed."""
+    from .models import MediaAsset, SetItem
+
+    lines = [f"📅 {event.name} · {event.location.name} ({event.when})"]
+    _ok, sync = sync_report(event.location, event)
+    lines.append(sync.split(": ", 1)[-1].split("\n")[0])
+    counts = defaultdict(int)
+    for name in SetItem.objects.filter(
+        media_set__service=event, asset__deleted_at__isnull=True
+    ).values_list("media_set__guest__person__name", flat=True):
+        counts[name or "Team"] += 1
+    guests = list(event.guests.select_related("person"))
+    with_files = [f"{name} ({n})" for name, n in sorted(counts.items())]
+    without = [g.person.name for g in guests if g.person.name not in counts]
+    lines.append("Sets: " + (", ".join(with_files) if with_files else "nobody has files yet"))
+    if without:
+        lines.append("No files yet: " + ", ".join(without))
+    assets = MediaAsset.objects.filter(set_items__media_set__service=event).distinct()
+    pending = assets.filter(approval=MediaAsset.APPROVAL_PENDING).count()
+    failed = assets.filter(status=MediaAsset.STATUS_FAILED).count()
+    if pending:
+        lines.append(f"⏳ {pending} waiting for approval")
+    if failed:
+        lines.append(f"⚠️ {failed} couldn't be converted")
+    return "\n".join(lines)
+
+
+@shared_task
+def morning_summary():
+    """On event days: one message per organization about today's events."""
+    from . import alerts
+    from .models import Service
+
+    today = timezone.localdate()
+    events = (
+        Service.objects.filter(is_active=True, location__isnull=False)
+        .overlapping(today, today)
+        .select_related("location__agent", "location__organization")
+    )
+    by_org = defaultdict(list)
+    for event in events:
+        by_org[event.location.organization].append(event)
+    for org, org_events in by_org.items():
+        if not (org.notify_summary and alerts.can_send(org)):
+            continue
+        org_events.sort(key=lambda e: e.sort_key(today))
+        text = "\n\n".join(summary_text(e) for e in org_events)
+        title = f"Today: {len(org_events)} event{'s' if len(org_events) != 1 else ''}"
+        alerts.notify(org, title, text + f"\n\n{alerts.manage_url('/manage/')}")

@@ -65,6 +65,10 @@ class Organization(models.Model):
     notify_offline = models.BooleanField(default=True, help_text="A vMix PC goes offline before or during an event.")
     notify_sync = models.BooleanField(default=True, help_text="The day before an event: are all its files on the vMix PC?")
     notify_backup = models.BooleanField(default=True, help_text="A backup failed, or the server's disk is nearly full.")
+    notify_control = models.BooleanField(default=True, help_text="A guest asks to control the screen from their own tablet view.")
+    notify_failed = models.BooleanField(default=True, help_text="A file couldn't be converted for vMix.")
+    notify_first_upload = models.BooleanField(default=True, help_text="Someone uploads for the first time.")
+    notify_summary = models.BooleanField(default=True, help_text="Morning summary on event days.")
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -734,6 +738,8 @@ class SiteSettings(models.Model):
     email_from = models.CharField(max_length=200, blank=True)
     offline_alert_minutes = models.PositiveIntegerField(null=True, blank=True)
     sync_check_time = models.CharField(max_length=5, blank=True, help_text="HH:MM")
+    summary_time = models.CharField(max_length=5, blank=True, help_text="HH:MM, morning summary on event days")
+    last_summary_day = models.DateField(null=True, blank=True)
 
     backup_kind = models.CharField(max_length=12, blank=True, choices=BACKUP_KINDS)
     backup_path = models.CharField(

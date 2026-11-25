@@ -50,6 +50,10 @@ def offline_alert_minutes():
     return site().offline_alert_minutes or django_settings.VITRINE_OFFLINE_ALERT_MINUTES
 
 
+def summary_time():
+    return site().summary_time or "08:00"
+
+
 def sync_check_time():
     return site().sync_check_time or django_settings.VITRINE_SYNC_CHECK_TIME
 

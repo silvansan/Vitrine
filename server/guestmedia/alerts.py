@@ -33,10 +33,11 @@ def send_telegram(chat_id, text):
     return telegram.send(chat_id, text)
 
 
-def notify(org, subject, text):
-    """Send to the organization's Telegram chat and email addresses. Returns a list of errors."""
+def notify(org, subject, text, telegram=True):
+    """Send to the organization's Telegram chat and email addresses. Returns a list of errors.
+    telegram=False: email only (the caller already sent its own Telegram messages)."""
     errors = []
-    if config.telegram_token() and org.notify_telegram_chat:
+    if telegram and config.telegram_token() and org.notify_telegram_chat:
         try:
             used = send_telegram(org.notify_telegram_chat, f"{subject}\n\n{text}")
             if used and used != str(org.notify_telegram_chat):
@@ -71,3 +72,69 @@ def send_email(recipients, subject, text):
 def manage_url(path):
     base = settings.VITRINE_PUBLIC_URL
     return f"{base}{path}" if base else path
+
+
+# ---------- one-off alerts (each can be switched off per organization) ----------
+
+def _safe_notify(org, subject, text):
+    """Alerts must never break the action that caused them."""
+    try:
+        if org is not None and can_send(org):
+            notify(org, subject, text)
+    except Exception:
+        log.exception("alert %r for %s failed", subject, org)
+
+
+def control_requested(person, event):
+    """A guest asked for control of the screen from their own tablet view (at most every 10 minutes)."""
+    from django.core.cache import cache
+
+    org = event.location.organization if event.location_id else person.organization
+    if not (org and org.notify_control):
+        return
+    if not cache.add(f"vitrine:alert:control:{person.pk}:{event.pk}", 1, 600):
+        return
+    where = event.location.name if event.location_id else "the screen"
+    _safe_notify(
+        org,
+        f"{person.name} asks to control {where}",
+        f"{person.name} wants to project from their own tablet ({event.name}, {event.when}).\n"
+        "Accept or refuse it on the back tablet.",
+    )
+
+
+def conversion_failed(asset):
+    org = asset.organization
+    if not (org and org.notify_failed):
+        return
+    last = (asset.error or "").strip().splitlines()[-1:] or ["unknown error"]
+    _safe_notify(
+        org,
+        f"Couldn't convert {asset.original_name}",
+        f"The file from {asset.owner_name} couldn't be made ready for vMix.\n"
+        f"Error: {last[0][:300]}\n\n"
+        f"Open it: {manage_url(f'/manage/asset/{asset.pk}/')}\n"
+        "To try again: Library → select it → Process again. Or ask them for another copy.",
+    )
+
+
+def first_upload(asset):
+    """The first file someone ever uploaded (useful to check that a new link works)."""
+    from django.core.cache import cache
+
+    from .models import MediaAsset
+
+    person, org = asset.uploaded_by, asset.organization
+    if person is None or not (org and org.notify_first_upload):
+        return
+    if MediaAsset.all_objects.filter(uploaded_by=person).exclude(pk=asset.pk).exists():
+        return
+    if not cache.add(f"vitrine:alert:first:{person.pk}", 1, 3600):  # several files at once
+        return
+    event = f" for {asset.service.name}" if asset.service_id else ""
+    _safe_notify(
+        org,
+        f"First upload from {person.name}",
+        f"{person.name} just uploaded for the first time{event}: {asset.original_name}.\n"
+        f"Their files: {manage_url(f'/manage/people/{person.pk}/')}",
+    )
