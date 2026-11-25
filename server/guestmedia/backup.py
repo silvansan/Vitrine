@@ -147,9 +147,9 @@ def run_backup(reason="schedule"):
 
             media = settings.MEDIA_ROOT
             incoming = settings.UPLOAD_TMP_ROOT
-            excludes = []
+            excludes = ["--exclude", "/_exports/**"]  # server-move archives (Settings → Move to another server)
             if incoming.is_relative_to(media):
-                excludes = ["--exclude", f"/{incoming.relative_to(media).as_posix()}/**"]
+                excludes += ["--exclude", f"/{incoming.relative_to(media).as_posix()}/**"]
             rclone("sync", str(media), join(target, "media"), "--backup-dir", join(target, "media-removed", today),
                    "--fast-list", "--transfers", "4", *excludes)
             rclone("delete", join(target, "media-removed"), "--min-age", f"{REMOVED_KEEP_DAYS}d", "--rmdirs", ok_codes=(0, 3))

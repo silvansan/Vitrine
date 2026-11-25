@@ -835,6 +835,12 @@ EMAIL_PRESETS = {
 }
 
 
+def transfer_context(request):
+    from . import transfer_views
+
+    return transfer_views.context(request)
+
+
 def _bot_status():
     from . import telegram
 
@@ -970,6 +976,7 @@ def site_settings(request):
             "test": request.session.pop("vitrine_backup_test", None),
             "telegram_from_env": bool(settings.VITRINE_TELEGRAM_BOT_TOKEN) and not s.telegram_bot_token,
             **_bot_status(),
+            **transfer_context(request),
             "email_presets": EMAIL_PRESETS,
             "email_from_env": bool(settings.EMAIL_HOST) and not s.email_host,
             "offline_minutes": config.offline_alert_minutes(),

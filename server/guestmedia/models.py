@@ -590,6 +590,8 @@ class Upload(models.Model):
     organization = models.ForeignKey(Organization, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
     person = models.ForeignKey(Person, null=True, blank=True, on_delete=models.CASCADE, related_name="+")
     service = models.ForeignKey(Service, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    # "" = a media file; "import" = a full backup to restore (Settings → Move to another server).
+    purpose = models.CharField(max_length=20, blank=True)
     filename = models.CharField(max_length=255)
     mime = models.CharField(max_length=120, blank=True)
     length = models.BigIntegerField()

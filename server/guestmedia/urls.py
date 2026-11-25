@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import account_views, agent_api, guest_views, manage_views, tus
+from . import account_views, agent_api, guest_views, manage_views, transfer_views, tus
 
 urlpatterns = [
     # Guest link
@@ -41,6 +41,11 @@ urlpatterns = [
     path("manage/backups/", manage_views.backups, name="manage-backups"),
     path("manage/settings/", manage_views.site_settings, name="manage-settings"),
     path("manage/account/", account_views.account, name="manage-account"),
+    path("manage/move/", transfer_views.move, name="manage-move"),
+    path("manage/move/status", transfer_views.move_status, name="manage-move-status"),
+    path("manage/move/download/<str:token>/<str:filename>", transfer_views.move_download, name="manage-move-download"),
+    path("manage/move/upload/", tus.import_collection, name="manage-move-upload"),
+    path("manage/move/upload/<uuid:upload_id>", tus.import_resource, name="manage-move-upload-resource"),
     path("manage/team/", account_views.team, name="manage-team"),
     path("manage/team/<int:pk>/", account_views.team_member, name="manage-team-member"),
     path("manage/switch-org", manage_views.switch_org, name="manage-switch-org"),

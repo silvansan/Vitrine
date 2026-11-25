@@ -177,6 +177,19 @@ What is copied:
 
 **Settings → Backup history** shows the last runs with their logs. The Events page warns superusers when backups are off or the last success is older than 36 hours, and the organizations that want it get an alert when one fails.
 
+### Moving to another server
+
+**Settings → Move to another server** (superusers) packs everything into one archive and brings it in on the new server, without any commands:
+
+1. **Old server**: update it to the latest version (Pull and redeploy), then **Prepare full backup**. A progress bar shows the packing; it needs as much free disk space as all files together, and uploads keep working meanwhile. The archive (`vitrine-full-YYYYMMDD-HHMM.tar`) holds the database (people, events, sets, settings, staff accounts), every file and the tablets' pairing key.
+2. **New server**: deploy the stack (same compose file, its own `POSTGRES_PASSWORD`), sign in with the first superuser from its stack variables, open **Settings → Move to another server**.
+3. Bring the archive in, either way:
+   - **From the link** (best for big libraries: server to server, nothing passes through your computer): on the old server press **Copy link for the new server**, paste it on the new one, type **REPLACE**, **Import from the link**. The link works for 48 hours without signing in, so only paste it there.
+   - **Upload the file**: **Download** it on the old server, then on the new one type REPLACE and choose the `.tar`; the upload resumes if the connection drops.
+4. Files arrive first, then the database is replaced in one go (if anything fails, the database stays as it was). You are signed out at that moment: sign in with an account **from the old server**.
+5. **Restart the stack** (Portainer → Stop, Start) so every part uses the imported pairing key; tablets then stay paired.
+6. If the address changed, update the vMix PCs (tray → Settings → server address) and the DNS / Nginx Proxy Manager host. Turn off backups on the old server (or switch it off), since the new one now backs up to the same target with the same settings. Back on the old server, **Delete archive** to free the space.
+
 ### Restore from a backup
 
 1. Deploy the stack fresh (or stop `web`, `worker` and `scheduler`).

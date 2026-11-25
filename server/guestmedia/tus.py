@@ -73,8 +73,12 @@ def collection(request, token):
     return _create(request, guest=guest)
 
 
-def _create(request, **owner):
-    max_size = settings.VITRINE_MAX_UPLOAD_MB * 1024 * 1024
+def _create(request, max_size=0, **owner):
+    # max_size: 0 = the normal upload limit; None = no limit (full backups to restore).
+    if max_size is None:
+        max_size = 4 * 1024 ** 4
+    elif not max_size:
+        max_size = settings.VITRINE_MAX_UPLOAD_MB * 1024 * 1024
     if request.method == "OPTIONS":
         return tus_response(
             204,
@@ -206,8 +210,36 @@ def _add_to_set(media_set, asset):
     )
 
 
+def import_collection(request):
+    """Upload of a full backup to restore (superusers, Settings → Move to another server)."""
+    user = _staff_user(request)
+    if user is None or not user.is_superuser:
+        return tus_response(403)
+    if request.method == "OPTIONS":
+        return _create(request)
+    return _create(request, staff=user, purpose="import", max_size=None)
+
+
+def import_resource(request, upload_id):
+    user = _staff_user(request)
+    if user is None or not user.is_superuser:
+        return tus_response(403)
+    upload = Upload.objects.filter(pk=upload_id, staff=user, purpose="import").first()
+    if upload is None:
+        return tus_response(404)
+    return _transfer(request, upload)
+
+
 def finish_upload(upload):
     """Move the finished file into the library and start processing."""
+    if upload.purpose == "import":
+        from . import transfer
+
+        target = transfer.imports_root() / f"upload-{upload.id.hex}.tar"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(upload.temp_path, target)
+        transfer.start_import(path=target, by=upload.staff.get_username() if upload.staff else "")
+        return
     guest = upload.guest
     relative = f"originals/{upload.id.hex}/{upload.filename}"
     target = Path(settings.MEDIA_ROOT) / relative

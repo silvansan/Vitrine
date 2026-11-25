@@ -66,6 +66,8 @@ Everything can be changed or removed from `/manage/`; `/admin/` is only needed f
 
 ## Settings (superusers)
 
+**Move to another server**: one archive with the database, all files and the pairing key, to download or to import on a new Vitrine from a link. See [Moving to another server](server.md#moving-to-another-server).
+
 **Settings** in `/manage/` holds what the whole server shares: how alerts are sent (Telegram bot, email server), when the "ready for tomorrow?" check runs, and where and when backups go (folder/NAS, S3, Azure, Google Drive, OpenDrive, FTP, SFTP, SMB or another rclone remote), with a connection test, **Back up now** and the backup history. Email providers like Brevo have a preset that fills in the server details. Who receives alerts is chosen per organization on **Organization**: **Connect Telegram** links your team group (or your own chat) by tapping a link, no chat id needed; see [Alerts to the team](server.md#alerts-to-the-team).
 
 On a phone, `/manage/` shows the sections as a row you swipe sideways, forms one field per line, and wide tables scroll sideways.

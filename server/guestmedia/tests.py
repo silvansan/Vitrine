@@ -1078,3 +1078,98 @@ class DeletePersonKeepsFilesTests(TestCase):
         self.assertFalse(banner.private)
         self.assertEqual(banner.owner_name, "Maria")
         self.assertIn(banner, MediaAsset.library_for(org))
+
+
+class MoveServerTests(TransactionTestCase):
+    """Settings → Move to another server: one archive out, the same archive in."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self.media = Path(tempfile.mkdtemp())
+        (self.media / "library" / "1").mkdir(parents=True)
+        (self.media / "library" / "1" / "a.jpg").write_bytes(b"jpg-data")
+        (self.media / "incoming").mkdir()
+        (self.media / "incoming" / "half-upload").write_bytes(b"x")
+        self.keys = Path(tempfile.mkdtemp())
+        (self.keys / "pairing_ed25519.pem").write_bytes(b"old-key")
+        self.override = override_settings(MEDIA_ROOT=self.media, UPLOAD_TMP_ROOT=self.media / "incoming",
+                                          VITRINE_KEY_PATH=self.keys / "pairing_ed25519.pem",
+                                          VITRINE_BACKUP_DIR=Path(tempfile.mkdtemp()), VITRINE_X_ACCEL=False)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        User.objects.create_superuser("admin", "a@example.org", "pw-long-enough")
+        self.client.login(username="admin", password="pw-long-enough")
+
+    def test_export_download_and_import(self):
+        import tarfile
+        from unittest import mock
+
+        from . import transfer
+
+        self.client.post("/manage/move/", {"action": "export"})
+        export = transfer.current_export()
+        self.assertEqual(export["state"], "done", export)
+        path = transfer.export_file(export["token"])
+        with tarfile.open(path) as tar:
+            names = tar.getnames()
+        self.assertEqual(names[0], "manifest.json")
+        self.assertIn("db.sqlite3", names)
+        self.assertIn("keys/pairing_ed25519.pem", names)
+        self.assertIn("media/library/1/a.jpg", names)
+        self.assertFalse([n for n in names if "incoming" in n or "_exports" in n])
+        page = self.client.get("/manage/settings/")
+        self.assertContains(page, "Copy link for the new server")
+        # The link works without signing in (the token is the secret), and only for that token.
+        url = f"/manage/move/download/{export['token']}/{path.name}"
+        anonymous = self.client_class()
+        response = anonymous.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content)[:10], path.read_bytes()[:10])
+        self.assertEqual(anonymous.get(f"/manage/move/download/wrong/{path.name}").status_code, 404)
+
+        # Import on a "new server": empty media, another key.
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        copy = Path(tempfile.mkdtemp()) / "in.tar"
+        shutil.copy(path, copy)
+        shutil.rmtree(self.media / "library")
+        transfer.delete_exports()
+        (self.keys / "pairing_ed25519.pem").write_bytes(b"new-server-key")
+        with mock.patch("guestmedia.transfer.restore_database") as restore:
+            transfer.start_import(path=copy, by="admin")
+        restore.assert_called_once()
+        status = transfer.import_status()
+        self.assertEqual(status["state"], "done", status)
+        self.assertEqual((self.media / "library" / "1" / "a.jpg").read_bytes(), b"jpg-data")
+        self.assertEqual((self.keys / "pairing_ed25519.pem").read_bytes(), b"old-key")
+        self.assertFalse(copy.exists())
+
+    def test_import_rejects_other_archives_and_needs_confirmation(self):
+        import io
+        import tarfile
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from . import transfer
+
+        bad = Path(tempfile.mkdtemp()) / "bad.tar"
+        with tarfile.open(bad, "w") as tar:
+            data = b"hello"
+            info = tarfile.TarInfo("media/../../evil.txt")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        with mock.patch("guestmedia.transfer.restore_database") as restore:
+            transfer.start_import(path=bad)
+        restore.assert_not_called()
+        self.assertEqual(transfer.import_status()["state"], "failed")
+        self.assertFalse((self.media.parent / "evil.txt").exists())
+        with mock.patch("guestmedia.transfer.start_import") as start:
+            self.client.post("/manage/move/", {"action": "import_link", "url": "https://old/manage/move/download/x/y.tar", "confirm": "no"})
+            start.assert_not_called()
+            self.client.post("/manage/move/", {"action": "import_link", "url": "https://old/manage/move/download/x/y.tar", "confirm": "replace"})
+            start.assert_called_once()

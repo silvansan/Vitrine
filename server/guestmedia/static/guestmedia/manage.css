@@ -149,3 +149,5 @@ label.check{display:inline-flex;flex-direction:row;align-items:center;gap:8px}
 .uploader .uploads li.ok .bar i{background:var(--ok)}
 .uploader .uploads li.bad span{color:var(--danger)}
 .logo-mark{width:26px;height:26px;flex:none;display:block}
+.move-bar{width:100%;height:10px;accent-color:var(--text)}
+.move-form label{display:flex;flex-direction:column;align-items:stretch;gap:4px;max-width:640px}.move-form input{width:100%}
