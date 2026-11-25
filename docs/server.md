@@ -177,6 +177,8 @@ What is copied:
 
 **Settings → Backup history** shows the last runs with their logs. The Events page warns superusers when backups are off or the last success is older than 36 hours, and the organizations that want it get an alert when one fails.
 
+Signing in over plain http (for example `http://100.x.x.x:8080` over Tailscale, before DNS and the certificate are ready) works. If an older version answers *CSRF verification failed* there, add that exact address to `DJANGO_CSRF_TRUSTED_ORIGINS` (e.g. `http://100.101.102.103:8080`) and update the stack.
+
 ### Moving to another server
 
 **Settings → Move to another server** (superusers) packs everything into one archive and brings it in on the new server, without any commands:
