@@ -61,6 +61,8 @@
     prev: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
     next: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
     trash: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
+    heart: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-9.2-8.6C1.2 8.3 3 5 6.3 5c2 0 3.3 1.1 4 2.3h3.4C14.4 6.1 15.7 5 17.7 5 21 5 22.8 8.3 21.2 11.4 19 15.6 12 20 12 20z"/></svg>',
+    heartOn: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-9.2-8.6C1.2 8.3 3 5 6.3 5c2 0 3.3 1.1 4 2.3h3.4C14.4 6.1 15.7 5 17.7 5 21 5 22.8 8.3 21.2 11.4 19 15.6 12 20 12 20z"/></svg>',
     grip: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg>',
     close: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
   };
@@ -198,7 +200,7 @@
         'aria-label': 'Remove ' + asset.name + ' from my set', html: ICON.trash,
         onclick: function () { quickRemove(asset); }
       });
-      var row = el('div', { class: 'set-row' }, [grip, thumbBox, meta, remove]);
+      var row = el('div', { class: 'set-row' }, [grip, thumbBox, meta, heartButton(asset, 'icon-btn row-heart'), remove]);
       var item = el('li', { class: 'set-item', 'data-id': String(asset.id) }, [row]);
       if (open) item.appendChild(renderExtras(asset));
       list.appendChild(item);
@@ -352,6 +354,26 @@
     place();
   }
 
+  /* ♥ favorites: kept per person across events. */
+  function heartButton(asset, cls) {
+    return el('button', {
+      type: 'button', class: (cls || 'icon-btn') + ' heart-btn' + (asset.fav ? ' on' : ''),
+      'aria-pressed': asset.fav ? 'true' : 'false',
+      title: asset.fav ? 'Remove from favorites' : 'Add to favorites',
+      'aria-label': (asset.fav ? 'Remove ' : 'Add ') + asset.name + (asset.fav ? ' from' : ' to') + ' favorites',
+      html: asset.fav ? ICON.heartOn : ICON.heart,
+      onclick: function (e) { e.stopPropagation(); toggleFavorite(asset); }
+    });
+  }
+  function toggleFavorite(asset) {
+    var on = !asset.fav;
+    [state.set, state.library, state.favorites || []].forEach(function (list) {
+      list.forEach(function (a) { if (a.id === asset.id) a.fav = on; });
+    });
+    render();
+    post('favorite', { asset_id: asset.id, on: on });
+  }
+
   /* Remove at once, with Undo (puts it back in the same place). */
   function quickRemove(asset) {
     var order = state.set.map(function (a) { return a.id; });
@@ -388,15 +410,36 @@
   }
 
   function renderLibrary() {
-    var grid = $('#library');
-    if (!grid) return;
-    grid.innerHTML = '';
-    var items = state.library.filter(function (a) {
+    renderPicker($('#library'), $('#library-empty'), state.library.filter(function (a) {
       if (ui.filter === 'all') return true;
       return a.group === ui.filter;
-    });
-    $('#library-empty').hidden = items.length > 0;
+    }), 'Library');
+    renderPicker($('#favorites'), $('#favorites-empty'), state.favorites || [], 'Favorites');
+    var fc = document.getElementById('fav-count');
+    if (fc) fc.textContent = (state.favorites || []).length;
+  }
+
+  function renderPicker(grid, empty, items, title) {
+    if (!grid) return;
+    grid.innerHTML = '';
+    if (empty) empty.hidden = items.length > 0;
     items.forEach(function (asset) {
+      if (asset.in_set) {
+        // Already in the set (favorites tab): show it, but it can't be added twice.
+        var inImg = el('div', { class: 'img' }, [
+          asset.thumb ? el('img', { src: asset.thumb, alt: '', loading: 'lazy' }) : null,
+          el('span', { class: 'in-set', text: 'In my set' })
+        ]);
+        var inCard = el('div', { class: 'pick in' }, [inImg, el('div', { class: 'txt' }, [
+          el('div', { class: 'who', text: asset.mine ? 'Your upload' : asset.owner }),
+          el('div', { class: 'when', text: asset.when })
+        ])]);
+        grid.appendChild(el('div', { class: 'pick-wrap' }, [inCard,
+          el('button', { type: 'button', class: 'pick-zoom', 'aria-label': 'View ' + asset.name + ' full screen', html: ICON.expand,
+            onclick: function () { openViewer(items, items.indexOf(asset), title); } }),
+          heartButton(asset, 'pick-heart')]));
+        return;
+      }
       var selected = ui.selected.indexOf(asset.id) !== -1;
       var img = el('div', { class: 'img' }, [
         asset.thumb ? el('img', { src: asset.thumb, alt: '', loading: 'lazy' }) : null,
@@ -417,9 +460,9 @@
       ])]);
       var zoom = el('button', {
         type: 'button', class: 'pick-zoom', 'aria-label': 'View ' + asset.name + ' full screen', html: ICON.expand,
-        onclick: function () { openViewer(items, items.indexOf(asset), 'Library'); }
+        onclick: function () { openViewer(items, items.indexOf(asset), title); }
       });
-      grid.appendChild(el('div', { class: 'pick-wrap' }, [card, zoom]));
+      grid.appendChild(el('div', { class: 'pick-wrap' }, [card, zoom, heartButton(asset, 'pick-heart')]));
     });
   }
 
@@ -434,7 +477,7 @@
       btn.setAttribute('aria-pressed', btn.dataset.filter === ui.filter ? 'true' : 'false');
     });
     var action = $('#main-action');
-    if (ui.tab === 'library') {
+    if (ui.tab === 'library' || ui.tab === 'favorites') {
       var n = ui.selected.length;
       action.textContent = n ? 'Add ' + n + ' to my set' : 'Select files to add';
       action.disabled = n === 0;
@@ -475,7 +518,7 @@
     btn.addEventListener('click', function () { ui.filter = btn.dataset.filter; render(); });
   });
   $('#main-action').addEventListener('click', function () {
-    if (ui.tab === 'library' && ui.selected.length) {
+    if ((ui.tab === 'library' || ui.tab === 'favorites') && ui.selected.length) {
       var ids = ui.selected.slice();
       ui.selected = [];
       ui.tab = 'mine';

@@ -178,6 +178,7 @@ CELERY_TASK_ROUTES = {
     "guestmedia.tasks.check_*": {"queue": "light"},
     "guestmedia.tasks.purge_trash": {"queue": "light"},
     "guestmedia.backup.*": {"queue": "light"},
+    "guestmedia.diskusage.*": {"queue": "light"},
 }
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1

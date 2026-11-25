@@ -179,6 +179,7 @@ def dashboard(request):
         "guestmedia/manage/dashboard.html",
         {
             "backup_warning": request.user.is_superuser and (not backup.enabled() or backup.is_stale()),
+            "disk_warning": request.user.is_superuser and _low_disks(),
             "backup_enabled": backup.enabled(),
             "events": events,
             "unplaced": unplaced,
@@ -835,6 +836,18 @@ EMAIL_PRESETS = {
 }
 
 
+def _low_disks():
+    from . import diskusage
+
+    return [{"which": w, **d} for w, d in diskusage.low_disks()]
+
+
+def storage_context(request):
+    from . import diskusage
+
+    return {"storage": diskusage.report(fresh=request.GET.get("refresh") == "storage")}
+
+
 def transfer_context(request):
     from . import transfer_views
 
@@ -977,6 +990,7 @@ def site_settings(request):
             "telegram_from_env": bool(settings.VITRINE_TELEGRAM_BOT_TOKEN) and not s.telegram_bot_token,
             **_bot_status(),
             **transfer_context(request),
+            **storage_context(request),
             "email_presets": EMAIL_PRESETS,
             "email_from_env": bool(settings.EMAIL_HOST) and not s.email_host,
             "offline_minutes": config.offline_alert_minutes(),

@@ -10,6 +10,10 @@
 <p class="error">{% if backup_enabled %}No successful backup in the last 36 hours.{% else %}Backups are off: uploads and the database exist only on this server.{% endif %} <a href="{% url 'manage-settings' %}#backups">Set up backups</a></p>
 {% endif %}
 
+{% for d in disk_warning %}
+<p class="error">{% if d.which == "files" %}The disk with the uploads{% else %}The server's system disk{% endif %} is {{ d.percent }} % full ({{ d.free|filesizeformat }} free). When it is full, uploads fail and the database stops. <a href="{% url 'manage-settings' %}#storage">See what takes the space</a></p>
+{% endfor %}
+
 {% if not locations %}
 <section class="card highlight">
   <h2>Start with a location</h2>

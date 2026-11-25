@@ -78,7 +78,7 @@
       <label><input type="checkbox" name="notify_uploads"{% if org.notify_uploads %} checked{% endif %}> Uploads waiting for approval</label>
       <label><input type="checkbox" name="notify_offline"{% if org.notify_offline %} checked{% endif %}> vMix PC offline around an event</label>
       <label><input type="checkbox" name="notify_sync"{% if org.notify_sync %} checked{% endif %}> The day before: are all files on the vMix PC?</label>
-      <label><input type="checkbox" name="notify_backup"{% if org.notify_backup %} checked{% endif %}> A backup failed</label>
+      <label><input type="checkbox" name="notify_backup"{% if org.notify_backup %} checked{% endif %}> A backup failed, or the server's disk is nearly full</label>
     </div>
     <div class="actions">
       <button class="btn primary" type="submit">Save</button>

@@ -160,3 +160,14 @@ body.viewer-open{overflow:hidden}
 .undo-bar{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:900;display:flex;align-items:center;gap:16px;max-width:calc(100vw - 32px);padding:12px 12px 12px 18px;border-radius:14px;background:#15181E;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.3);font-size:15px}
 .undo-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .undo-bar button{flex:none;height:38px;padding:0 16px;border-radius:10px;border:0;background:#fff;color:#15181E;font-weight:700;cursor:pointer}
+
+/* Favorites */
+.heart-btn{color:var(--muted)}
+.heart-btn.on{color:#E5484D}
+.set-row .row-heart{margin-left:auto;border-color:transparent;background:transparent}
+.set-row .row-heart + .remove-btn{margin-left:0}
+.pick-heart{position:absolute;top:66px;right:8px;width:36px;height:36px;border-radius:10px;border:0;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.pick-heart.on{color:#FF6B6F;background:rgba(0,0,0,.65)}
+.pick-heart svg{width:20px;height:20px}
+.pick.in{opacity:.75;cursor:default}
+.pick .in-set{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:8px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:700}

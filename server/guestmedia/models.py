@@ -64,7 +64,7 @@ class Organization(models.Model):
     notify_uploads = models.BooleanField(default=True, help_text="Uploads waiting for approval.")
     notify_offline = models.BooleanField(default=True, help_text="A vMix PC goes offline before or during an event.")
     notify_sync = models.BooleanField(default=True, help_text="The day before an event: are all its files on the vMix PC?")
-    notify_backup = models.BooleanField(default=True, help_text="A backup failed.")
+    notify_backup = models.BooleanField(default=True, help_text="A backup failed, or the server's disk is nearly full.")
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -757,3 +757,15 @@ class SiteSettings(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class Favorite(models.Model):
+    """A person's ♥ on a file (guest page → Favorites). Kept across events, until removed."""
+
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="favorites")
+    asset = models.ForeignKey(MediaAsset, on_delete=models.CASCADE, related_name="favorited_by")
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("person", "asset")]
+        ordering = ["-created"]

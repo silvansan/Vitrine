@@ -22,4 +22,5 @@ def setup_schedule(sender, **kwargs):
         "vmix-pcs-offline": {"task": "guestmedia.tasks.check_agents", "schedule": 120.0},
         "files-ready-for-tomorrow": {"task": "guestmedia.tasks.check_sync_due", "schedule": 300.0},
         "backup": {"task": "guestmedia.backup.check_backup_due", "schedule": 300.0},
+        "disk-space": {"task": "guestmedia.diskusage.check_disk_space", "schedule": 1800.0},
     }

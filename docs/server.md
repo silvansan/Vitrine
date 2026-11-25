@@ -177,6 +177,34 @@ What is copied:
 
 **Settings → Backup history** shows the last runs with their logs. The Events page warns superusers when backups are off or the last success is older than 36 hours, and the organizations that want it get an alert when one fails.
 
+## Storage and more space
+
+**Settings → Storage** (superusers) shows how full the disk is, what takes the space (uploads as received, converted files and thumbnails, uploads in progress, a server-move archive, the database, the trash) and the uploads per organization. When a disk is over 90 % full or has less than 5 GB free, the Events page shows a warning and the organizations that get backup alerts get a Telegram/email message (at most every 12 hours). A full disk stops uploads and then the database, so act on it.
+
+### More space: a Hetzner volume
+
+Uploads and converted videos are the big part. They can live on a separate Hetzner volume, which you can make bigger at any time without touching the server:
+
+1. **Hetzner Cloud Console → Volumes → Create volume**: the size you need, the **same location** as the server, attach it to the server, mount **Automatic**, file system **ext4**. Over SSH, `df -h` then shows it at `/mnt/HC_Volume_<number>`.
+2. Find Vitrine's current volumes: `docker volume ls | grep vitrine` (they are called `<stack name>_vitrine-data` and `<stack name>_vitrine-db`).
+3. **Stop the stack** in Portainer.
+4. Copy the files (and, if you like, the database) to the new disk, keeping owners and permissions:
+   ```
+   rsync -aHAX --info=progress2 /var/lib/docker/volumes/<stack>_vitrine-data/_data/ /mnt/HC_Volume_<number>/vitrine-data/
+   rsync -aHAX --info=progress2 /var/lib/docker/volumes/<stack>_vitrine-db/_data/   /mnt/HC_Volume_<number>/vitrine-db/
+   ```
+5. Add to the stack variables (the second only if you copied the database) and **Update the stack**:
+   ```
+   VITRINE_DATA_PATH=/mnt/HC_Volume_<number>/vitrine-data
+   VITRINE_DB_PATH=/mnt/HC_Volume_<number>/vitrine-db
+   ```
+6. Check **Settings → Storage**: it now says *Files disk* (and shows the system disk separately), with the same number of files as before.
+7. After a few days of normal use, delete the old Docker volumes to free the server's disk: `docker volume rm <stack>_vitrine-data` (and `…_vitrine-db` if you moved it). Not before: they are your way back.
+
+To grow the volume later: Hetzner Console → the volume → **Resize**, then on the server `resize2fs /dev/disk/by-id/scsi-0HC_Volume_<number>`; no restart needed.
+
+If the volume ever isn't mounted when the server starts (detached in the console, for example), Docker would create an empty folder in its place and Vitrine would look empty: Settings → Storage would say *Server disk* again. Attach it, check `df -h`, and restart the stack; nothing is lost.
+
 Signing in over plain http (for example `http://100.x.x.x:8080` over Tailscale, before DNS and the certificate are ready) works. If an older version answers *CSRF verification failed* there, add that exact address to `DJANGO_CSRF_TRUSTED_ORIGINS` (e.g. `http://100.101.102.103:8080`) and update the stack.
 
 ### Moving to another server

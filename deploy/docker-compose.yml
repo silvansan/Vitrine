@@ -35,7 +35,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       VITRINE_X_ACCEL: "true"
     volumes:
-      - vitrine-data:/data
+      - ${VITRINE_DATA_PATH:-vitrine-data}:/data
     depends_on: [db, redis]
     networks: [internal]
 
@@ -49,7 +49,7 @@ services:
       POSTGRES_HOST: db
       REDIS_URL: redis://redis:6379/0
     volumes:
-      - vitrine-data:/data
+      - ${VITRINE_DATA_PATH:-vitrine-data}:/data
     depends_on: [db, redis]
     networks: [internal]
 
@@ -64,7 +64,7 @@ services:
       POSTGRES_HOST: db
       REDIS_URL: redis://redis:6379/0
     volumes:
-      - vitrine-data:/data
+      - ${VITRINE_DATA_PATH:-vitrine-data}:/data
       # Backup to a folder on this server (USB disk, NAS mounted on the host): uncomment,
       # then choose "Folder on the server" with /backup in /manage/ → Settings → Backups.
       # Cloud, FTP, SFTP and SMB targets need nothing here: set them up in Settings.
@@ -78,7 +78,7 @@ services:
     restart: unless-stopped
     logging: *logging
     volumes:
-      - vitrine-data:/data:ro
+      - ${VITRINE_DATA_PATH:-vitrine-data}:/data:ro
     ports:
       # For the agent over Tailscale. Bind to the server's Tailscale IP to keep it off the internet,
       # e.g. VITRINE_BIND=100.101.102.103
@@ -95,7 +95,7 @@ services:
       POSTGRES_USER: vitrine
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
-      - vitrine-db:/var/lib/postgresql/data
+      - ${VITRINE_DB_PATH:-vitrine-db}:/var/lib/postgresql/data
     networks: [internal]
 
   redis:
@@ -106,6 +106,11 @@ services:
     logging: *logging
     networks: [internal]
 
+# Where the data lives. By default in Docker volumes on the server's own disk. To put it on a
+# separate disk (e.g. a Hetzner volume mounted at /mnt/HC_Volume_123456), set in the variables
+#   VITRINE_DATA_PATH=/mnt/HC_Volume_123456/vitrine-data     (uploads, converted files: the big part)
+#   VITRINE_DB_PATH=/mnt/HC_Volume_123456/vitrine-db         (optional: the database)
+# and copy the existing data there first (docs/server.md → More space: a Hetzner volume).
 volumes:
   vitrine-data:
   vitrine-db:

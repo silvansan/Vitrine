@@ -14,6 +14,7 @@ urlpatterns = [
     path("g/<str:token>/pin", guest_views.change_pin, name="guest-change-pin"),
     path("g/<str:token>/api/state", guest_views.api_state, name="guest-state"),
     path("g/<str:token>/api/set/add", guest_views.api_set_add, name="guest-set-add"),
+    path("g/<str:token>/api/favorite", guest_views.api_favorite, name="guest-favorite"),
     path("g/<str:token>/api/set/copy", guest_views.api_set_copy, name="guest-set-copy"),
     path("g/<str:token>/api/set/remove", guest_views.api_set_remove, name="guest-set-remove"),
     path("g/<str:token>/api/set/order", guest_views.api_set_order, name="guest-set-order"),

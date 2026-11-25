@@ -13,7 +13,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from . import pins
 from .files import serve_field
-from .models import Guest, Marker, MediaAsset, MediaSet, Person, PersonAlias, SetItem
+from .models import Favorite, Guest, Marker, MediaAsset, MediaSet, Person, PersonAlias, SetItem
 
 
 def load_person(token, request=None, check_pin=True):
@@ -73,8 +73,12 @@ def asset_for_guest(asset, guest):
         when = f"From {service}"
         group = "earlier"
     q = f"?e={guest.service_id}"
+    favs = getattr(guest, "_fav_ids", None)
+    if favs is None:
+        favs = guest._fav_ids = set(Favorite.objects.filter(person=person).values_list("asset_id", flat=True))
     return {
         "id": asset.pk,
+        "fav": asset.pk in favs,
         "kind": asset.kind or "processing",
         "owner": asset.owner_name,
         "name": asset.original_name,
@@ -215,6 +219,12 @@ def api_state(request, token):
         .prefetch_related("markers")
     )
     library_ids = {item["id"] for item in library}
+    favorites = []
+    for fav in Favorite.objects.filter(person=person).select_related("asset__service", "asset__organization").prefetch_related("asset__markers"):
+        if fav.asset.visible_to(person):
+            item = asset_for_guest(fav.asset, guest)
+            item["in_set"] = fav.asset_id in in_set
+            favorites.append(item)
     for asset in own_extra:
         if asset.pk not in library_ids:
             library.insert(0, asset_for_guest(asset, guest))
@@ -232,6 +242,7 @@ def api_state(request, token):
             },
             "set": my_set,
             "library": library,
+            "favorites": favorites,
             "previous_set": (
                 {"id": previous.pk, "label": event_label(previous.service), "count": previous.items.count()}
                 if previous else None
@@ -467,3 +478,18 @@ def location_tablet(request, slug):
     if agent and agent.tablet_base_url:
         return HttpResponseRedirect(f"{agent.tablet_base_url}/screen")
     return render(request, "guestmedia/tablet_offline.html", {"location": location}, status=503)
+
+
+@csrf_exempt
+@require_POST
+def api_favorite(request, token):
+    """♥ a file or take the ♥ away: {"asset_id": 12, "on": true}."""
+    person, guest = load_guest(request, token)
+    data = read_json(request)
+    asset = MediaAsset.objects.filter(pk=data.get("asset_id") or 0).first()
+    if asset is not None and asset.visible_to(person):
+        if data.get("on"):
+            Favorite.objects.get_or_create(person=person, asset=asset)
+        else:
+            Favorite.objects.filter(person=person, asset=asset).delete()
+    return api_state(request_as_get(request), token)

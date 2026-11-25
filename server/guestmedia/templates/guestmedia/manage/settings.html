@@ -111,6 +111,45 @@
   {% if test %}<pre class="log {% if test.ok %}ok{% else %}bad{% endif %}">{{ test.log }}</pre>{% endif %}
 </form>
 
+<section class="card" id="storage">
+  <h2>Storage</h2>
+  {% with s=storage %}
+  {% if s.data %}
+  <div class="disk">
+    <div class="disk-head"><strong>{% if s.separate %}Files disk{% else %}Server disk{% endif %}</strong>
+      <span class="muted">{{ s.data.used|filesizeformat }} of {{ s.data.total|filesizeformat }} used · {{ s.data.free|filesizeformat }} free</span></div>
+    <div class="disk-bar{% if s.data.low %} low{% endif %}"><i style="width:{{ s.data.percent }}%"></i></div>
+    <p class="muted note">{% if s.separate %}Uploads and converted files are on their own disk (for example a Hetzner volume).{% else %}Uploads, converted files, the database and Docker all share the server's disk. A separate volume keeps uploads from filling it: see <a href="{% url 'docs-page' 'server' %}#more-space-a-hetzner-volume">More space: a Hetzner volume</a>.{% endif %}</p>
+  </div>
+  {% endif %}
+  {% if s.system %}
+  <div class="disk">
+    <div class="disk-head"><strong>System disk</strong> <span class="muted">{{ s.system.used|filesizeformat }} of {{ s.system.total|filesizeformat }} used · {{ s.system.free|filesizeformat }} free</span></div>
+    <div class="disk-bar{% if s.system.low %} low{% endif %}"><i style="width:{{ s.system.percent }}%"></i></div>
+    <p class="muted note">Docker images, container logs and (unless moved too) the database.</p>
+  </div>
+  {% endif %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>What</th><th>Files</th><th>Size</th></tr></thead>
+    <tbody>
+      {% for r in s.media.rows %}<tr><td>{{ r.label }}</td><td>{{ r.files }}</td><td>{{ r.bytes|filesizeformat }}</td></tr>{% endfor %}
+      <tr><td>Database</td><td></td><td>{{ s.database|filesizeformat }}</td></tr>
+      {% if s.trash.files %}<tr><td class="muted">of which in the trash (deleted for good after {{ s.trash_days }} days)</td><td>{{ s.trash.files }}</td><td>{{ s.trash.bytes|filesizeformat }}</td></tr>{% endif %}
+    </tbody>
+  </table>
+  </div>
+  {% if s.by_org|length > 1 %}
+  <h3>Uploads per organization</h3>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Organization</th><th>Files</th><th>Uploaded size</th></tr></thead>
+    <tbody>{% for o in s.by_org %}<tr><td>{{ o.organization__name|default:"—" }}</td><td>{{ o.files }}</td><td>{{ o.bytes|default:0|filesizeformat }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+  <p class="muted note">Folder sizes are counted every 10 minutes. <a href="?refresh=storage#storage">Count again now</a>. When a disk is over 90 % full (or under 5 GB free), Events shows a warning and the organizations that get backup alerts get a message.</p>
+  {% endwith %}
+</section>
+
 <section class="card" id="move" data-status="{% url 'manage-move-status' %}">
   <h2>Move to another server</h2>
   <p class="muted">One archive with everything: the database (people, events, sets, settings, accounts), every file and the tablets' pairing key. Download it to keep a copy, or bring it into a new Vitrine.</p>

@@ -48,6 +48,7 @@
       <button type="button" role="tab" data-tab="mine" aria-selected="false">My set (<span id="count">0</span>)</button>
       {% if guest.can_upload %}<button type="button" role="tab" data-tab="upload" aria-selected="false">Upload</button>{% endif %}
       {% if guest.can_browse %}<button type="button" role="tab" data-tab="library" aria-selected="false">Library</button>{% endif %}
+      <button type="button" role="tab" data-tab="favorites" aria-selected="false">Favorites (<span id="fav-count">0</span>)</button>
     </div>
   </nav>
 
@@ -82,6 +83,12 @@
     </div>
     <div class="grid" id="library"></div>
     <p class="empty" id="library-empty" hidden>Nothing to pick here.</p>
+  </section>
+
+  <section class="panel" data-panel="favorites" hidden>
+    <p class="hint">Your favorites stay here for every event. Tap ♡ on a picture to add it; select some to put them in your set.</p>
+    <div class="grid" id="favorites"></div>
+    <p class="empty" id="favorites-empty" hidden>No favorites yet. Tap ♡ on a picture in the library or in your set.</p>
   </section>
 
   <footer class="foot">

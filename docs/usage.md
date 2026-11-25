@@ -66,6 +66,8 @@ Everything can be changed or removed from `/manage/`; `/admin/` is only needed f
 
 ## Settings (superusers)
 
+**Storage**: how full the disk is and what takes the space; a warning on Events and an alert when it is nearly full. See [Storage and more space](server.md#storage-and-more-space).
+
 **Move to another server**: one archive with the database, all files and the pairing key, to download or to import on a new Vitrine from a link. See [Moving to another server](server.md#moving-to-another-server).
 
 **Settings** in `/manage/` holds what the whole server shares: how alerts are sent (Telegram bot, email server), when the "ready for tomorrow?" check runs, and where and when backups go (folder/NAS, S3, Azure, Google Drive, OpenDrive, FTP, SFTP, SMB or another rclone remote), with a connection test, **Back up now** and the backup history. Email providers like Brevo have a preset that fills in the server details. Who receives alerts is chosen per organization on **Organization**: **Connect Telegram** links your team group (or your own chat) by tapping a link, no chat id needed; see [Alerts to the team](server.md#alerts-to-the-team).
@@ -111,6 +113,10 @@ Unpair from the companion, or **Unpair** next to the code in the backend (takes 
 ## Phones
 
 The tablet pages also work on a phone (upright or sideways): the bars get smaller and the tiles scroll instead of shrinking. Use Chrome, Samsung Internet or Safari; Brave's HTTPS upgrade blocks the local address unless you turn its Shields down for it.
+
+## Favorites on the guest page
+
+Guests tap the ♡ on a picture (in the library, in their set, or in the **Favorites** tab) to keep it in **Favorites**. Favorites belong to the person, not to one event, so banners and pictures they use often are there at every event. In Favorites they select pictures and press **Add to my set**; pictures already in the set are marked *In my set*. Tapping ♥ again removes it from Favorites (never from the set or the library).
 
 ## Ordering a set on the guest page
 

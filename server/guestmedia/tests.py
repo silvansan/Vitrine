@@ -122,6 +122,30 @@ class FlowTests(TestCase):
         return client.generic("PATCH", response["Location"], data=data, content_type="application/offset+octet-stream",
                               HTTP_UPLOAD_OFFSET="0", HTTP_TUS_RESUMABLE="1.0.0")
 
+    def test_favorites(self):
+        asset = MediaAsset.objects.create(owner_name="Daniel", original_name="b.jpg", kind="photo", status="ready",
+                                          approval="approved", organization=self.org)
+        hidden = MediaAsset.objects.create(owner_name="Daniel", original_name="p.jpg", kind="photo", status="ready",
+                                           approval="approved", organization=self.org, private=True)
+        base = f"/g/{self.maria.person.token}/api/"
+        state = self.client.post(base + "favorite", json.dumps({"asset_id": asset.pk, "on": True}), content_type="application/json").json()
+        self.assertEqual([f["id"] for f in state["favorites"]], [asset.pk])
+        self.assertTrue([a for a in state["library"] if a["id"] == asset.pk][0]["fav"])
+        # Someone else's private file can't be a favorite.
+        state = self.client.post(base + "favorite", json.dumps({"asset_id": hidden.pk, "on": True}), content_type="application/json").json()
+        self.assertEqual(len(state["favorites"]), 1)
+        # In the set, it stays a favorite and says so; favorites follow the person to other events.
+        self.client.post(base + "set/add", json.dumps({"asset_ids": [asset.pk]}), content_type="application/json")
+        state = self.client.get(base + "state").json()
+        self.assertTrue(state["favorites"][0]["in_set"])
+        other_event = Service.objects.create(name="Other", location=self.service.location)
+        other_guest = Guest.objects.create(service=other_event, person=self.maria.person)
+        state = self.client.get(base + f"state?e={other_event.pk}").json()
+        self.assertEqual([f["id"] for f in state["favorites"]], [asset.pk])
+        self.assertFalse(state["favorites"][0]["in_set"])
+        state = self.client.post(base + "favorite", json.dumps({"asset_id": asset.pk, "on": False}), content_type="application/json").json()
+        self.assertEqual(state["favorites"], [])
+
     def test_staff_uploads_from_manage(self):
         from django.test import Client
 
@@ -1173,3 +1197,27 @@ class MoveServerTests(TransactionTestCase):
             start.assert_not_called()
             self.client.post("/manage/move/", {"action": "import_link", "url": "https://old/manage/move/download/x/y.tar", "confirm": "replace"})
             start.assert_called_once()
+
+
+class StorageTests(TestCase):
+    def test_storage_card_and_low_disk_alert(self):
+        from collections import namedtuple
+        from unittest import mock
+
+        from . import diskusage
+
+        User.objects.create_superuser("admin", "a@example.org", "pw-long-enough")
+        self.client.login(username="admin", password="pw-long-enough")
+        page = self.client.get("/manage/settings/")
+        self.assertContains(page, 'id="storage"')
+        self.assertContains(page, "Database")
+        Usage = namedtuple("Usage", "total used free")
+        nearly_full = Usage(100 * 1024 ** 3, 97 * 1024 ** 3, 3 * 1024 ** 3)
+        Organization.objects.update(notify_backup=True)
+        with mock.patch("guestmedia.diskusage.shutil.disk_usage", return_value=nearly_full):
+            self.assertContains(self.client.get("/manage/"), "97 % full")
+            with mock.patch("guestmedia.alerts.notify") as notify:
+                diskusage.check_disk_space()
+                diskusage.check_disk_space()  # not twice within 12 hours
+            self.assertEqual(notify.call_count, 1)
+            self.assertIn("97 % full", notify.call_args[0][2])
