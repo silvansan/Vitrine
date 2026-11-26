@@ -222,8 +222,58 @@ def send_upload(chat_id, asset):
     return api("sendMessage", chat_id=chat_id, text=caption, reply_markup=markup)
 
 
+def send_control_request(chat_id, guest, text):
+    """A guest asks for control of the screen: Allow / Refuse buttons (answered on the vMix PC)."""
+    set_id = guest.get_set().pk
+    markup = {"inline_keyboard": [[
+        {"text": "✅ Allow", "callback_data": f"ca:{set_id}"},
+        {"text": "❌ Refuse", "callback_data": f"cr:{set_id}"},
+    ]]}
+    return api("sendMessage", chat_id=chat_id, text=text[:1000], reply_markup=markup)
+
+
+def handle_control_button(press, action, set_id, chat_id, who, message):
+    from . import relay
+    from .models import MediaSet
+
+    media_set = MediaSet.objects.select_related("service__location__organization", "service__location__agent").filter(
+        pk=int(set_id) if set_id.isdigit() else 0
+    ).first()
+    location = media_set.service.location if media_set and media_set.service_id else None
+    if location is None or location.organization is None:
+        api("answerCallbackQuery", callback_query_id=press["id"], text="That request doesn't exist any more.")
+        return
+    if str(location.organization.notify_telegram_chat) != chat_id:
+        api("answerCallbackQuery", callback_query_id=press["id"], text="Not allowed from this chat.", show_alert="true")
+        return
+    allow = action == "ca"
+    result = {"ok": False, "error": "This location has no vMix PC."}
+    if location.agent_id:
+        result = relay.send_command(location.agent, {"action": "desk_control", "set_id": media_set.pk, "on": allow,
+                                                     "by": f"{who} in Telegram"})
+    if result.get("ok"):
+        outcome = f"✅ Allowed by {who}" if allow else f"❌ Refused by {who}"
+        done = True
+    else:
+        error = result.get("error") or "the vMix PC didn't answer"
+        if "unknown" in error.lower() or "no control" in error.lower():
+            error = "update the Vitrine agent on the vMix PC to answer from Telegram"
+        outcome = f"⚠️ Couldn't {'allow' if allow else 'refuse'}: {error}"
+        done = "already has control" in error
+    api("answerCallbackQuery", callback_query_id=press["id"], text=outcome[:190])
+    if not done and not result.get("ok"):
+        return  # keep the buttons: they can try again
+    text = (message.get("text") or "").rstrip()
+    try:
+        api("editMessageText", chat_id=chat_id, message_id=message.get("message_id"),
+            reply_markup={"inline_keyboard": []}, text=f"{text}\n{outcome}"[:1000])
+    except TelegramError:
+        pass
+
+
 def handle_button(press):
-    """A press on Approve / Reject. Only counts from the organization's own linked chat."""
+    """A press on Approve / Reject (uploads) or Allow / Refuse (control requests).
+    Only counts from the organization's own linked chat."""
     from .models import MediaAsset
 
     data = press.get("data") or ""
@@ -231,6 +281,9 @@ def handle_button(press):
     chat_id = str((message.get("chat") or {}).get("id", ""))
     who = (press.get("from") or {}).get("first_name") or "someone"
     action, _, pk = data.partition(":")
+    if action in ("ca", "cr"):
+        handle_control_button(press, action, pk, chat_id, who, message)
+        return
     asset = MediaAsset.all_objects.filter(pk=int(pk) if pk.isdigit() else 0).select_related("organization").first()
     if action not in ("a", "r") or asset is None or asset.organization is None:
         api("answerCallbackQuery", callback_query_id=press["id"], text="This file doesn't exist any more.")

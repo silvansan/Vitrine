@@ -1318,6 +1318,48 @@ class MoreAlertsTests(TestCase):
         alerts.control_requested(person, self.event)
         self.assertEqual(len(self.texts()), 1)
 
+    def test_control_request_buttons(self):
+        from unittest import mock
+
+        from . import alerts
+        from .telegram import process_updates
+
+        guest = make_guest(self.event, "Pastor Dan")
+        alerts.control_requested(guest.person, self.event)
+        sent = [p for m, p, _f in self.calls if m == "sendMessage"]
+        self.assertEqual(len(sent), 1)  # buttons in Telegram, no second plain message
+        buttons = sent[0]["reply_markup"]["inline_keyboard"][0]
+        set_id = guest.get_set().pk
+        self.assertEqual([b["callback_data"] for b in buttons], [f"ca:{set_id}", f"cr:{set_id}"])
+
+        message = {"message_id": 5, "chat": {"id": -100}, "text": sent[0]["text"]}
+        with mock.patch("guestmedia.relay.send_command", return_value={"ok": True}) as relayed:
+            self.updates = [{"update_id": 10, "callback_query": {"id": "q", "data": f"ca:{set_id}",
+                                                                 "from": {"first_name": "Ana"}, "message": message}}]
+            process_updates()
+        relayed.assert_called_once()
+        self.assertEqual(relayed.call_args[0][1], {"action": "desk_control", "set_id": set_id, "on": True, "by": "Ana in Telegram"})
+        edits = [p for m, p, _f in self.calls if m == "editMessageText"]
+        self.assertIn("Allowed by Ana", edits[-1]["text"])
+
+        # From another chat: refused, nothing relayed.
+        with mock.patch("guestmedia.relay.send_command") as relayed:
+            self.updates = [{"update_id": 11, "callback_query": {"id": "r", "data": f"cr:{set_id}",
+                                                                 "from": {"first_name": "Eve"},
+                                                                 "message": {**message, "chat": {"id": -9}}}}]
+            process_updates()
+        relayed.assert_not_called()
+
+        # vMix PC offline: the buttons stay so they can try again.
+        count = len([1 for m, *_ in self.calls if m == "editMessageText"])
+        with mock.patch("guestmedia.relay.send_command", return_value={"ok": False, "error": "The vMix PC didn't answer. Is it online?"}):
+            self.updates = [{"update_id": 12, "callback_query": {"id": "s", "data": f"cr:{set_id}",
+                                                                 "from": {"first_name": "Ana"}, "message": message}}]
+            process_updates()
+        self.assertEqual(len([1 for m, *_ in self.calls if m == "editMessageText"]), count)
+        answers = [p for m, p, _f in self.calls if m == "answerCallbackQuery"]
+        self.assertIn("didn't answer", answers[-1]["text"])
+
     def test_conversion_failed_and_first_upload(self):
         from . import alerts
 

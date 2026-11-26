@@ -59,6 +59,9 @@ type RemoteCommand struct {
 	StartMs    int    `json:"start_ms"`
 	PositionMs int    `json:"position_ms"`
 	By         string `json:"by"`
+	// desk_control (from the team, e.g. a Telegram button, relayed by the server; guests
+	// can't send it): On gives control, otherwise the request is refused.
+	On bool `json:"on"`
 }
 
 // activeControls returns the sets that have control now (expired grants are dropped).
@@ -125,34 +128,51 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request, sc *store
 		writeError(w, http.StatusBadRequest, "bad request")
 		return
 	}
-	set := setByID(s.Store.Manifest(), body.SetID)
-	if set == nil {
-		writeError(w, http.StatusNotFound, "unknown guest")
+	if err := s.setControl(body.SetID, body.On, false, ""); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// setControl gives (on) or takes back a guest's control, and answers their request.
+// onlyRequest: refusing a request doesn't take back control given meanwhile on the back tablet.
+// by: who decided, when not on the back tablet (e.g. "Ana in Telegram").
+func (s *Server) setControl(setID int64, on, onlyRequest bool, by string) error {
+	set := setByID(s.Store.Manifest(), setID)
+	if set == nil {
+		return errors.New("unknown guest")
+	}
 	hadControl := false
+	s.Store.Read(func(st *store.State) { _, hadControl = activeControls(st)[setID] })
+	if !on && onlyRequest && hadControl {
+		return fmt.Errorf("%s already has control (given on the back tablet)", set.Guest)
+	}
 	_ = s.Store.Update(func(st *store.State) {
-		_, hadControl = activeControls(st)[body.SetID]
-		if body.On {
-			st.Controls[body.SetID] = endOfDay(time.Now())
+		if on {
+			st.Controls[setID] = endOfDay(time.Now())
 		} else {
-			delete(st.Controls, body.SetID)
+			delete(st.Controls, setID)
 		}
 	})
-	s.dropRequest(body.SetID)
-	if body.On {
-		s.Notice(fmt.Sprintf("%s can now show their files from their phone.", set.Guest))
-	} else if hadControl {
-		s.Notice(fmt.Sprintf("%s no longer controls the screen.", set.Guest))
-	} else {
-		s.Notice(fmt.Sprintf("Declined %s's request.", set.Guest))
+	s.dropRequest(setID)
+	suffix := ""
+	if by != "" {
+		suffix = " (" + by + ")"
 	}
-	log.Printf("control for %s (set %d): %v", set.Guest, body.SetID, body.On)
+	if on {
+		s.Notice(fmt.Sprintf("%s can now show their files from their phone.%s", set.Guest, suffix))
+	} else if hadControl {
+		s.Notice(fmt.Sprintf("%s no longer controls the screen.%s", set.Guest, suffix))
+	} else {
+		s.Notice(fmt.Sprintf("Declined %s's request.%s", set.Guest, suffix))
+	}
+	log.Printf("control for %s (set %d): %v %s", set.Guest, setID, on, by)
 	s.BroadcastState()
 	if s.OnControlsChanged != nil {
 		s.OnControlsChanged()
 	}
-	writeJSON(w, map[string]bool{"ok": true})
+	return nil
 }
 
 // Notice shows a short message on every tablet.
@@ -165,6 +185,9 @@ func (s *Server) Notice(text string) {
 // ExecuteRemote runs a guest's command if they have control and the file is theirs.
 func (s *Server) ExecuteRemote(raw json.RawMessage) error {
 	var cmd RemoteCommand
+	if err := json.Unmarshal(raw, &cmd); err == nil && cmd.Action == "desk_control" {
+		return s.setControl(cmd.SetID, cmd.On, !cmd.On, cmd.By)
+	}
 	if err := json.Unmarshal(raw, &cmd); err != nil {
 		return err
 	}

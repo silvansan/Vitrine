@@ -95,12 +95,25 @@ def control_requested(person, event):
     if not cache.add(f"vitrine:alert:control:{person.pk}:{event.pk}", 1, 600):
         return
     where = event.location.name if event.location_id else "the screen"
-    _safe_notify(
-        org,
-        f"{person.name} asks to control {where}",
-        f"{person.name} wants to project from their own tablet ({event.name}, {event.when}).\n"
-        "Accept or refuse it on the back tablet.",
-    )
+    subject = f"{person.name} asks to control {where}"
+    text = f"{person.name} wants to project from their own tablet ({event.name}, {event.when})."
+    # In Telegram with Allow / Refuse buttons; by email (or if that fails) as text.
+    sent = False
+    guest = event.guests.filter(person=person).first()
+    if guest is not None and event.location_id and event.location.agent_id:
+        from . import config, telegram
+
+        if config.telegram_token() and org.notify_telegram_chat:
+            try:
+                telegram.send_control_request(org.notify_telegram_chat, guest, subject + "\n" + text)
+                sent = True
+            except Exception:
+                log.exception("telegram control request for %s failed", org)
+    try:
+        if can_send(org):
+            notify(org, subject, text + "\nAccept or refuse it on the back tablet.", telegram=not sent)
+    except Exception:
+        log.exception("alert %r for %s failed", subject, org)
 
 
 def conversion_failed(asset):

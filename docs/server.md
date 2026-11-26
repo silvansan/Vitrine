@@ -117,7 +117,7 @@ Vitrine can tell your team when something needs them, by **Telegram** and/or **e
 | Alert | When |
 |---|---|
 | **Uploads waiting for approval** | About every 2 minutes. In Telegram, each upload comes as its own message (thumbnail, who, file name, length, event) with **✅ Approve**, **❌ Reject** and **Open** buttons; after 10 files the rest is one link. By email: one summary with a link. |
-| **Someone asks to control the screen** | A guest presses *Ask for access* on their own tablet view (at most once per person and event every 10 minutes). Accept or refuse it on the back tablet. |
+| **Someone asks to control the screen** | A guest presses *Ask for access* on their own tablet view (at most once per person and event every 10 minutes). In Telegram with **✅ Allow** / **❌ Refuse** buttons (the vMix PC gives control until midnight, as from the back tablet, and the tablets show who decided); or accept or refuse it on the back tablet. Refusing doesn't take back control the back tablet gave meanwhile. If the vMix PC is offline, the buttons stay so you can try again. |
 | **A file couldn't be converted** | Right after the conversion fails: file, who sent it, the error, and a link. Try again with Library → select it → *Process again*. |
 | **First upload from someone** | The first file a person ever uploads (handy to know a new link works). |
 | **Morning summary** | On days with an event, at the *morning summary* time (08:00): per event the vMix PC status, who has files in their set and how many, who has none yet, what waits for approval and what failed. |
@@ -127,7 +127,7 @@ Vitrine can tell your team when something needs them, by **Telegram** and/or **e
 
 Each organization chooses which of these it wants on **Organization → Alerts to the team**.
 
-**Approving from Telegram**: anyone in the linked chat can press Approve or Reject; the message then shows *✅ Approved by Ana* (or *❌ Rejected by …*) and its buttons go away, so the others see it was handled. Presses from any other chat are refused. The scheduler reads the presses every few seconds (with `getUpdates`, so no webhook and nothing reachable from outside is needed); without the scheduler running, the buttons don't react.
+**Approving from Telegram**: anyone in the linked chat can press Approve or Reject (uploads) or Allow or Refuse (screen control); the message then shows *✅ Approved by Ana* (or *❌ Rejected by …*) and its buttons go away, so the others see it was handled. Presses from any other chat are refused. The scheduler reads the presses every few seconds (with `getUpdates`, so no webhook and nothing reachable from outside is needed); without the scheduler running, the buttons don't react.
 
 Everything is set up in the web interface; nothing has to go into the stack.
 
