@@ -1359,3 +1359,97 @@ class MoreAlertsTests(TestCase):
         self.assertIn("No files yet: Tom", texts[0])
         self.assertIn("1 waiting for approval", texts[0])
         self.assertIn("offline", texts[0])  # the vMix PC was never seen
+
+
+class ClipTests(TestCase):
+    """Mark in / mark out per set entry: the same video can be in a set several times."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        org = Organization.objects.create(name="Main")
+        self.agent, self.token = Agent.create_with_token("Hall PC")
+        self.location = Location.objects.create(organization=org, name="Hall", agent=self.agent)
+        self.event = Service.objects.create(name="Sunday", location=self.location)
+        self.guest = make_guest(self.event, "Maria")
+        self.video = MediaAsset.objects.create(owner_name="Maria", organization=org, uploaded_by=self.guest.person,
+                                               original_name="testimony.mp4", kind="video", status="ready",
+                                               approval="approved", duration_ms=300000, sha256="v")
+        self.photo = MediaAsset.objects.create(owner_name="Maria", organization=org, original_name="a.jpg", kind="photo",
+                                               status="ready", approval="approved", sha256="p")
+        self.set = self.guest.get_set()
+        self.set.add_asset(self.video)
+        self.set.add_asset(self.photo)
+        self.api = f"/g/{self.guest.person.token}/api/"
+        enter_pin(self.client, self.guest)
+
+    def post(self, path, body):
+        return self.client.post(self.api + path + f"?e={self.event.pk}", json.dumps(body), content_type="application/json")
+
+    def entries(self):
+        return self.client.get(self.api + f"state?e={self.event.pk}").json()["set"]
+
+    def test_two_clips_of_one_video(self):
+        first = self.entries()[0]
+        self.assertIsNone(first["clip"])
+        # Trim this entry, then add a second part of the same video right after it.
+        self.post("set/clip", {"mode": "update", "item_id": first["item_id"], "in_ms": 72000, "out_ms": 160000,
+                               "label": "Baptism", "at_end": "hold"})
+        self.post("set/clip", {"mode": "new", "item_id": first["item_id"], "in_ms": 200000, "out_ms": None,
+                               "label": "Prayer", "at_end": "fade"})
+        entries = self.entries()
+        self.assertEqual([(e["id"], e["clip"] and e["clip"]["label"]) for e in entries],
+                         [(self.video.pk, "Baptism"), (self.video.pk, "Prayer"), (self.photo.pk, None)])
+        self.assertEqual(entries[0]["clip"], {"in_ms": 72000, "out_ms": 160000, "label": "Baptism", "at_end": "hold"})
+        self.assertEqual(entries[1]["clip"]["out_ms"], 0)  # to the end
+
+        # Wrong marks are refused with a reason.
+        bad = self.post("set/clip", {"mode": "update", "item_id": first["item_id"], "in_ms": 5000, "out_ms": 5200})
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("at least a second", bad.json()["error"])
+        photo = entries[2]
+        self.assertEqual(self.post("set/clip", {"mode": "update", "item_id": photo["item_id"], "in_ms": 1000}).status_code, 400)
+
+        # Order and remove work per entry; Undo puts the clip back with its marks.
+        ids = [e["item_id"] for e in entries]
+        self.post("set/order", {"item_ids": [ids[2], ids[1], ids[0]]})
+        self.assertEqual([e["item_id"] for e in self.entries()], [ids[2], ids[1], ids[0]])
+        self.post("set/remove", {"item_id": ids[1]})
+        self.assertEqual(len(self.entries()), 2)
+        self.post("set/clip", {"mode": "restore", "asset_id": self.video.pk, "position": 1, "in_ms": 200000,
+                               "out_ms": None, "label": "Prayer", "at_end": "fade"})
+        labels = [e["clip"] and e["clip"]["label"] for e in self.entries()]
+        self.assertEqual(sorted(filter(None, labels)), ["Baptism", "Prayer"])
+
+        # "Add to my set" doesn't add the video a third time; the whole video again clears the marks.
+        self.post("set/add", {"asset_ids": [self.video.pk]})
+        self.assertEqual(len(self.entries()), 3)
+        baptism = [e for e in self.entries() if e["clip"] and e["clip"]["label"] == "Baptism"][0]
+        self.post("set/clip", {"mode": "clear", "item_id": baptism["item_id"]})
+        self.assertIsNone([e for e in self.entries() if e["item_id"] == baptism["item_id"]][0]["clip"])
+
+    def test_manifest_and_back_tablet(self):
+        item = self.set.items.get(asset=self.video)
+        auth = {"HTTP_AUTHORIZATION": f"Bearer {self.token}"}
+        response = self.client.post("/api/agent/clips", json.dumps({
+            "set_id": self.set.pk, "item_id": item.pk, "mode": "new", "in_ms": 10000, "out_ms": 20000,
+            "label": "Part 2", "at_end": "fade", "by": "Back tablet"}), content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 200, response.content)
+        manifest = self.client.get("/api/agent/manifest", **auth).json()
+        sets = [s for s in manifest["sets"] if s["id"] == self.set.pk][0]
+        self.assertEqual(sets["items"], [self.video.pk, self.photo.pk])  # each file once (older agents)
+        self.assertEqual([(e["asset_id"], e.get("clip", False), e.get("label")) for e in sets["entries"]],
+                         [(self.video.pk, False, None), (self.video.pk, True, "Part 2"), (self.photo.pk, False, None)])
+        clip = sets["entries"][1]
+        self.assertEqual((clip["in_ms"], clip["out_ms"], clip["at_end"]), (10000, 20000, "fade"))
+        # Another location's agent can't touch this set.
+        other, other_token = Agent.create_with_token("Other PC")
+        Location.objects.create(organization=self.location.organization, name="Other", agent=other)
+        refused = self.client.post("/api/agent/clips", json.dumps({"set_id": self.set.pk, "item_id": item.pk, "mode": "delete"}),
+                                   content_type="application/json", HTTP_AUTHORIZATION=f"Bearer {other_token}")
+        self.assertEqual(refused.status_code, 404)
+        deleted = self.client.post("/api/agent/clips", json.dumps({"set_id": self.set.pk, "item_id": clip["id"], "mode": "delete"}),
+                                   content_type="application/json", **auth)
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(self.set.items.count(), 2)

@@ -189,3 +189,52 @@ func TestVideoSoundFollowsTheMix(t *testing.T) {
 		t.Fatal("with video_audio off Vitrine must not switch sound on")
 	}
 }
+
+func TestClipStopsAtMarkOut(t *testing.T) {
+	e, fake := setup(t)
+	fake.VideoDurationMs = 60000
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.Run(ctx)
+
+	// Hold: starts at the mark in, pauses on the mark out.
+	if err := e.TakeClip(2, 0, Clip{EntryID: 7, Clip: true, InMs: 5000, OutMs: 7000, AtEnd: "hold"}); err != nil {
+		t.Fatal(err)
+	}
+	if pos := fake.Position("GM_A"); pos < 5000 || pos > 5600 {
+		t.Fatalf("a clip should start at its mark in, at %d", pos)
+	}
+	if st := e.Status(); st.EntryID != 7 || !st.Clip || st.InMs != 5000 || st.OutMs != 7000 {
+		t.Fatalf("live should tell which clip is on: %+v", st.Live)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && !e.Status().Paused {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !e.Status().Paused || fake.Active(2) != "GM_A" {
+		t.Fatalf("at the mark out a holding clip pauses on screen (paused=%v, mix=%q)", e.Status().Paused, fake.Active(2))
+	}
+	if pos := fake.Position("GM_A"); pos < 6800 || pos > 7300 {
+		t.Fatalf("it should stop close to the mark out (7000), stopped at %d", pos)
+	}
+
+	// Seeking stays inside the clip.
+	if err := e.Seek(1000); err != nil {
+		t.Fatal(err)
+	}
+	if pos := e.Status().PositionMs; pos < 5000 {
+		t.Fatalf("seek before the mark in should go to the mark in, got %d", pos)
+	}
+
+	// Fade: back to the default input at the mark out.
+	if err := e.TakeClip(2, 0, Clip{EntryID: 8, Clip: true, InMs: 10000, OutMs: 11500, AtEnd: "fade"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && fake.Active(2) != "Banner Sunday" {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if fake.Active(2) != "Banner Sunday" || e.Status().AssetID != 0 {
+		t.Fatalf("a fading clip should return to the default input (mix=%q)", fake.Active(2))
+	}
+}

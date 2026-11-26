@@ -79,6 +79,7 @@ func New(cfg *config.Config) (*App, error) {
 		Restart:      a.Restart,
 		AddMarker:    a.addMarker,
 		DeleteMarker: a.deleteMarker,
+		SaveClip:     a.saveClip,
 	}
 	var lastCatalog atomic.Int64
 	a.Syncer.OnChanged = func() {
@@ -369,6 +370,21 @@ func (a *App) deleteMarker(id int64) error {
 	})
 	a.Web.BroadcastCatalog()
 	a.requestRefresh()
+	return nil
+}
+
+// saveClip sends a clip made on the back tablet to the server and reloads the sets, so every
+// tablet shows it. Needs the server to be reachable (the set lives there).
+func (a *App) saveClip(edit web.ClipEdit) error {
+	if !a.online.Load() {
+		return errors.New("clips can only be changed while the server is connected")
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, 10*time.Second)
+	defer cancel()
+	if err := a.API.Clip(ctx, edit); err != nil {
+		return err
+	}
+	a.fetchManifest(a.ctx)
 	return nil
 }
 

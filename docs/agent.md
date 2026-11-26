@@ -76,7 +76,7 @@ The module lives in its own repo, [silvansan/companion-module-vitrine](https://g
 2. In Companion, import the module's `.tgz` (**Modules → Import module package**), add a **Vitrine** connection with the agent address, port 8090 and the key.
 3. If Companion runs on another PC, the agent must listen on the LAN (`"listen": "0.0.0.0:8090"` under Connection settings; the installer's firewall rule already allows port 8090).
 
-A key acts like a back tablet. It is sent as `Authorization: Bearer vik_…` or, for the WebSocket, as `/ws?key=vik_…`. Besides the tablet endpoints, integrations can address files by number: `POST /api/take {"guest": 2, "file": 3, "from": "start"|"resume"}` (1-based, in tablet order, counting only files on this PC) and `POST /api/pulpit {"guest": 2}`.
+A key acts like a back tablet. It is sent as `Authorization: Bearer vik_…` or, for the WebSocket, as `/ws?key=vik_…`. Besides the tablet endpoints, integrations can address files by number: `POST /api/take {"guest": 2, "file": 3, "from": "start"|"resume"}` (1-based, in tablet order, counting only files on this PC; a clip counts as its own file and plays from its mark in to its mark out) and `POST /api/pulpit {"guest": 2}`.
 
 ## Files on disk
 

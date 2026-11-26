@@ -78,13 +78,15 @@ type LocalFile struct {
 }
 
 type State struct {
-	Manifest    *model.Manifest      `json:"manifest"`
-	Settings    Settings             `json:"settings"`
-	Screens     map[string]*Screen   `json:"screens"`
-	Positions   map[int64]int        `json:"positions"`
-	Files       map[int64]*LocalFile `json:"files"`
-	AgentSecret string               `json:"agent_secret"`
-	UsedNonces  map[string]time.Time `json:"used_nonces"`
+	Manifest  *model.Manifest    `json:"manifest"`
+	Settings  Settings           `json:"settings"`
+	Screens   map[string]*Screen `json:"screens"`
+	Positions map[int64]int      `json:"positions"`
+	// Where each clip (set entry id) was stopped, as a position in the video.
+	ClipPositions map[int64]int        `json:"clip_positions"`
+	Files         map[int64]*LocalFile `json:"files"`
+	AgentSecret   string               `json:"agent_secret"`
+	UsedNonces    map[string]time.Time `json:"used_nonces"`
 	// Guests the back tablet gave control of the projector, by set id, until a time.
 	// They can show their own set's files from their phone (relayed by the server).
 	Controls map[int64]time.Time `json:"controls"`
@@ -148,6 +150,9 @@ func Open(dataDir string) (*Store, error) {
 	st := &s.state
 	if st.Screens == nil {
 		st.Screens = map[string]*Screen{}
+	}
+	if st.ClipPositions == nil {
+		st.ClipPositions = map[int64]int{}
 	}
 	if st.Positions == nil {
 		st.Positions = map[int64]int{}

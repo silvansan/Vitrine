@@ -62,17 +62,25 @@ def build_manifest(agent):
     asset_ids = set()
     for media_set in sets:
         playable = []
+        entries = []
         for item in media_set.items.all():
             if item.asset.is_playable:
-                playable.append(item.asset_id)
+                if item.asset_id not in playable:
+                    playable.append(item.asset_id)
                 asset_ids.add(item.asset_id)
+                entry = {"id": item.pk, "asset_id": item.asset_id}
+                if item.is_clip:
+                    entry.update(item.clip_json(), clip=True)
+                entries.append(entry)
         set_entries.append(
             {
                 "id": media_set.pk,
                 "service_id": media_set.service_id,
                 "title": media_set.title,
                 "guest": media_set.guest.person.name if media_set.guest else media_set.title,
+                # Files once each (agents before 0.1.20), then every entry with its clip marks.
                 "items": playable,
+                "entries": entries,
             }
         )
 

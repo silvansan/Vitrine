@@ -552,19 +552,81 @@ class MediaSet(models.Model):
         return f"{self.title} ({self.service.name})"
 
     def asset_ids(self):
-        return list(self.items.order_by("position", "id").values_list("asset_id", flat=True))
+        """The files in the set, in order (a file with several clips is listed once)."""
+        out = []
+        for asset_id in self.items.order_by("position", "id").values_list("asset_id", flat=True):
+            if asset_id not in out:
+                out.append(asset_id)
+        return out
+
+    def next_position(self):
+        last = self.items.order_by("-position").first()
+        return (last.position + 1) if last else 0
+
+    def add_asset(self, asset, position=None):
+        """Put a file at the end of the set, unless it is already in it (as itself or as a clip)."""
+        if self.items.filter(asset=asset).exists():
+            return None
+        return SetItem.objects.create(
+            media_set=self, asset=asset, position=self.next_position() if position is None else position
+        )
 
 
 class SetItem(models.Model):
+    """One entry of a set: a file, or a clip of a video (mark in / mark out). The same video can be
+    in a set several times, once per clip."""
+
+    AT_END_HOLD = "hold"
+    AT_END_FADE = "fade"
+    AT_END_CHOICES = [(AT_END_HOLD, "Hold the last frame"), (AT_END_FADE, "Fade to the background")]
+
     media_set = models.ForeignKey(MediaSet, on_delete=models.CASCADE, related_name="items")
     asset = models.ForeignKey(MediaAsset, on_delete=models.CASCADE, related_name="set_items")
     position = models.PositiveIntegerField(default=0)
+    in_ms = models.PositiveIntegerField(null=True, blank=True, help_text="Mark in: the clip starts here.")
+    out_ms = models.PositiveIntegerField(null=True, blank=True, help_text="Mark out: the clip stops here.")
+    label = models.CharField(max_length=60, blank=True, help_text="Name of the clip, e.g. 'Baptism'.")
+    at_end = models.CharField(max_length=5, choices=AT_END_CHOICES, default=AT_END_HOLD,
+                              help_text="At the mark out.")
 
     class Meta:
         ordering = ["position", "id"]
-        constraints = [
-            models.UniqueConstraint(fields=["media_set", "asset"], name="asset_once_per_set"),
-        ]
+
+    @property
+    def is_clip(self):
+        return self.in_ms is not None or self.out_ms is not None
+
+    def clip_json(self):
+        if not self.is_clip:
+            return None
+        return {"in_ms": self.in_ms or 0, "out_ms": self.out_ms or 0, "label": self.label, "at_end": self.at_end}
+
+    def set_clip(self, in_ms, out_ms, label="", at_end=AT_END_HOLD):
+        """Store a mark in / mark out. None for both (and no name) makes it the whole file again.
+        Raises ValueError for a clip that can't work."""
+        duration = self.asset.duration_ms or 0
+
+        def clean(value):
+            if value in (None, ""):
+                return None
+            value = max(0, int(value))
+            return min(value, duration) if duration else value
+
+        in_ms, out_ms = clean(in_ms), clean(out_ms)
+        label = (label or "").strip()[:60]
+        if out_ms is not None and duration and out_ms >= duration - 200:
+            out_ms = None  # to the end
+        if in_ms is None and (out_ms is not None or label):
+            in_ms = 0
+        if in_ms is not None and not self.asset.is_timed:
+            raise ValueError("Only videos and audio can have a mark in / mark out.")
+        if in_ms is not None and out_ms is not None and out_ms - in_ms < 1000:
+            raise ValueError("The mark out has to be at least a second after the mark in.")
+        if in_ms is not None and duration and in_ms > duration - 1000:
+            raise ValueError("The mark in is too close to the end of the video.")
+        self.in_ms, self.out_ms = in_ms, out_ms
+        self.label = label if in_ms is not None else ""
+        self.at_end = at_end if at_end in (self.AT_END_HOLD, self.AT_END_FADE) else self.AT_END_HOLD
 
 
 class Marker(models.Model):

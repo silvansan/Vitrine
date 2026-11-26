@@ -171,3 +171,19 @@ body.viewer-open{overflow:hidden}
 .pick-heart svg{width:20px;height:20px}
 .pick.in{opacity:.75;cursor:default}
 .pick .in-set{position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:8px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:700}
+/* Clips (mark in / mark out) */
+.meta .clip-tag{display:inline-block;align-self:flex-start;font-size:12px;font-weight:600;color:#1F5FBF;background:rgba(31,95,191,.09);border-radius:6px;padding:2px 7px;margin-top:2px}
+.set-item.is-clip{border-left:3px solid #1F5FBF}
+.clip-editor{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(127,127,127,.04)}
+.clip-title{font-weight:700}
+.clip-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.clip-row label{display:flex;align-items:center;gap:8px}
+.clip-row label span{min-width:62px;color:var(--subtle)}
+.clip-editor input,.clip-editor select{min-height:40px;border:1px solid #D3D8E0;border-radius:8px;padding:0 10px;min-width:0;background:#fff;font:inherit}
+.clip-editor input[name=label]{flex:1;min-width:180px}
+.clip-editor select{flex:1;min-width:200px}
+.clip-editor .small-btn{min-height:40px;padding:0 12px;border-radius:8px;border:1px solid #D3D8E0;background:#fff;font-weight:600;cursor:pointer}
+.clip-editor .clip-save{background:var(--accent);color:#fff;border-color:var(--accent)}
+.clip-editor .marker{padding:4px 10px;cursor:pointer;font:inherit;font-size:13px}
+.clip-error{color:#C4352D;font-size:13px}
+.clip-error:empty{display:none}

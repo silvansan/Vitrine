@@ -18,6 +18,7 @@ urlpatterns = [
     path("g/<str:token>/api/set/copy", guest_views.api_set_copy, name="guest-set-copy"),
     path("g/<str:token>/api/set/remove", guest_views.api_set_remove, name="guest-set-remove"),
     path("g/<str:token>/api/set/order", guest_views.api_set_order, name="guest-set-order"),
+    path("g/<str:token>/api/set/clip", guest_views.api_set_clip, name="guest-set-clip"),
     path("g/<str:token>/api/markers/add", guest_views.api_marker_add, name="guest-marker-add"),
     path("g/<str:token>/api/markers/delete", guest_views.api_marker_delete, name="guest-marker-delete"),
     path("g/<str:token>/api/private", guest_views.api_private, name="guest-private"),
@@ -30,6 +31,7 @@ urlpatterns = [
     path("api/agent/heartbeat", agent_api.heartbeat, name="agent-heartbeat"),
     path("api/agent/pairing", agent_api.pairing, name="agent-pairing"),
     path("api/agent/markers", agent_api.markers, name="agent-markers"),
+    path("api/agent/clips", agent_api.clips, name="agent-clips"),
     path("api/agent/files/<int:asset_id>/<str:variant>", agent_api.file, name="agent-file"),
     # Staff backend
     path("manage/", manage_views.dashboard, name="manage-dashboard"),

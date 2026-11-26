@@ -55,6 +55,7 @@ type RemoteCommand struct {
 	Action     string `json:"action"` // take, clear, pause, play, seek, stop_audio
 	SetID      int64  `json:"set_id"`
 	AssetID    int64  `json:"asset_id"`
+	EntryID    int64  `json:"entry_id"` // the tile in their set (a clip has marks)
 	StartMs    int    `json:"start_ms"`
 	PositionMs int    `json:"position_ms"`
 	By         string `json:"by"`
@@ -227,11 +228,17 @@ func (s *Server) ExecuteRemote(raw json.RawMessage) error {
 		if !inSet(cmd.AssetID) {
 			return errors.New("that file isn't in your set")
 		}
+		if cmd.EntryID != 0 {
+			if e := set.Entry(cmd.EntryID); e == nil || e.AssetID != cmd.AssetID {
+				return errors.New("that clip isn't in your set")
+			}
+		}
 		if _, ok := s.Engine.Resolve(cmd.AssetID); !ok {
 			return errors.New("that file is still being copied to the vMix PC; try again in a minute")
 		}
 		s.Notice(fmt.Sprintf("%s (phone) put %s on screen", who, name(cmd.AssetID)))
-		go func() { _ = s.Engine.Take(cmd.AssetID, cmd.StartMs) }()
+		clip := s.clipFor(cmd.AssetID, cmd.EntryID)
+		go func() { _ = s.Engine.TakeClip(cmd.AssetID, cmd.StartMs, clip) }()
 	case "clear":
 		if !liveIsTheirs {
 			return errors.New("nothing of yours is on screen")

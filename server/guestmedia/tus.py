@@ -202,12 +202,7 @@ def staff_resource(request, upload_id):
 
 
 def _add_to_set(media_set, asset):
-    last = media_set.items.order_by("-position").first()
-    SetItem.objects.get_or_create(
-        media_set=media_set,
-        asset=asset,
-        defaults={"position": (last.position + 1) if last else 0},
-    )
+    media_set.add_asset(asset)
 
 
 def import_collection(request):

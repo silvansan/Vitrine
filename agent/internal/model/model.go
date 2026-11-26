@@ -43,7 +43,43 @@ type Set struct {
 	ServiceID int64   `json:"service_id"`
 	Title     string  `json:"title"`
 	Guest     string  `json:"guest"`
-	Items     []int64 `json:"items"`
+	Items     []int64 `json:"items"` // each file once
+	// Every entry in order, with clip marks (server 0.1.20+). A video can be in it several
+	// times, once per clip. Empty from older servers: use List.
+	Entries []Entry `json:"entries"`
+}
+
+// Entry is one tile of a set: a file, or a clip of a video (mark in → mark out).
+type Entry struct {
+	ID      int64  `json:"id"` // the server's set item; 0 from older servers
+	AssetID int64  `json:"asset_id"`
+	Clip    bool   `json:"clip"`
+	InMs    int    `json:"in_ms"`
+	OutMs   int    `json:"out_ms"` // 0: to the end
+	Label   string `json:"label"`
+	AtEnd   string `json:"at_end"` // at the mark out: "hold" (last frame) or "fade" (to the default input)
+}
+
+// List returns the set's entries in order (built from Items for older servers).
+func (s Set) List() []Entry {
+	if len(s.Entries) > 0 {
+		return s.Entries
+	}
+	out := make([]Entry, 0, len(s.Items))
+	for _, id := range s.Items {
+		out = append(out, Entry{AssetID: id})
+	}
+	return out
+}
+
+// Entry returns the set entry with the given id, or nil.
+func (s Set) Entry(id int64) *Entry {
+	for i := range s.Entries {
+		if s.Entries[i].ID == id {
+			return &s.Entries[i]
+		}
+	}
+	return nil
 }
 
 type Marker struct {
@@ -79,6 +115,19 @@ func (a Asset) IsVideo() bool { return a.Kind == "video" }
 
 // IsTimed reports whether the asset plays over time (video or audio).
 func (a Asset) IsTimed() bool { return a.Kind == "video" || a.Kind == "audio" }
+
+// FindEntry looks for a set entry by id in all sets.
+func (m *Manifest) FindEntry(id int64) (*Set, *Entry) {
+	if m == nil || id == 0 {
+		return nil, nil
+	}
+	for i := range m.Sets {
+		if e := m.Sets[i].Entry(id); e != nil {
+			return &m.Sets[i], e
+		}
+	}
+	return nil, nil
+}
 
 // Service returns the service with the given id, or nil.
 func (m *Manifest) Service(id int64) *Service {

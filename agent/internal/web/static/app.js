@@ -69,6 +69,37 @@
   function asset(id) { return S.boot && S.boot.assets ? S.boot.assets[String(id)] : null; }
   function setById(id) { return sets().filter(function (s) { return s.id === id; })[0] || null; }
   function positions() { return (S.status && S.status.positions) || {}; }
+  function clipPositions() { return (S.status && S.status.clip_positions) || {}; }
+
+  /* A tile is a set entry: a file, or a clip of a video (mark in → mark out). */
+  function entriesOf(set) {
+    if (set.entries && set.entries.length) return set.entries;
+    return (set.items || []).map(function (id) { return { id: 0, asset_id: id }; });
+  }
+  function isClip(t) { return !!(t && t.entry && t.entry.clip); }
+  function tileKey(t) { return isClip(t) ? 'c' + t.entry.id : 'a' + t.id; }
+  function clipEntry(entryId) {
+    if (!entryId) return null;
+    var found = null;
+    sets().forEach(function (set) {
+      entriesOf(set).forEach(function (e) { if (e.id === entryId) found = e; });
+    });
+    return found;
+  }
+  // Start and length of what a tile plays (the whole file, or the clip).
+  function span(t) {
+    var a = asset(t.id) || {};
+    if (!isClip(t)) return { start: 0, length: a.duration_ms || 0 };
+    var end = t.entry.out_ms || a.duration_ms || 0;
+    return { start: t.entry.in_ms || 0, length: Math.max(0, end - (t.entry.in_ms || 0)) };
+  }
+  function savedFor(t) {
+    return isClip(t) ? clipPositions()[String(t.entry.id)] : positions()[String(t.id)];
+  }
+  function clipText(entry) {
+    var range = fmt(entry.in_ms || 0) + '–' + (entry.out_ms ? fmt(entry.out_ms) : 'end');
+    return (entry.label ? entry.label + ' · ' : 'Clip · ') + range;
+  }
   function settings() { return (S.boot && S.boot.settings) || {}; }
   function pulpits() { return S.screens.filter(function (s) { return s.role === 'pulpit'; }); }
 
@@ -102,20 +133,22 @@
   }
 
   function itemsBack() {
-    var ids = [];
+    var out = [];
     var seen = {};
     sets().forEach(function (set) {
       if (ui.set !== 'all' && set.id !== ui.set) return;
-      set.items.forEach(function (id) {
-        if (!seen[id] && asset(id)) { seen[id] = true; ids.push({ id: id, set: set }); }
+      entriesOf(set).forEach(function (e) {
+        var t = { id: e.asset_id, set: set, entry: e };
+        var key = tileKey(t);
+        if (!seen[key] && asset(e.asset_id)) { seen[key] = true; out.push(t); }
       });
     });
-    return ids;
+    return out;
   }
   function itemsPulpit() {
     var set = pulpitSet();
     if (!set) return [];
-    return set.items.filter(function (id) { return asset(id); }).map(function (id) { return { id: id, set: set }; });
+    return entriesOf(set).filter(function (e) { return asset(e.asset_id); }).map(function (e) { return { id: e.asset_id, set: set, entry: e }; });
   }
 
   function theme() {
@@ -178,10 +211,15 @@
     var e = eng();
     var au = audioState();
     if (e.asset_id && isTimedKind(e.kind)) {
-      return { id: e.asset_id, position_ms: e.position_ms, duration_ms: e.duration_ms, paused: e.paused, jumping: e.jumping, audioOnly: false };
+      // A clip counts from its mark in; abs_ms is the position in the file.
+      var start = e.clip ? e.in_ms || 0 : 0;
+      var end = e.clip && e.out_ms ? e.out_ms : e.duration_ms;
+      return { id: e.asset_id, entry: e.clip ? clipEntry(e.entry_id) : null, start: start, abs_ms: e.position_ms,
+        position_ms: Math.max(0, (e.position_ms || 0) - start), duration_ms: Math.max(0, (end || 0) - start),
+        paused: e.paused, jumping: e.jumping, audioOnly: false };
     }
     if (au.asset_id) {
-      return { id: au.asset_id, position_ms: au.position_ms, duration_ms: au.duration_ms, paused: au.paused, jumping: false, audioOnly: true };
+      return { id: au.asset_id, start: 0, abs_ms: au.position_ms, position_ms: au.position_ms, duration_ms: au.duration_ms, paused: au.paused, jumping: false, audioOnly: true };
     }
     return null;
   }
@@ -189,7 +227,7 @@
   function liveKey() {
     var e = eng();
     var au = audioState();
-    return [e.asset_id, e.pending_id, e.paused, e.jumping, e.error, e.vmix_ok, e.default_ok, e.mix, au.asset_id, au.pending_id, au.paused, S.status && S.status.server_online,
+    return [e.asset_id, e.pending_id, e.entry_id, e.pending_entry, e.paused, e.jumping, e.error, e.vmix_ok, e.default_ok, e.mix, au.asset_id, au.pending_id, au.paused, S.status && S.status.server_online,
       JSON.stringify((S.status && S.status.controls || []).map(function (c) { return c.set_id; })),
       JSON.stringify((S.status && S.status.requests || []).map(function (c) { return c.set_id; }))].join('|');
   }
@@ -228,11 +266,15 @@
 
   /* ---------- rendering ---------- */
 
-  function tileState(id) {
+  // A clip tile is live when that clip is on screen; a file tile when the file is (not one of its clips).
+  function tileState(t) {
     var e = eng();
     var au = audioState();
-    if (e.pending_id === id || au.pending_id === id) return 'pending';
-    if (e.asset_id === id || au.asset_id === id) return 'live';
+    var pendClip = clipEntry(e.pending_entry);
+    if (isClip(t) ? (pendClip && pendClip.id === t.entry.id) : (e.pending_id === t.id && !(pendClip && pendClip.clip))) return 'pending';
+    if (au.pending_id === t.id) return 'pending';
+    if (isClip(t) ? (e.clip && e.entry_id === t.entry.id) : (e.asset_id === t.id && !e.clip)) return 'live';
+    if (au.asset_id === t.id) return 'live';
     return '';
   }
 
@@ -244,20 +286,24 @@
 
   function renderTile(entry, index) {
     var a = asset(entry.id);
-    var state = tileState(entry.id);
+    var state = tileState(entry);
     var video = isTimedKind(a.kind);
     var sound = a.kind === 'audio';
     var audioOnly = sound && audioState().asset_id === entry.id;
     var back = isBack();
-    var saved = positions()[String(entry.id)];
-    var classes = 'tile' + (state ? ' ' + state : '') + (a.ready ? '' : ' notready');
-    var label = (state === 'live' ? 'Take off ' : 'Show ') + a.name;
+    var clip = isClip(entry);
+    var saved = savedFor(entry);
+    var length = span(entry).length;
+    var ent = entry.entry && entry.entry.id ? ' data-entry="' + entry.entry.id + '"' : '';
+    var classes = 'tile' + (state ? ' ' + state : '') + (a.ready ? '' : ' notready') + (clip ? ' clip' : '');
+    var label = (state === 'live' ? 'Take off ' : 'Show ') + a.name + (clip ? ' (' + clipText(entry.entry) + ')' : '');
     var html = '<div class="' + classes + '">';
-    html += '<button type="button" class="thumb" data-act="tap" data-id="' + entry.id + '" aria-pressed="' + (state === 'live') + '" aria-label="' + h(label) + '">';
+    html += '<button type="button" class="thumb" data-act="tap" data-id="' + entry.id + '"' + ent + ' aria-pressed="' + (state === 'live') + '" aria-label="' + h(label) + '">';
     html += a.thumb ? '<img src="' + h(a.thumb) + '" alt="" draggable="false" loading="lazy">' : (sound ? ICON.note : video ? ICON.video : ICON.photo);
     if (!back) html += '<span class="ov ov-num">' + (index + 1) + '</span>';
     if (!a.ready) html += '<span class="ov ov-wait">Downloading…</span>';
-    if (video && state !== 'live') html += '<span class="ov ov-dur">' + fmt(a.duration_ms) + '</span>';
+    if (video && state !== 'live') html += '<span class="ov ov-dur">' + fmt(length) + '</span>';
+    if (clip && !state) html += '<span class="ov ov-clip">' + h(clipText(entry.entry)) + '</span>';
     if (state === 'pending') html += '<span class="ov ov-tag pend"><span class="d"></span>SENDING…</span>';
     if (state === 'live') {
       if (audioOnly) html += '<span class="ov ov-tag live"><span class="d"></span>' + (back ? 'PLAYING · AUDIO' : 'PLAYING') + '</span>';
@@ -276,8 +322,9 @@
       html += '</div>';
       if (video) {
         html += '<div class="row" style="flex-shrink:0;gap:6px">';
-        if (saved && state !== 'live') html += '<button type="button" class="small-btn" data-act="resume" data-id="' + entry.id + '">' + ICON.play + ' Resume ' + fmt(saved) + '</button>';
-        if (opts().video_seek) html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '" aria-label="Cue ' + h(a.name) + '">' + ICON.more + '</button>';
+        if (saved && state !== 'live') html += '<button type="button" class="small-btn" data-act="resume" data-id="' + entry.id + '"' + ent + '>' + ICON.play + ' Resume ' + fmt(saved - span(entry).start) + '</button>';
+        // The cue panel is also where clips are made (mark in / mark out).
+        html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '"' + ent + ' aria-label="Cue or clip ' + h(a.name) + '">' + ICON.more + '</button>';
         html += '</div>';
       } else {
         html += '<span class="badge">Photo</span>';
@@ -286,10 +333,10 @@
     } else if (!video) {
       html += '<div class="strip"><span class="t">Photo</span></div>';
     } else {
-      html += '<div class="strip"><span class="t">' + (sound ? 'Audio' : 'Video') + ' · ' + fmt(a.duration_ms) + '</span>';
+      html += '<div class="strip"><span class="t">' + (clip ? h(entry.entry.label || 'Clip') : sound ? 'Audio' : 'Video') + ' · ' + fmt(length) + '</span>';
       html += '<span class="row" style="gap:6px">';
-      if (saved && state !== 'live') html += '<button type="button" class="small-btn" data-act="resume" data-id="' + entry.id + '">' + ICON.play + ' Resume ' + fmt(saved) + '</button>';
-      if (opts().video_seek) html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '" aria-label="Cue ' + h(a.name) + '">' + ICON.more + '</button>';
+      if (saved && state !== 'live') html += '<button type="button" class="small-btn" data-act="resume" data-id="' + entry.id + '"' + ent + '>' + ICON.play + ' Resume ' + fmt(saved - span(entry).start) + '</button>';
+      if (opts().video_seek) html += '<button type="button" class="small-btn sq" data-act="cue" data-id="' + entry.id + '"' + ent + ' aria-label="Cue ' + h(a.name) + '">' + ICON.more + '</button>';
       html += '</span></div>';
     }
     html += '</div>';
@@ -301,7 +348,7 @@
   function renderGrid(list, emptyText) {
     var l = layout();
     var rows = Math.min(l.rows, ui.fitRows || l.rows);
-    ui.gridKey = list.map(function (e) { return e.id; }).join(',') + '|' + perPage();
+    ui.gridKey = list.map(tileKey).join(',') + '|' + perPage();
     if (!list.length) return { html: '<main class="grid empty-grid" id="grid"><div class="empty">' + h(emptyText) + '</div></main>', count: 1 };
     var html = '<main class="grid" id="grid" style="--cols:' + l.cols + ';--rows:' + rows + '"' +
       (perPage() >= 12 ? ' data-dense="more"' : perPage() >= 8 ? ' data-dense="some"' : '') + '>';
@@ -325,12 +372,18 @@
     else html += '<button type="button" class="t-btn' + (isBack() ? ' inv' : '') + '" data-act="pause" aria-label="Pause">' + ICON.pause + (isBack() ? '' : ' Pause') + '</button>';
     if (seek) html += '<button type="button" class="t-btn" data-act="nudge" data-d="10000" aria-label="Forward 10 seconds">+10s</button>';
     if (seek) html += '<button type="button" class="t-btn" data-act="marker-live" aria-label="Add marker here">' + ICON.flag + ' Marker</button>';
-    if (a.markers && a.markers.length) {
+    var inside = (a.markers || []).filter(function (m) {
+      var rel = m.t_ms - (p.start || 0);
+      return rel >= 0 && (!p.duration_ms || rel < p.duration_ms);
+    });
+    if (inside.length) {
       html += '<span class="divider"></span>';
-      a.markers.forEach(function (m) {
-        html += '<button type="button" class="mk-btn" data-act="seek" data-t="' + m.t_ms + '">' + h(m.label) + ' · ' + fmt(m.t_ms) + '</button>';
+      inside.forEach(function (m) {
+        var rel = m.t_ms - (p.start || 0);
+        html += '<button type="button" class="mk-btn" data-act="seek" data-t="' + rel + '">' + h(m.label) + ' · ' + fmt(rel) + '</button>';
       });
     }
+    if (p.entry) html += '<span class="divider"></span><span class="clip-now">' + h(clipText(p.entry)) + (p.entry.out_ms ? (p.entry.at_end === 'fade' ? ' · then fades out' : ' · then holds') : '') + '</span>';
     html += '<div class="progress"><div class="time-row"><span id="prog-time">' + fmt(p.position_ms) + ' / ' + fmt(p.duration_ms || a.duration_ms) + '</span><span id="prog-note">' + h(progressNote()) + '</span></div>';
     html += '<div class="track"><span id="prog-bar" style="width:' + progressPct() + '%"></span></div></div>';
     html += '</div>';
@@ -352,7 +405,8 @@
     var a = asset(e.asset_id);
     var au = asset(audioState().asset_id);
     var sound = au ? ' · \u266A ' + au.name : '';
-    if (a) return { cls: 'live', text: a.name + ' · ' + (isTimedKind(a.kind) ? progressNote() : a.owner) + sound };
+    var pl = playing();
+    if (a) return { cls: 'live', text: a.name + (pl && pl.entry ? ' (' + (pl.entry.label || 'clip') + ')' : '') + ' · ' + (isTimedKind(a.kind) ? progressNote() : a.owner) + sound };
     if (e.asset_id) return { cls: 'live', text: 'A file from another service' + sound };
     if (au) return { cls: 'live', text: '\u266A ' + au.name + ' · ' + progressNote() + ' (default stays on screen)' };
     return { cls: '', text: 'Default · ' + (settings().default_input_title || e.mix_active || 'not set') };
@@ -548,6 +602,11 @@
     html += '<span class="off">Off-air · the projector is unchanged</span><span class="big" id="cue-time">' + fmt(pos) + '</span></div>';
     html += '<div class="cue-track" id="cue-track"><div class="bar"><span id="cue-bar" style="width:' + pct + '%"></span></div>';
     (a.markers || []).forEach(function (m) { html += '<span class="tick" style="left:calc(' + (m.t_ms / dur) * 100 + '% - 1px)"></span>'; });
+    if (ui.cue.in_ms != null) {
+      var inPct = (ui.cue.in_ms / dur) * 100;
+      var outPct = ui.cue.out_ms ? (ui.cue.out_ms / dur) * 100 : 100;
+      html += '<span class="clip-range" style="left:' + inPct + '%;width:' + Math.max(0, outPct - inPct) + '%"></span>';
+    }
     html += '<span class="knob" id="cue-knob" style="left:' + pct + '%"></span></div>';
     if (a.filmstrip_count) {
       html += '<div class="frames">';
@@ -572,10 +631,52 @@
     html += '<button type="button" class="t-btn" data-act="marker-cue">' + ICON.flag + ' Add marker here</button>';
     html += '</div>';
     html += '</div>';
+    html += renderClipBox(a);
     html += '<div class="row end"><button type="button" class="sec-btn" data-act="cue-close">Cancel</button>';
     html += '<button type="button" class="pri-btn" data-act="cue-start">' + ICON.play + ' Start here on ' + (eng().mix > 1 ? 'Mix ' + eng().mix : 'Main') + ' · <span id="cue-start-time">' + fmt(pos) + '</span></button></div>';
     html += '</div></div>';
     return html;
+  }
+
+  /* Clip of this tile (back tablet): mark in / mark out at the cue position, name, and what happens at the end. */
+  function renderClipBox(a) {
+    var t = ui.cue.tile;
+    if (!isBack() || !t || !t.set || !t.entry || !t.entry.id || !isTimedKind(a.kind)) return '';
+    var clip = isClip(t) ? t.entry : null;
+    var c = ui.cue;
+    var html = '<div class="clip-box"><div class="row between"><span class="label">' + (clip ? 'Clip' : 'Make a clip') + ' · ' + h(t.set.guest) + '</span>';
+    html += '<span class="muted">' + (c.in_ms != null ? 'In ' + fmt(c.in_ms) + ' → Out ' + (c.out_ms ? fmt(c.out_ms) : 'end') : 'Play only a part of this video') + '</span></div>';
+    html += '<div class="row"><button type="button" class="t-btn" data-act="clip-in">Mark in here</button>';
+    html += '<button type="button" class="t-btn" data-act="clip-out">Mark out here</button>';
+    html += '<input id="clip-name" class="text-input" maxlength="60" autocomplete="off" placeholder="Name, e.g. Baptism" value="' + h(c.label != null ? c.label : (clip ? clip.label || '' : '')) + '">';
+    var atEnd = c.at_end || (clip ? clip.at_end : '') || 'hold';
+    html += '<select id="clip-end" class="text-input"><option value="hold"' + (atEnd === 'hold' ? ' selected' : '') + '>At the mark out: hold the last frame</option>' +
+      '<option value="fade"' + (atEnd === 'fade' ? ' selected' : '') + '>At the mark out: fade to the default</option></select></div>';
+    html += '<div class="row">';
+    if (c.in_ms != null) {
+      html += '<button type="button" class="pri-btn" data-act="clip-save" data-mode="update">' + (clip ? 'Save clip' : 'Make this tile a clip') + '</button>';
+      html += '<button type="button" class="sec-btn" data-act="clip-save" data-mode="new">Add as another clip</button>';
+    }
+    if (clip) {
+      html += '<button type="button" class="sec-btn" data-act="clip-save" data-mode="clear">Whole video again</button>';
+      html += '<button type="button" class="sec-btn" data-act="clip-save" data-mode="delete">Remove this clip</button>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function saveClip(mode) {
+    var c = ui.cue;
+    var t = c && c.tile;
+    if (!t || !t.set) return;
+    var nameEl = document.getElementById('clip-name');
+    var endEl = document.getElementById('clip-end');
+    if (mode === 'delete' && !confirm('Remove this clip from ' + t.set.guest + '\u2019s set?')) return;
+    var body = { set_id: t.set.id, item_id: t.entry.id, mode: mode, in_ms: c.in_ms, out_ms: c.out_ms || null,
+      label: nameEl ? nameEl.value.trim() : '', at_end: endEl ? endEl.value : 'hold' };
+    post('/api/clips', body).then(function (res) {
+      if (res && res.ok) { ui.cue = null; showToast(mode === 'delete' ? 'Clip removed' : mode === 'clear' ? 'Whole video again' : 'Clip saved'); render(); }
+    });
   }
 
   function updateCue() {
@@ -722,15 +823,25 @@
 
   /* ---------- actions ---------- */
 
-  function tap(id) {
-    var e = eng();
-    var a = asset(id);
+  // The tile the button belongs to (data-id = file, data-entry = set entry).
+  function tileFrom(data) {
+    var id = data.id ? parseInt(data.id, 10) : 0;
+    var entryId = data.entry ? parseInt(data.entry, 10) : 0;
+    var entry = clipEntry(entryId);
+    var t = { id: id, entry: entry && entry.asset_id === id ? entry : { id: entryId, asset_id: id } };
+    sets().forEach(function (set) { entriesOf(set).forEach(function (e) { if (e === t.entry) t.set = set; }); });
+    return t;
+  }
+
+  function tap(t) {
+    var a = asset(t.id);
     if (!a) return;
+    var state = tileState(t);
     var au = audioState();
-    if (au.asset_id === id || au.pending_id === id) { post('/api/audio/stop'); return; }
-    if (e.asset_id === id || e.pending_id === id) { post('/api/clear'); return; }
+    if (state && (au.asset_id === t.id || au.pending_id === t.id)) { post('/api/audio/stop'); return; }
+    if (state) { post('/api/clear'); return; }
     if (!a.ready) { showToast('Still downloading to the vMix PC'); return; }
-    post('/api/take', { asset_id: id, start_ms: 0 });
+    post('/api/take', { asset_id: t.id, entry_id: t.entry.id || 0, start_ms: 0 });
   }
 
   // Full screen hides the browser's address bar and tabs (Android, iPad, desktop).
@@ -909,9 +1020,23 @@
       case 'pair-new-close': ui.pairNew = null; render(); break;
       case 'install': addToHomeScreen(); break;
       case 'install-close': ui.install = false; render(); break;
-      case 'tap': tap(id); break;
-      case 'resume': post('/api/take', { asset_id: id, start_ms: positions()[String(id)] || 0 }); break;
-      case 'cue': ui.cue = { id: id, pos: positions()[String(id)] || 0 }; render(); break;
+      case 'tap': tap(tileFrom(data)); break;
+      case 'resume': {
+        var rt = tileFrom(data);
+        post('/api/take', { asset_id: rt.id, entry_id: rt.entry.id || 0, start_ms: savedFor(rt) || 0 });
+        break;
+      }
+      case 'cue': {
+        var ct = tileFrom(data);
+        var cs = span(ct);
+        ui.cue = { id: ct.id, tile: ct, pos: savedFor(ct) || cs.start, in_ms: isClip(ct) ? ct.entry.in_ms || 0 : null,
+          out_ms: isClip(ct) ? ct.entry.out_ms || null : null };
+        render();
+        break;
+      }
+      case 'clip-in': ui.cue.in_ms = ui.cue.pos; if (ui.cue.out_ms != null && ui.cue.out_ms <= ui.cue.pos) ui.cue.out_ms = null; render(); break;
+      case 'clip-out': ui.cue.out_ms = ui.cue.pos; if (ui.cue.in_ms == null || ui.cue.in_ms >= ui.cue.pos) ui.cue.in_ms = ui.cue.in_ms != null && ui.cue.in_ms < ui.cue.pos ? ui.cue.in_ms : 0; render(); break;
+      case 'clip-save': saveClip(data.mode); break;
       case 'cue-close': ui.cue = null; render(); break;
       case 'cue-close-bg': break;
       case 'cue-set': ui.cue.pos = parseInt(data.t, 10); updateCue(); break;
@@ -921,11 +1046,11 @@
         updateCue();
         break;
       }
-      case 'cue-start': post('/api/take', { asset_id: ui.cue.id, start_ms: ui.cue.pos }); ui.cue = null; render(); break;
+      case 'cue-start': post('/api/take', { asset_id: ui.cue.id, entry_id: (ui.cue.tile && ui.cue.tile.entry.id) || 0, start_ms: ui.cue.pos }); ui.cue = null; render(); break;
       case 'marker-cue': ui.marker = { id: ui.cue.id, t: ui.cue.pos }; render(); break;
       case 'marker-live': {
         var pl = playing();
-        if (pl) { ui.marker = { id: pl.id, t: pl.position_ms || 0 }; render(); }
+        if (pl) { ui.marker = { id: pl.id, t: pl.abs_ms || 0 }; render(); }
         break;
       }
       case 'audio-stop': post('/api/audio/stop'); break;
@@ -936,10 +1061,11 @@
       case 'clear': post('/api/clear'); break;
       case 'pause': post('/api/pause'); break;
       case 'play': post('/api/play'); break;
-      case 'seek': post('/api/seek', { position_ms: parseInt(data.t, 10) }); break;
+      // data-t counts from the start of what plays (a clip's mark in).
+      case 'seek': { var sp = playing(); post('/api/seek', { position_ms: ((sp && sp.start) || 0) + parseInt(data.t, 10) }); break; }
       case 'nudge': {
         var cur = playing();
-        post('/api/seek', { position_ms: Math.max(0, ((cur && cur.position_ms) || 0) + parseInt(data.d, 10)) });
+        post('/api/seek', { position_ms: Math.max(0, ((cur && cur.abs_ms) || 0) + parseInt(data.d, 10)) });
         break;
       }
       case 'page': goToPage(ui.page + parseInt(data.d, 10)); break;
@@ -965,8 +1091,14 @@
     act(el.dataset.act, el.dataset);
   });
 
+  // Keep what is typed in the clip box when the panel redraws.
+  app.addEventListener('input', function (ev) {
+    if (ev.target.id === 'clip-name' && ui.cue) ui.cue.label = ev.target.value;
+  });
+
   app.addEventListener('change', function (ev) {
     if (ev.target.tagName === 'SELECT') ev.target.blur(); // let the redraw happen (see render)
+    if (ev.target.id === 'clip-end' && ui.cue) { ui.cue.at_end = ev.target.value; return; }
     var el = ev.target;
     var kind = el.dataset.change;
     if (!kind) return;

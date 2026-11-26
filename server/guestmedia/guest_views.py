@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import F
 from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -200,7 +201,16 @@ def api_state(request, token):
         a.pk: a
         for a in MediaAsset.objects.filter(pk__in=in_set).select_related("service", "organization").prefetch_related("markers")
     }
-    my_set = [asset_for_guest(set_assets[i], guest) for i in in_set if i in set_assets and set_assets[i].visible_to(person)]
+    # One entry per set item: a file, or a clip of a video (the same video can come several times).
+    my_set = []
+    for item in media_set.items.order_by("position", "id"):
+        asset = set_assets.get(item.asset_id)
+        if asset is None or not asset.visible_to(person):
+            continue
+        entry = asset_for_guest(asset, guest)
+        entry["item_id"] = item.pk
+        entry["clip"] = item.clip_json()
+        my_set.append(entry)
 
     library = []
     if person.can_browse:
@@ -264,9 +274,12 @@ def api_set_copy(request, token):
         for item in source.items.select_related("asset").order_by("position", "id"):
             if not item.asset.visible_to(person):
                 continue
-            _, created = SetItem.objects.get_or_create(media_set=media_set, asset=item.asset, defaults={"position": position})
-            if created:
-                position += 1
+            same = media_set.items.filter(asset=item.asset, in_ms=item.in_ms, out_ms=item.out_ms)
+            if same.exists():
+                continue
+            SetItem.objects.create(media_set=media_set, asset=item.asset, position=position, in_ms=item.in_ms,
+                                   out_ms=item.out_ms, label=item.label, at_end=item.at_end)
+            position += 1
     return api_state(request_as_get(request), token)
 
 
@@ -277,14 +290,9 @@ def api_set_add(request, token):
     ids = [int(i) for i in read_json(request).get("asset_ids", []) if str(i).isdigit()]
     media_set = guest.get_set()
     with transaction.atomic():
-        last = media_set.items.order_by("-position").first()
-        position = (last.position + 1) if last else 0
         for asset in MediaAsset.objects.filter(pk__in=ids):
-            if not asset.visible_to(person):
-                continue
-            _, created = SetItem.objects.get_or_create(media_set=media_set, asset=asset, defaults={"position": position})
-            if created:
-                position += 1
+            if asset.visible_to(person):
+                media_set.add_asset(asset)
     return api_state(request_as_get(request), token)
 
 
@@ -292,8 +300,12 @@ def api_set_add(request, token):
 @require_POST
 def api_set_remove(request, token):
     person, guest = load_guest(request, token)
-    asset_id = read_json(request).get("asset_id")
-    guest.get_set().items.filter(asset_id=asset_id).delete()
+    body = read_json(request)
+    items = guest.get_set().items
+    if body.get("item_id"):
+        items.filter(pk=body.get("item_id")).delete()
+    else:  # older pages: the file and all its clips
+        items.filter(asset_id=body.get("asset_id")).delete()
     return api_state(request_as_get(request), token)
 
 
@@ -301,11 +313,66 @@ def api_set_remove(request, token):
 @require_POST
 def api_set_order(request, token):
     person, guest = load_guest(request, token)
-    ids = [int(i) for i in read_json(request).get("asset_ids", []) if str(i).isdigit()]
+    body = read_json(request)
     media_set = guest.get_set()
     with transaction.atomic():
-        for position, asset_id in enumerate(ids):
-            media_set.items.filter(asset_id=asset_id).update(position=position)
+        if "item_ids" in body:
+            ids = [int(i) for i in body.get("item_ids", []) if str(i).isdigit()]
+            for position, item_id in enumerate(ids):
+                media_set.items.filter(pk=item_id).update(position=position)
+        else:  # older pages
+            ids = [int(i) for i in body.get("asset_ids", []) if str(i).isdigit()]
+            for position, asset_id in enumerate(ids):
+                media_set.items.filter(asset_id=asset_id).update(position=position)
+    from .notify import notify_agents
+
+    notify_agents()  # .update() sends no signal
+    return api_state(request_as_get(request), token)
+
+
+def save_clip(media_set, body):
+    """Shared by the guest page and the back tablet. body: item_id, in_ms, out_ms, label, at_end and
+    mode: "update" (this entry), "new" (a new clip right after it), "clear" (the whole file again) or
+    "restore" (put a removed entry back: asset_id and position). Returns the item. Raises ValueError."""
+    mode = body.get("mode") or "update"
+    if mode == "restore":
+        asset = MediaAsset.objects.filter(pk=body.get("asset_id")).first()
+        if asset is None:
+            raise ValueError("That file doesn't exist any more.")
+        item = SetItem(media_set=media_set, asset=asset, position=int(body.get("position") or 0))
+    else:
+        item = media_set.items.select_related("asset").filter(pk=body.get("item_id")).first()
+        if item is None:
+            raise ValueError("That entry isn't in the set any more.")
+    if mode == "clear":
+        item.set_clip(None, None)
+        item.save()
+        return item
+    if mode == "new":
+        item = SetItem(media_set=media_set, asset=item.asset, position=item.position + 1)
+    item.set_clip(body.get("in_ms"), body.get("out_ms"), body.get("label", ""), body.get("at_end", SetItem.AT_END_HOLD))
+    with transaction.atomic():
+        if item.pk is None:  # make room after the source entry
+            media_set.items.filter(position__gte=item.position).update(position=F("position") + 1)
+        item.save()
+    return item
+
+
+@csrf_exempt
+@require_POST
+def api_set_clip(request, token):
+    """Mark in / mark out on an entry of the set (see save_clip)."""
+    person, guest = load_guest(request, token)
+    body = read_json(request)
+    media_set = guest.get_set()
+    if body.get("mode") == "restore":
+        asset = MediaAsset.objects.filter(pk=body.get("asset_id")).first()
+        if asset is None or not asset.visible_to(person):
+            raise Http404()
+    try:
+        save_clip(media_set, body)
+    except (ValueError, TypeError) as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
     return api_state(request_as_get(request), token)
 
 
@@ -410,6 +477,11 @@ def _live_for(guest):
                 "position_ms": src.get("position_ms", 0),
                 "duration_ms": src.get("duration_ms", 0),
                 "paused": bool(src.get("paused")),
+                # Which clip is on screen (0: the whole file), and its marks.
+                "entry_id": src.get("entry_id", 0),
+                "pending_entry": src.get("pending_entry", 0),
+                "in_ms": src.get("in_ms", 0),
+                "out_ms": src.get("out_ms", 0),
             }
         elif asset_id:
             out["other_on_screen"] = True  # someone else's file: no details
@@ -454,12 +526,17 @@ def api_live_action(request, token, action):
         "action": action,
         "set_id": state["set_id"],
         "asset_id": int(body.get("asset_id") or 0),
+        "entry_id": int(body.get("entry_id") or 0),
         "start_ms": int(body.get("start_ms") or 0),
         "position_ms": int(body.get("position_ms") or 0),
         "by": person.name,
     }
     if action == "take" and payload["asset_id"] not in guest.get_set().asset_ids():
         return JsonResponse({"ok": False, "error": "That file isn't in your set."}, status=403)
+    if action == "take" and payload["entry_id"] and not guest.get_set().items.filter(
+        pk=payload["entry_id"], asset_id=payload["asset_id"]
+    ).exists():
+        return JsonResponse({"ok": False, "error": "That clip isn't in your set."}, status=403)
     result = relay.send_command(agent, payload)
     if action == "request_access" and result.get("ok"):
         from . import alerts

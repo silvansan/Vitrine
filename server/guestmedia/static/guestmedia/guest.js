@@ -143,6 +143,7 @@
     return fetch(api + 'state' + eventQuery).then(checked).then(setState);
   }
   function setState(data) {
+    if (data && data.ok === false) return data; // an error answer: the caller shows it
     state = data;
     render();
     var busy = state.set.concat(state.library).some(function (a) { return a.status === 'processing'; });
@@ -164,6 +165,8 @@
     $('#count').textContent = state.set.length;
     $('#set-empty').hidden = state.set.length > 0;
     state.set.forEach(function (asset, index) {
+      var key = asset.item_id || asset.id;
+      var clip = asset.clip;
       var thumbBox = el('button', {
         type: 'button', class: 'thumb-box', 'aria-label': 'View ' + asset.name + ' full screen',
         onclick: function () { openViewer(state.set, index, 'My set'); }
@@ -172,12 +175,13 @@
         el('span', { class: 'num', text: String(index + 1) }),
         el('span', { class: 'zoom', html: ICON.expand })
       ]);
-      var open = !!ui.openExtras[asset.id];
+      var open = !!ui.openExtras[key];
       var meta = el('button', {
         type: 'button', class: 'meta', 'aria-expanded': open ? 'true' : 'false',
-        onclick: function () { ui.openExtras[asset.id] = !ui.openExtras[asset.id]; render(); }
+        onclick: function () { ui.openExtras[key] = !ui.openExtras[key]; render(); }
       }, [
         el('span', { class: 'name', text: asset.name }),
+        clip ? el('span', { class: 'clip-tag', text: clipText(clip, asset) }) : null,
         el('span', { class: 'owner', text: (asset.mine ? 'Your upload' : 'From ' + asset.owner) + (timed(asset) && asset.duration_ms ? ' · ' + fmt(asset.duration_ms) : '') + (asset.markers.length ? ' · ' + asset.markers.length + ' marker' + (asset.markers.length > 1 ? 's' : '') : '') }),
         statusBadge(asset),
         el('span', { class: 'more', text: open ? 'Less' : 'Options' })
@@ -189,7 +193,7 @@
         onkeydown: function (e) {
           if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault();
-            ui.focusGrip = asset.id;
+            ui.focusGrip = key;
             move(index, e.key === 'ArrowUp' ? -1 : 1);
           }
         },
@@ -201,10 +205,10 @@
         onclick: function () { quickRemove(asset); }
       });
       var row = el('div', { class: 'set-row' }, [grip, thumbBox, meta, heartButton(asset, 'icon-btn row-heart'), remove]);
-      var item = el('li', { class: 'set-item', 'data-id': String(asset.id) }, [row]);
+      var item = el('li', { class: 'set-item' + (clip ? ' is-clip' : ''), 'data-id': String(key) }, [row]);
       if (open) item.appendChild(renderExtras(asset));
       list.appendChild(item);
-      if (ui.focusGrip === asset.id) { ui.focusGrip = null; setTimeout(function () { grip.focus(); }, 0); }
+      if (ui.focusGrip === key) { ui.focusGrip = null; setTimeout(function () { grip.focus(); }, 0); }
     });
   }
 
@@ -215,7 +219,16 @@
       if (asset.file) {
         player = el(asset.kind === 'audio' ? 'audio' : 'video', { class: 'preview', src: asset.file, controls: '', preload: 'metadata', playsinline: '' });
         box.appendChild(player);
+        if (asset.clip) {
+          // The preview starts at the mark in and stops at the mark out, like on the projector.
+          var c = asset.clip;
+          player.addEventListener('loadedmetadata', function () { player.currentTime = (c.in_ms || 0) / 1000; });
+          player.addEventListener('timeupdate', function () {
+            if (c.out_ms && !player.paused && player.currentTime * 1000 >= c.out_ms) { player.pause(); player.currentTime = c.out_ms / 1000; }
+          });
+        }
       }
+      box.appendChild(renderClipEditor(asset, player));
       box.appendChild(el('div', { text: 'Start points the operator can jump to:' }));
       var markers = el('div', { class: 'markers' });
       asset.markers.forEach(function (m) {
@@ -265,7 +278,7 @@
     if (at <= 0) moveUp.disabled = true;
     if (at === state.set.length - 1) moveDown.disabled = true;
     box.appendChild(el('div', { class: 'extra-actions' }, [moveUp, moveDown,
-      el('button', { type: 'button', class: 'link-btn', text: 'Remove from my set', onclick: function () { post('set/remove', { asset_id: asset.id }); } })]));
+      el('button', { type: 'button', class: 'link-btn', text: 'Remove from my set', onclick: function () { quickRemove(asset); } })]));
     return box;
   }
 
@@ -338,10 +351,10 @@
       var ids = Array.prototype.map.call(list.children, function (li) { return li.dataset.id; });
       if (ids.join(',') !== before) {
         var byId = {};
-        state.set.forEach(function (a) { byId[a.id] = a; });
+        state.set.forEach(function (a) { byId[a.item_id || a.id] = a; });
         state.set = ids.map(function (id) { return byId[id]; });
         render();
-        post('set/order', { asset_ids: ids.map(Number) });
+        post('set/order', { item_ids: ids.map(Number) });
       } else {
         render();
       }
@@ -380,15 +393,24 @@
 
   /* Remove at once, with Undo (puts it back in the same place). */
   function quickRemove(asset) {
-    var order = state.set.map(function (a) { return a.id; });
-    state.set = state.set.filter(function (a) { return a.id !== asset.id; });
+    var order = state.set.map(function (a) { return a.item_id; });
+    var at = order.indexOf(asset.item_id);
+    state.set = state.set.filter(function (a) { return a.item_id !== asset.item_id; });
     render();
-    post('set/remove', { asset_id: asset.id });
-    showUndo('Removed “' + asset.name + '”', function () {
-      post('set/add', { asset_ids: [asset.id] }).then(function () {
-        var now = state.set.map(function (a) { return a.id; });
-        var wanted = order.filter(function (id) { return now.indexOf(id) !== -1; });
-        if (wanted.join(',') !== now.join(',')) post('set/order', { asset_ids: wanted });
+    post('set/remove', { item_id: asset.item_id });
+    var clip = asset.clip || {};
+    showUndo('Removed “' + (clip.label || asset.name) + '”', function () {
+      // Put the same entry (with its clip marks) back where it was.
+      post('set/clip', {
+        mode: 'restore', asset_id: asset.id, position: at,
+        in_ms: asset.clip ? clip.in_ms : null, out_ms: asset.clip ? (clip.out_ms || null) : null,
+        label: clip.label || '', at_end: clip.at_end || 'hold'
+      }).then(function () {
+        var now = state.set.map(function (a) { return a.item_id; });
+        var added = now.filter(function (id) { return order.indexOf(id) === -1; })[0];
+        var wanted = order.map(function (id) { return id === asset.item_id ? added : id; })
+          .filter(function (id) { return id && now.indexOf(id) !== -1; });
+        if (wanted.join(',') !== now.join(',')) post('set/order', { item_ids: wanted });
       });
     });
   }
@@ -406,11 +428,73 @@
   }
 
   function move(index, delta) {
-    var ids = state.set.map(function (a) { return a.id; });
+    var ids = state.set.map(function (a) { return a.item_id; });
     var target = index + delta;
     if (target < 0 || target >= ids.length) return;
     var tmp = ids[index]; ids[index] = ids[target]; ids[target] = tmp;
-    post('set/order', { asset_ids: ids });
+    post('set/order', { item_ids: ids });
+  }
+
+  /* Clips: a part of a video (mark in → mark out). The same video can be in the set several times. */
+  function clipText(clip, asset) {
+    var end = clip.out_ms ? fmt(clip.out_ms) : 'end';
+    var range = fmt(clip.in_ms || 0) + '–' + end;
+    var after = clip.at_end === 'fade' ? 'then fades out' : 'then holds';
+    return (clip.label ? clip.label + ' · ' : 'Clip · ') + range + (clip.out_ms ? ' · ' + after : '');
+  }
+
+  function renderClipEditor(asset, player) {
+    var clip = asset.clip || {};
+    var box = el('div', { class: 'clip-editor' });
+    box.appendChild(el('div', { class: 'clip-title', text: asset.clip ? 'This clip' : 'Play only a part (mark in / mark out)' }));
+    var inField = el('input', { name: 'in', inputmode: 'numeric', size: '6', placeholder: '0:00', 'aria-label': 'Mark in (minutes:seconds)', value: asset.clip ? fmt(clip.in_ms || 0) : '' });
+    var outField = el('input', { name: 'out', inputmode: 'numeric', size: '6', placeholder: 'end', 'aria-label': 'Mark out (minutes:seconds)', value: clip.out_ms ? fmt(clip.out_ms) : '' });
+    var name = el('input', { name: 'label', maxlength: '60', placeholder: 'Name, e.g. Baptism', 'aria-label': 'Clip name', value: clip.label || '' });
+    var atEnd = el('select', { 'aria-label': 'At the mark out' }, [
+      el('option', { value: 'hold', text: 'At the mark out: hold the last frame' }),
+      el('option', { value: 'fade', text: 'At the mark out: fade to the background' })
+    ]);
+    atEnd.value = clip.at_end || 'hold';
+    function hereButton(text, field) {
+      return el('button', {
+        type: 'button', class: 'small-btn', text: text,
+        onclick: function () { player.pause(); field.value = fmt(Math.round(player.currentTime * 1000)); }
+      });
+    }
+    box.appendChild(el('div', { class: 'clip-row' }, [
+      el('label', {}, [el('span', { text: 'Mark in' }), inField]), player ? hereButton('Mark in here', inField) : null
+    ]));
+    box.appendChild(el('div', { class: 'clip-row' }, [
+      el('label', {}, [el('span', { text: 'Mark out' }), outField]), player ? hereButton('Mark out here', outField) : null
+    ]));
+    if (asset.markers.length && player) {
+      var jumps = el('div', { class: 'clip-row markers' }, [el('span', { class: 'owner', text: 'Jump the player to:' })]);
+      asset.markers.forEach(function (m) {
+        jumps.appendChild(el('button', { type: 'button', class: 'marker', text: m.label + ' · ' + fmt(m.t_ms),
+          onclick: function () { player.currentTime = m.t_ms / 1000; } }));
+      });
+      box.appendChild(jumps);
+    }
+    box.appendChild(el('div', { class: 'clip-row' }, [name]));
+    box.appendChild(el('div', { class: 'clip-row' }, [atEnd]));
+    var error = el('div', { class: 'clip-error', role: 'alert' });
+    function save(mode) {
+      var t1 = inField.value.trim() ? parseTime(inField.value) : 0;
+      var t2 = outField.value.trim() ? parseTime(outField.value) : null;
+      if (t1 === null) { inField.focus(); return; }
+      if (outField.value.trim() && t2 === null) { outField.focus(); return; }
+      error.textContent = '';
+      post('set/clip', { mode: mode, item_id: asset.item_id, in_ms: t1, out_ms: t2, label: name.value.trim(), at_end: atEnd.value })
+        .then(function (res) { if (res && res.error) error.textContent = res.error; });
+    }
+    var actions = [el('button', { type: 'button', class: 'small-btn clip-save', text: asset.clip ? 'Save clip' : 'Make this a clip', onclick: function () { save('update'); } }),
+      el('button', { type: 'button', class: 'small-btn', text: 'Add as another clip', title: 'Keeps this entry and adds the video once more with these marks, right after it', onclick: function () { save('new'); } })];
+    if (asset.clip) {
+      actions.push(el('button', { type: 'button', class: 'link-btn', text: 'Whole video again', onclick: function () { post('set/clip', { mode: 'clear', item_id: asset.item_id }); } }));
+    }
+    box.appendChild(el('div', { class: 'clip-row' }, actions));
+    box.appendChild(error);
+    return box;
   }
 
   function renderLibrary() {

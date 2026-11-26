@@ -113,7 +113,8 @@ def duplicate_event(event, name, starts_on, ends_on, with_people=True, with_file
                         new_set.title = old_set.title
                         new_set.save(update_fields=["title"])
                         SetItem.objects.bulk_create(
-                            SetItem(media_set=new_set, asset_id=item.asset_id, position=item.position)
+                            SetItem(media_set=new_set, asset_id=item.asset_id, position=item.position, in_ms=item.in_ms,
+                                    out_ms=item.out_ms, label=item.label, at_end=item.at_end)
                             for item in old_set.items.all()
                         )
     return copy
@@ -484,13 +485,9 @@ def library(request):
                 messages.error(request, "Choose whose set to add them to.")
             else:
                 media_set = guest.get_set()
-                last = media_set.items.order_by("-position").first()
-                position = (last.position + 1) if last else 0
                 added = 0
                 for asset in selected.filter(deleted_at__isnull=True).order_by("created"):
-                    _, created = SetItem.objects.get_or_create(media_set=media_set, asset=asset, defaults={"position": position})
-                    if created:
-                        position += 1
+                    if media_set.add_asset(asset):
                         added += 1
                 messages.success(request, f"Added {added} file(s) to {guest.person.name}'s set in {guest.service.name}.")
         return redirect(request.get_full_path())

@@ -58,16 +58,37 @@
   function items() { return (state && state.set) || []; }
   function control() { return !!(live && live.control); }
 
+  // A clip plays a part of a video: [in, out]. Times on this page are counted from its mark in.
+  function span(a) {
+    var c = a && a.clip;
+    var start = (c && c.in_ms) || 0;
+    var end = (c && c.out_ms) || (a && a.duration_ms) || 0;
+    return { start: start, length: Math.max(0, end - start) };
+  }
+  function isOn(a, cur, key) {
+    if (!cur) return false;
+    if (cur[key + 'entry']) return cur[key + 'entry'] === a.item_id;
+    return cur[key + 'id'] === a.id && !a.clip;
+  }
+
   // What is on screen from this guest's point of view: live (with control) or simulated.
   function current() {
     if (control() || !sim) {
       var l = live && (live.live || live.audio);
       if (!l) return null;
-      return { asset_id: l.asset_id, pending_id: l.pending_id, kind: l.kind, position_ms: l.position_ms, duration_ms: l.duration_ms, paused: l.paused, audio: !live.live };
+      var start = l.in_ms || 0;
+      var end = l.out_ms || l.duration_ms || 0;
+      return { asset_id: l.asset_id, pending_id: l.pending_id, asset_entry: l.entry_id || 0, pending_entry: l.pending_entry || 0,
+        kind: l.kind, start: start, position_ms: Math.max(0, (l.position_ms || 0) - start), duration_ms: Math.max(0, end - start),
+        paused: l.paused, audio: !live.live };
     }
     var pos = sim.paused ? sim.offset : sim.offset + (Date.now() - sim.start);
-    if (sim.duration_ms && pos >= sim.duration_ms) { sim = null; return null; }
-    return { asset_id: sim.asset_id, kind: sim.kind, position_ms: pos, duration_ms: sim.duration_ms, paused: sim.paused, simulated: true };
+    if (sim.duration_ms && pos >= sim.duration_ms) {
+      if (sim.hold) { sim.offset = sim.duration_ms; sim.paused = true; pos = sim.duration_ms; } // a clip that holds its last frame
+      else { sim = null; return null; }
+    }
+    return { asset_id: sim.asset_id, asset_entry: sim.entry, kind: sim.kind, start: sim.in_ms, position_ms: pos,
+      duration_ms: sim.duration_ms, paused: sim.paused, simulated: true };
   }
 
   function badge() {
@@ -169,10 +190,11 @@
     if (!slice.length) html += '<div class="empty">Your set is empty. Add files on your page first.</div>';
     slice.forEach(function (a, i) {
       var n = i + 1;
-      var isLive = cur && cur.asset_id === a.id;
-      var isPend = cur && cur.pending_id === a.id;
+      var isLive = isOn(a, cur, 'asset_');
+      var isPend = !isLive && cur && (cur.pending_entry ? cur.pending_entry === a.item_id : cur.pending_id === a.id && !a.clip);
       var label = a.kind === 'video' ? 'Video · ' + fmt(a.duration_ms) : a.kind === 'audio' ? 'Audio · ' + fmt(a.duration_ms) : 'Photo';
-      html += '<button type="button" class="tile' + (isLive ? ' live' : '') + (isPend ? ' pend' : '') + '" data-act="tap" data-id="' + a.id + '">' +
+      if (a.clip) label = (a.clip.label || 'Clip') + ' · ' + fmt(a.clip.in_ms || 0) + '–' + (a.clip.out_ms ? fmt(a.clip.out_ms) : 'end');
+      html += '<button type="button" class="tile' + (isLive ? ' live' : '') + (isPend ? ' pend' : '') + (a.clip ? ' clip' : '') + '" data-act="tap" data-id="' + a.item_id + '">' +
         (a.thumb ? '<img src="' + h(a.thumb) + '" alt="">' : '<span class="ph">' + h(a.kind) + '</span>') +
         '<span class="num">' + n + '</span>' + '<span class="meta">' + h(label) + '</span>' +
         (isLive ? '<span class="badge">' + (cur.simulated ? 'PRACTICE' : 'ON SCREEN') + '</span>' : '') +
@@ -183,14 +205,17 @@
     html += '</main>';
 
     if (cur && cur.asset_id && (cur.kind === 'video' || cur.kind === 'audio')) {
-      var a2 = list.filter(function (x) { return x.id === cur.asset_id; })[0] || {};
+      var a2 = list.filter(function (x) { return isOn(x, cur, 'asset_'); })[0] || list.filter(function (x) { return x.id === cur.asset_id; })[0] || {};
+      var sp = { start: cur.start || 0, length: cur.duration_ms || 0 };
       html += '<div class="transport">' +
         '<button type="button" data-act="seek" data-to="0">From start</button>' +
         '<button type="button" data-act="skip" data-d="-10000">−10s</button>' +
         '<button type="button" data-act="' + (cur.paused ? 'play' : 'pause') + '">' + (cur.paused ? 'Play' : 'Pause') + '</button>' +
         '<button type="button" data-act="skip" data-d="10000">+10s</button>';
       (a2.markers || []).slice().sort(function (x, y) { return x.t_ms - y.t_ms; }).forEach(function (m) {
-        html += '<button type="button" data-act="seek" data-to="' + m.t_ms + '">' + h(m.label || fmt(m.t_ms)) + ' · ' + fmt(m.t_ms) + '</button>';
+        var rel = m.t_ms - sp.start;
+        if (rel < 0 || (sp.length && rel >= sp.length)) return; // outside the clip
+        html += '<button type="button" data-act="seek" data-to="' + rel + '">' + h(m.label || fmt(m.t_ms)) + ' · ' + fmt(rel) + '</button>';
       });
       html += '<div class="prog"><div class="track"><i style="width:' + (cur.duration_ms ? Math.min(100, 100 * cur.position_ms / cur.duration_ms) : 0) + '%"></i></div>' +
         fmt(Math.max(0, (cur.duration_ms || 0) - (cur.position_ms || 0))) + ' left</div></div>';
@@ -200,7 +225,7 @@
       '<button type="button" class="clear" data-act="clear"' + (cur && (cur.asset_id || cur.pending_id) ? '' : ' disabled') + '>Back to the banner</button></footer>';
     var old = root.querySelector('.grid');
     var keepLeft = old ? old.scrollLeft : 0;
-    var key = list.map(function (a) { return a.id; }).join(',') + '|' + PER_PAGE;
+    var key = list.map(function (a) { return a.item_id || a.id; }).join(',') + '|' + PER_PAGE;
     root.innerHTML = html;
     var grid = root.querySelector('.grid');
     if (grid) {
@@ -232,26 +257,34 @@
     }).catch(function () { busy = false; toast('No connection.'); });
   }
 
+  // id: the set entry (item_id); one video can have several clips.
   function tap(id) {
-    var a = items().filter(function (x) { return x.id === id; })[0];
+    var a = items().filter(function (x) { return x.item_id === id; })[0];
     if (!a) return;
     var cur = current();
+    var on = cur && (isOn(a, cur, 'asset_') || (cur.pending_entry ? cur.pending_entry === id : cur.pending_id === a.id && !a.clip));
     if (control()) {
-      if (cur && (cur.asset_id === id || cur.pending_id === id)) send(cur.audio ? 'stop_audio' : 'clear');
-      else send('take', { asset_id: id, start_ms: 0 });
+      if (on) send(cur.audio ? 'stop_audio' : 'clear');
+      else send('take', { asset_id: a.id, entry_id: a.item_id, start_ms: 0 });
       return;
     }
-    if (cur && cur.asset_id === id) { sim = null; }
-    else { sim = { asset_id: id, kind: a.kind, start: Date.now(), offset: 0, paused: false, duration_ms: a.duration_ms || 0 }; }
+    if (on) { sim = null; }
+    else {
+      var sp = span(a);
+      sim = { asset_id: a.id, entry: a.item_id, kind: a.kind, start: Date.now(), offset: 0, paused: false,
+        in_ms: sp.start, duration_ms: (a.kind === 'video' || a.kind === 'audio') ? sp.length : 0,
+        hold: !!(a.clip && a.clip.out_ms && a.clip.at_end !== 'fade') };
+    }
     render();
   }
 
+  // ms: from the start of what plays (the mark in of a clip).
   function seekTo(ms) {
     var cur = current();
     if (!cur) return;
     ms = Math.max(0, Math.min(ms, Math.max(0, (cur.duration_ms || 0) - 500)));
-    if (control()) { send('seek', { position_ms: ms }); return; }
-    if (sim) { sim.offset = ms; sim.start = Date.now(); render(); }
+    if (control()) { send('seek', { position_ms: (cur.start || 0) + ms }); return; }
+    if (sim) { sim.offset = ms; sim.start = Date.now(); sim.paused = false; render(); }
   }
 
   root.addEventListener('change', function (ev) {

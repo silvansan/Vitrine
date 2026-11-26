@@ -291,3 +291,32 @@ func (c *Client) Markers(ctx context.Context, add []NewMarker, del []int64) erro
 	}
 	return c.doJSON(ctx, http.MethodPost, "/api/agent/markers", map[string]any{"add": add, "delete": del}, nil)
 }
+
+// Clip changes a set entry's mark in / mark out on the server (back tablet). The body is
+// sent as given (see web.ClipEdit); the server's own explanation is returned as the error.
+func (c *Client) Clip(ctx context.Context, edit any) error {
+	req, err := c.request(ctx, http.MethodPost, "/api/agent/clips", edit)
+	if err != nil {
+		return err
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	var out struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&out)
+	if resp.StatusCode == http.StatusNotFound && out.Error == "" {
+		return errors.New("the server is too old for clips; update it")
+	}
+	if resp.StatusCode/100 != 2 {
+		if out.Error != "" {
+			return errors.New(out.Error)
+		}
+		return fmt.Errorf("saving the clip failed: %s", resp.Status)
+	}
+	return nil
+}

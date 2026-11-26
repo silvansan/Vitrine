@@ -126,3 +126,30 @@ def markers(request):
     ids = [int(i) for i in body.get("delete", []) if str(i).isdigit()]
     deleted = Marker.objects.filter(pk__in=ids).delete()[0] if ids else 0
     return JsonResponse({"added": added, "deleted": deleted})
+
+
+@csrf_exempt
+@require_POST
+@agent_required
+def clips(request):
+    """Mark in / mark out set on the back tablet (same rules as the guest page)."""
+    from .guest_views import save_clip
+    from .models import MediaSet
+
+    try:
+        body = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        body = {}
+    agent = request.agent
+    location = getattr(agent, "location", None)
+    media_set = MediaSet.objects.filter(pk=body.get("set_id"), service__location=location).first() if location else None
+    if media_set is None:
+        return JsonResponse({"ok": False, "error": "That set isn't in an event of this location."}, status=404)
+    if body.get("mode") == "delete":
+        media_set.items.filter(pk=body.get("item_id")).delete()
+        return JsonResponse({"ok": True})
+    try:
+        item = save_clip(media_set, body)
+    except (ValueError, TypeError) as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    return JsonResponse({"ok": True, "item_id": item.pk})

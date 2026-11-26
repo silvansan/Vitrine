@@ -44,17 +44,34 @@ type AudioLive struct {
 	Paused     bool  `json:"paused"`
 }
 
+// Clip limits what plays of a video: from InMs to OutMs (0: the end of the file). At the
+// mark out it holds the last frame (paused) or fades back to the default input.
+type Clip struct {
+	EntryID int64  // the set entry it came from (0: none)
+	Clip    bool   // has marks
+	InMs    int    // mark in
+	OutMs   int    // mark out, 0 = end
+	AtEnd   string // "hold" or "fade"
+}
+
 // Live describes what is on the projector mix right now.
 type Live struct {
-	AssetID    int64  `json:"asset_id"`
-	PendingID  int64  `json:"pending_id"`
-	Slot       string `json:"slot"`
-	Kind       string `json:"kind"`
-	PositionMs int    `json:"position_ms"`
-	DurationMs int    `json:"duration_ms"`
-	Paused     bool   `json:"paused"`
-	Jumping    bool   `json:"jumping"`
-	Error      string `json:"error"`
+	AssetID   int64 `json:"asset_id"`
+	PendingID int64 `json:"pending_id"`
+	// The set entry on screen (a clip, or a file taken from its tile); 0 when taken another way.
+	EntryID      int64  `json:"entry_id"`
+	PendingEntry int64  `json:"pending_entry"`
+	Clip         bool   `json:"clip"`
+	InMs         int    `json:"in_ms"`
+	OutMs        int    `json:"out_ms"`
+	AtEnd        string `json:"at_end"`
+	Slot         string `json:"slot"`
+	Kind         string `json:"kind"`
+	PositionMs   int    `json:"position_ms"`
+	DurationMs   int    `json:"duration_ms"`
+	Paused       bool   `json:"paused"`
+	Jumping      bool   `json:"jumping"`
+	Error        string `json:"error"`
 }
 
 type Status struct {
@@ -92,6 +109,11 @@ type Engine struct {
 	audioGen  int
 	used      []int64
 	errorTill time.Time
+	// Mark out of a clip: takeGen changes with every take and jump; the out action runs
+	// once per generation (outArmed: a precise timer is waiting for it).
+	takeGen  int
+	outArmed int
+	outFired int
 }
 
 // transitionList is what the companion offers, in vMix's function names. Only
@@ -161,6 +183,7 @@ func (e *Engine) setError(err error) {
 	e.mu.Lock()
 	e.status.Error = err.Error()
 	e.status.PendingID = 0
+	e.status.PendingEntry = 0
 	e.errorTill = time.Now().Add(8 * time.Second)
 	e.mu.Unlock()
 	log.Printf("engine: %v", err)
@@ -274,6 +297,20 @@ func (e *Engine) waitActive(ctx context.Context, mix, number int) bool {
 
 func (e *Engine) rememberPosition(live Live) {
 	if live.AssetID == 0 || !timed(live.Kind) {
+		return
+	}
+	if live.Clip && live.EntryID != 0 {
+		end := live.OutMs
+		if end == 0 {
+			end = live.DurationMs
+		}
+		_ = e.Store.Update(func(st *store.State) {
+			if live.PositionMs > live.InMs+1500 && (end == 0 || live.PositionMs < end-1500) {
+				st.ClipPositions[live.EntryID] = live.PositionMs
+			} else {
+				delete(st.ClipPositions, live.EntryID)
+			}
+		})
 		return
 	}
 	_ = e.Store.Update(func(st *store.State) {
@@ -447,14 +484,39 @@ func outMs(s store.Settings, transitionMs int) int {
 
 // Take puts an asset on the projector mix, starting at startMs (videos).
 func (e *Engine) Take(assetID int64, startMs int) error {
+	return e.TakeClip(assetID, startMs, Clip{})
+}
+
+// clipStart keeps a start position inside the clip.
+func clipStart(clip Clip, startMs, durationMs int) int {
+	if !clip.Clip {
+		return startMs
+	}
+	end := clip.OutMs
+	if end == 0 {
+		end = durationMs
+	}
+	if startMs < clip.InMs || (end > 0 && startMs >= end-500) {
+		return clip.InMs
+	}
+	return startMs
+}
+
+// TakeClip puts a set entry on the projector mix: a file, or a clip of a video that starts at its
+// mark in and stops at its mark out. startMs is a position in the file (kept inside the clip).
+func (e *Engine) TakeClip(assetID int64, startMs int, clip Clip) error {
 	media, ok := e.Resolve(assetID)
 	if !ok {
 		err := errors.New("this file is not on the vMix PC yet; it is still downloading")
 		e.setError(err)
 		return err
 	}
+	if !timed(media.Kind) {
+		clip.Clip = false
+	}
+	startMs = clipStart(clip, startMs, media.DurationMs)
 	if media.Kind == "audio" && e.Store.Settings().AudioKeepDefault {
-		return e.PlayAudio(media, startMs)
+		return e.PlayAudio(media, startMs) // behind the default input: starts at the mark in
 	}
 	prev, s := e.begin()
 	defer e.end()
@@ -463,6 +525,7 @@ func (e *Engine) Take(assetID int64, startMs int) error {
 
 	e.mu.Lock()
 	e.status.PendingID = assetID
+	e.status.PendingEntry = clip.EntryID
 	e.status.Error = ""
 	e.mu.Unlock()
 	e.changed()
@@ -505,7 +568,9 @@ func (e *Engine) Take(assetID int64, startMs int) error {
 	e.rememberPosition(prev)
 	e.mu.Lock()
 	e.ending = 0
-	e.status.Live = Live{AssetID: assetID, Slot: target, Kind: media.Kind, PositionMs: startMs, DurationMs: media.DurationMs}
+	e.status.Live = Live{AssetID: assetID, Slot: target, Kind: media.Kind, PositionMs: startMs, DurationMs: media.DurationMs,
+		EntryID: clip.EntryID, Clip: clip.Clip, InMs: clip.InMs, OutMs: clip.OutMs, AtEnd: clip.AtEnd}
+	e.takeGen++
 	e.used = append(e.used, assetID)
 	e.mu.Unlock()
 	if prev.AssetID != 0 && timed(prev.Kind) {
@@ -599,6 +664,17 @@ func (e *Engine) Seek(positionMs int) error {
 	if media.DurationMs > 0 && positionMs > media.DurationMs-500 {
 		positionMs = media.DurationMs - 500
 	}
+	if live.Clip { // stay inside the clip
+		if positionMs < live.InMs {
+			positionMs = live.InMs
+		}
+		if live.OutMs > 0 && positionMs > live.OutMs-500 {
+			positionMs = live.OutMs - 500
+		}
+	}
+	e.mu.Lock()
+	e.takeGen++ // a jump re-arms the mark out
+	e.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -738,8 +814,9 @@ func (e *Engine) poll(ctx context.Context) bool {
 		e.status.Error = ""
 	}
 
-	var ended, external bool
+	var ended, external, outNow bool
 	live := e.status.Live
+	gen := e.takeGen
 	if live.AssetID != 0 && !e.busy {
 		slot := st.InputByName(slotName(s, live.Slot))
 		if slot == nil || st.Active[s.Mix] != slot.Number {
@@ -752,6 +829,17 @@ func (e *Engine) poll(ctx context.Context) bool {
 			e.status.Paused = slot.State == "Paused"
 			if e.status.DurationMs > 0 && slot.Position >= e.status.DurationMs-350 {
 				ended = true
+			}
+			if live.Clip && live.OutMs > 0 && !e.status.Paused && e.outFired != e.takeGen {
+				left := live.OutMs - slot.Position
+				if left <= 350 {
+					outNow = true
+				} else if left < 1300 && e.outArmed != e.takeGen {
+					// Between two polls: a timer stops it on the mark out, not up to 300 ms later.
+					e.outArmed = e.takeGen
+					gen := e.takeGen
+					time.AfterFunc(time.Duration(left-60)*time.Millisecond, func() { e.reachOut(gen) })
+				}
 			}
 		}
 	}
@@ -785,6 +873,14 @@ func (e *Engine) poll(ctx context.Context) bool {
 	if external {
 		e.rememberPosition(live)
 	}
+	if outNow {
+		go e.reachOut(gen)
+	}
+	if ended && live.Clip && e.outFired != gen {
+		// A clip that runs to the end of the file does what it says at its end too.
+		go e.reachOut(gen)
+		return false
+	}
 	if ended {
 		e.mu.Lock()
 		first := e.ending != live.AssetID
@@ -806,6 +902,38 @@ func (e *Engine) poll(ctx context.Context) bool {
 		before.Audio.AssetID != after.Audio.AssetID || before.Audio.Paused != after.Audio.Paused ||
 		before.InputsOK != after.InputsOK || before.DefaultOK != after.DefaultOK || before.MixActive != after.MixActive ||
 		before.Error != after.Error
+}
+
+// reachOut runs a clip's end action once: hold its last frame, or fade back to the default input.
+func (e *Engine) reachOut(gen int) {
+	e.mu.Lock()
+	live := e.status.Live
+	if e.outFired == gen || e.takeGen != gen || !live.Clip || live.AssetID == 0 || e.status.Paused || e.busy {
+		e.mu.Unlock()
+		return
+	}
+	e.outFired = gen
+	e.mu.Unlock()
+	if live.EntryID != 0 {
+		_ = e.Store.Update(func(st *store.State) { delete(st.ClipPositions, live.EntryID) })
+	}
+	if live.AtEnd == "fade" {
+		_ = e.Clear()
+		return
+	}
+	s := e.Store.Settings()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := e.VMix.Call(ctx, "Pause", map[string]string{"Input": slotName(s, live.Slot)}); err != nil {
+		e.setError(err)
+		return
+	}
+	e.mu.Lock()
+	if e.status.AssetID == live.AssetID && e.takeGen == gen {
+		e.status.Paused = true
+	}
+	e.mu.Unlock()
+	e.changed()
 }
 
 // ---------- audio that plays while the projector keeps the default input ----------

@@ -53,6 +53,7 @@ type Server struct {
 	Restart      func()
 	AddMarker    func(assetID int64, tMs int, label, by string) error
 	DeleteMarker func(id int64) error
+	SaveClip     func(edit ClipEdit) error
 	Version      string
 	// Called when the back tablet gives or takes back a guest's control.
 	OnControlsChanged func()
@@ -123,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/pulpit", s.screenOnly(s.handlePulpitSet))
 	mux.HandleFunc("POST /api/markers", s.screenOnly(s.handleMarkerAdd))
 	mux.HandleFunc("POST /api/markers/delete", s.screenOnly(s.handleMarkerDelete))
+	mux.HandleFunc("POST /api/clips", s.screenOnly(s.handleClip))
 
 	mux.HandleFunc("GET /api/companion/state", s.adminOnly(s.handleCompanionState))
 	mux.HandleFunc("POST /api/companion/settings", s.adminOnly(s.handleSettings))
@@ -506,6 +508,9 @@ func (s *Server) catalog(sc *store.Screen) map[string]any {
 		sets := m.SetsFor(serviceID)
 		assets := map[string]tabletAsset{}
 		if m != nil {
+			for i := range sets {
+				sets[i].Entries = sets[i].List() // the tablets always get entries
+			}
 			for _, set := range sets {
 				for _, id := range set.Items {
 					a := m.Asset(id)
@@ -548,6 +553,7 @@ func (s *Server) catalog(sc *store.Screen) map[string]any {
 		out["screens"] = s.screensLocked(st)
 		out["settings"] = st.Settings
 		out["positions"] = positionsJSON(st.Positions)
+		out["clip_positions"] = positionsJSON(st.ClipPositions)
 		if sc != nil {
 			if live := st.Screens[sc.ID]; live != nil {
 				out["screen"] = publicScreen{ID: live.ID, Name: live.Name, Role: live.Role, CurrentSetID: live.CurrentSetID,
@@ -575,8 +581,11 @@ func positionsJSON(p map[int64]int) map[string]int {
 }
 
 func (s *Server) statusMessage() map[string]any {
-	var positions map[string]int
-	s.Store.Read(func(st *store.State) { positions = positionsJSON(st.Positions) })
+	var positions, clipPositions map[string]int
+	s.Store.Read(func(st *store.State) {
+		positions = positionsJSON(st.Positions)
+		clipPositions = positionsJSON(st.ClipPositions)
+	})
 	online := false
 	if s.ServerOnline != nil {
 		online = s.ServerOnline()
@@ -586,15 +595,16 @@ func (s *Server) statusMessage() map[string]any {
 		serverError = s.ServerError()
 	}
 	return map[string]any{
-		"type":          "state",
-		"engine":        s.Engine.Status(),
-		"positions":     positions,
-		"sync":          s.Syncer.Status(),
-		"server_online": online,
-		"server_error":  serverError,
-		"configured":    s.Cfg.Configured(),
-		"controls":      s.controlsView(),
-		"requests":      s.requestsView(),
+		"type":           "state",
+		"engine":         s.Engine.Status(),
+		"positions":      positions,
+		"clip_positions": clipPositions,
+		"sync":           s.Syncer.Status(),
+		"server_online":  online,
+		"server_error":   serverError,
+		"configured":     s.Cfg.Configured(),
+		"controls":       s.controlsView(),
+		"requests":       s.requestsView(),
 	}
 }
 
@@ -679,6 +689,8 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request, _ *store.Sc
 func (s *Server) handleTake(w http.ResponseWriter, r *http.Request, _ *store.Screen) {
 	var body struct {
 		AssetID int64 `json:"asset_id"`
+		// The set entry (tile) it comes from: a clip plays from its mark in to its mark out.
+		EntryID int64 `json:"entry_id"`
 		StartMs int   `json:"start_ms"`
 		// Alternative to asset_id, for integrations: guest number and file number (1-based).
 		Guest int `json:"guest"`
@@ -691,18 +703,25 @@ func (s *Server) handleTake(w http.ResponseWriter, r *http.Request, _ *store.Scr
 		return
 	}
 	if body.AssetID == 0 && body.Guest > 0 && body.File > 0 {
-		id, ok := s.fileAt(body.Guest, body.File)
+		entry, ok := s.fileAt(body.Guest, body.File)
 		if !ok {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("guest %d has no file %d", body.Guest, body.File))
 			return
 		}
-		body.AssetID = id
+		body.AssetID, body.EntryID = entry.AssetID, entry.ID
 	}
+	clip := s.clipFor(body.AssetID, body.EntryID)
 	if body.From == "resume" {
-		s.Store.Read(func(st *store.State) { body.StartMs = st.Positions[body.AssetID] })
+		s.Store.Read(func(st *store.State) {
+			if clip.Clip {
+				body.StartMs = st.ClipPositions[clip.EntryID]
+			} else {
+				body.StartMs = st.Positions[body.AssetID]
+			}
+		})
 	}
 	// Answer right away; the tablets follow progress (Sending… / live) over the WebSocket.
-	go func() { _ = s.Engine.Take(body.AssetID, body.StartMs) }()
+	go func() { _ = s.Engine.TakeClip(body.AssetID, body.StartMs, clip) }()
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
@@ -1186,6 +1205,42 @@ func (s *Server) handleMarkerDelete(w http.ResponseWriter, r *http.Request, sc *
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
+// ---------- clips (mark in / mark out) from the back tablet ----------
+
+// ClipEdit is a change to a set entry's clip marks, saved on the server.
+type ClipEdit struct {
+	SetID  int64  `json:"set_id"`
+	ItemID int64  `json:"item_id"`
+	Mode   string `json:"mode"` // update, new, clear, delete
+	InMs   *int   `json:"in_ms"`
+	OutMs  *int   `json:"out_ms"`
+	Label  string `json:"label"`
+	AtEnd  string `json:"at_end"`
+	By     string `json:"by"`
+}
+
+func (s *Server) handleClip(w http.ResponseWriter, r *http.Request, sc *store.Screen) {
+	if sc.Role != "back" {
+		writeError(w, http.StatusForbidden, "clips are made on the back tablet")
+		return
+	}
+	var body ClipEdit
+	if err := readJSON(r, &body); err != nil || body.SetID == 0 {
+		writeError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if s.SaveClip == nil {
+		writeError(w, http.StatusServiceUnavailable, "not available")
+		return
+	}
+	body.By = sc.Name
+	if err := s.SaveClip(body); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
 // ---------- guests and files by number (for integrations) ----------
 
 // setAt returns the n-th guest set (1-based) of the active service, in tablet order.
@@ -1202,27 +1257,41 @@ func (s *Server) setAt(n int) (model.Set, bool) {
 	return out, ok
 }
 
-// fileAt returns the asset id of file f (1-based) of guest g, counting only files on this PC.
-func (s *Server) fileAt(g, f int) (int64, bool) {
+// clipFor returns the clip marks of a set entry (none when the entry isn't that file's).
+func (s *Server) clipFor(assetID, entryID int64) engine.Clip {
+	out := engine.Clip{}
+	if entryID == 0 {
+		return out
+	}
+	s.Store.Read(func(st *store.State) {
+		if _, e := st.Manifest.FindEntry(entryID); e != nil && e.AssetID == assetID {
+			out = engine.Clip{EntryID: e.ID, Clip: e.Clip, InMs: e.InMs, OutMs: e.OutMs, AtEnd: e.AtEnd}
+		}
+	})
+	return out
+}
+
+// fileAt returns entry f (1-based: a file or a clip) of guest g, counting only files on this PC.
+func (s *Server) fileAt(g, f int) (model.Entry, bool) {
 	set, ok := s.setAt(g)
 	if !ok {
-		return 0, false
+		return model.Entry{}, false
 	}
 	n := 0
-	var id int64
+	var found model.Entry
 	s.Store.Read(func(st *store.State) {
-		for _, assetID := range set.Items {
-			if st.Manifest.Asset(assetID) == nil {
+		for _, e := range set.List() {
+			if st.Manifest.Asset(e.AssetID) == nil {
 				continue
 			}
 			n++
 			if n == f {
-				id = assetID
+				found = e
 				return
 			}
 		}
 	})
-	return id, id != 0
+	return found, found.AssetID != 0
 }
 
 // ---------- integration keys ----------
