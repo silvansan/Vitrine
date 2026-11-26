@@ -78,7 +78,9 @@ def _create(request, max_size=0, **owner):
     if max_size is None:
         max_size = 4 * 1024 ** 4
     elif not max_size:
-        max_size = settings.VITRINE_MAX_UPLOAD_MB * 1024 * 1024
+        from . import config
+
+        max_size = config.max_upload_mb() * 1024 * 1024
     if request.method == "OPTIONS":
         return tus_response(
             204,
@@ -93,8 +95,17 @@ def _create(request, max_size=0, **owner):
         length = int(request.headers.get("Upload-Length", ""))
     except ValueError:
         return tus_response(400)
-    if length <= 0 or length > max_size:
-        return tus_response(413)
+    if length <= 0:
+        response = tus_response(413)
+        response.content = b"This file is empty (0 bytes). If it is in iCloud, OneDrive or Google Drive, download it to the device first."
+        return response
+    if length > max_size:
+        response = tus_response(413)
+        response.content = (
+            f"This file is {length / 1024 ** 3:.1f} GB; the largest upload is {max_size / 1024 ** 3:g} GB "
+            "(an admin can raise it in Settings → Storage)."
+        ).encode()
+        return response
 
     meta = parse_metadata(request.headers.get("Upload-Metadata"))
     upload = Upload.objects.create(

@@ -637,6 +637,11 @@
       status.textContent = 'Too large (limit ' + Math.round(maxBytes / 1048576) + ' MB).';
       return;
     }
+    if (!file.size) {
+      row.classList.add('error');
+      status.textContent = 'This file is empty. If it is in iCloud or another cloud, download it to your phone first.';
+      return;
+    }
     var upload = new tus.Upload(file, {
       endpoint: tusEndpoint,
       chunkSize: 8 * 1024 * 1024,
@@ -645,6 +650,8 @@
       metadata: { filename: file.name, filetype: file.type || '' },
       onError: function (err) {
         row.classList.add('error');
+        var res = err && err.originalResponse;
+        if (res && res.getStatus && res.getStatus() === 413 && res.getBody()) { status.textContent = res.getBody(); return; }
         status.textContent = 'Upload stopped. Pick the file again to continue where it stopped. (' + (err && err.message ? err.message.split('\n')[0] : 'error') + ')';
       },
       onProgress: function (sent, total) {

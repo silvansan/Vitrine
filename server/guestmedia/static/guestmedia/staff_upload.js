@@ -7,6 +7,14 @@
   var drop = box.querySelector('.drop');
   var personField = box.querySelector('[data-field=person]');
   var eventField = box.querySelector('[data-field=event]');
+  function gb(bytes) { return (bytes / 1073741824).toFixed(1).replace(/\.0$/, ''); }
+  // The server's own explanation (e.g. too large, empty file), else tus' message.
+  function uploadErrorText(err) {
+    var res = err && err.originalResponse;
+    var body = res && res.getBody ? res.getBody() : '';
+    if (res && res.getStatus && res.getStatus() === 413 && body) return body;
+    return err && err.message ? err.message.split('\n')[0] : 'error';
+  }
   var maxBytes = parseInt(box.dataset.maxMb, 10) * 1048576;
   var running = 0;
   var finished = 0;
@@ -45,7 +53,12 @@
     li.appendChild(bar);
     list.appendChild(li);
     if (file.size > maxBytes) {
-      status.textContent = 'Too large (limit ' + mb(maxBytes) + ' MB).';
+      status.textContent = 'Too large: ' + gb(file.size) + ' GB, the limit is ' + gb(maxBytes) + ' GB (Settings → Storage).';
+      li.className = 'bad';
+      return;
+    }
+    if (!file.size) {
+      status.textContent = 'This file is empty (0 bytes). If it is in iCloud, OneDrive or Google Drive, download it first.';
       li.className = 'bad';
       return;
     }
@@ -59,7 +72,9 @@
       onError: function (err) {
         running--;
         li.className = 'bad';
-        status.textContent = 'Stopped: ' + (err && err.message ? err.message.split('\n')[0] : 'error') + '. Choose the file again to continue.';
+        var why = uploadErrorText(err);
+        status.textContent = err && err.originalResponse && err.originalResponse.getStatus() === 413
+          ? why : 'Stopped: ' + why + '. Choose the file again to continue.';
       },
       onProgress: function (sent, total) {
         var pct = total ? Math.floor(sent / total * 100) : 0;

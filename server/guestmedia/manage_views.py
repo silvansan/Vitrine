@@ -384,7 +384,7 @@ def person_detail(request, pk):
             "uploads": MediaAsset.objects.filter(uploaded_by=person)[:60],
             "devices": person.devices.all(),
             "upload_events": [g.service for g in person.upcoming_participations()],
-            "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
+            "max_upload_mb": vitrine_config.max_upload_mb(),
             "today": timezone.localdate(),
         },
     )
@@ -508,7 +508,7 @@ def library(request):
             "upload_events": upcoming_events(org),
             "set_targets": Guest.objects.filter(service__in=upcoming_events(org)).select_related("service__location", "person")
             .order_by("service__starts_on", "service__name", "person__name"),
-            "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
+            "max_upload_mb": vitrine_config.max_upload_mb(),
         },
     )
 
@@ -883,6 +883,16 @@ def site_settings(request):
         def keep_secret(new, old):
             return old if new in ("", SECRET_MASK) else new
 
+        if action == "uploads":
+            raw = P.get("max_upload_gb", "").strip().replace(",", ".")
+            try:
+                s.max_upload_mb = max(1, round(float(raw) * 1024)) if raw else None
+            except ValueError:
+                messages.error(request, "Type the largest upload in GB, for example 8.")
+                return redirect(reverse("manage-settings") + "#storage")
+            s.save(update_fields=["max_upload_mb"])
+            messages.success(request, f"Uploads up to {config.max_upload_mb() / 1024:g} GB per file.")
+            return redirect(reverse("manage-settings") + "#storage")
         if action == "alerts":
             s.telegram_bot_token = keep_secret(P.get("telegram_bot_token", "").strip(), s.telegram_bot_token)
             if P.get("clear_telegram") == "on":
@@ -993,6 +1003,8 @@ def site_settings(request):
             "email_presets": EMAIL_PRESETS,
             "email_from_env": bool(settings.EMAIL_HOST) and not s.email_host,
             "offline_minutes": config.offline_alert_minutes(),
+            "max_upload_gb": f"{config.max_upload_mb() / 1024:g}",
+            "env_upload_gb": f"{settings.VITRINE_MAX_UPLOAD_MB / 1024:g}",
             "sync_time": config.sync_check_time(),
             "summary_time": config.summary_time(),
         },

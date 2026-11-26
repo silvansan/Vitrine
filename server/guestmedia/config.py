@@ -50,6 +50,11 @@ def offline_alert_minutes():
     return site().offline_alert_minutes or django_settings.VITRINE_OFFLINE_ALERT_MINUTES
 
 
+def max_upload_mb():
+    """Largest upload per file, in MB (Settings → Storage, else VITRINE_MAX_UPLOAD_MB)."""
+    return site().max_upload_mb or django_settings.VITRINE_MAX_UPLOAD_MB
+
+
 def summary_time():
     return site().summary_time or "08:00"
 

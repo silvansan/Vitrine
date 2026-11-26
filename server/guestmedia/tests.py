@@ -1453,3 +1453,26 @@ class ClipTests(TestCase):
                                    content_type="application/json", **auth)
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(self.set.items.count(), 2)
+
+
+class UploadLimitTests(TestCase):
+    def test_limit_from_settings_and_clear_413(self):
+        from django.contrib.auth.models import User
+
+        from .models import SiteSettings
+
+        User.objects.create_superuser("boss", "b@example.org", "pw")
+        self.client.login(username="boss", password="pw")
+        headers = {"HTTP_TUS_RESUMABLE": "1.0.0", "HTTP_UPLOAD_METADATA": ""}
+        empty = self.client.post("/manage/tus/", HTTP_UPLOAD_LENGTH="0", **headers)
+        self.assertEqual(empty.status_code, 413)
+        self.assertIn(b"empty", empty.content)
+        self.client.post("/manage/settings/", {"action": "uploads", "max_upload_gb": "0.5"})
+        self.assertEqual(SiteSettings.load().max_upload_mb, 512)
+        big = self.client.post("/manage/tus/", HTTP_UPLOAD_LENGTH=str(600 * 1024 * 1024), **headers)
+        self.assertEqual(big.status_code, 413)
+        self.assertIn(b"largest upload is 0.5 GB", big.content)
+        ok = self.client.post("/manage/tus/", HTTP_UPLOAD_LENGTH=str(400 * 1024 * 1024), **headers)
+        self.assertEqual(ok.status_code, 201)
+        self.client.post("/manage/settings/", {"action": "uploads", "max_upload_gb": ""})
+        self.assertIsNone(SiteSettings.load().max_upload_mb)

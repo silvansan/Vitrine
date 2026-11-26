@@ -114,6 +114,12 @@
 
 <section class="card" id="storage">
   <h2>Storage</h2>
+  <form method="post" class="inline-form upload-limit">
+    {% csrf_token %}<input type="hidden" name="action" value="uploads">
+    <label>Largest upload per file <input name="max_upload_gb" inputmode="decimal" size="5" value="{{ max_upload_gb }}"> GB</label>
+    <button class="btn" type="submit">Save</button>
+    <span class="muted">Empty: {{ env_upload_gb }} GB (<code>VITRINE_MAX_UPLOAD_MB</code>). Keep it well under the free space below.</span>
+  </form>
   {% with s=storage %}
   {% if s.data %}
   <div class="disk">

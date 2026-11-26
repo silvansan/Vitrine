@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from . import config as vitrine_config
 from . import pins
 from .files import serve_field
 from .models import Favorite, Guest, Marker, MediaAsset, MediaSet, Person, PersonAlias, SetItem
@@ -120,7 +121,7 @@ def page(request, token):
                 for g in person.upcoming_participations()
             ] + ([] if any(g.pk == guest.pk for g in person.upcoming_participations())
                  else [{"id": guest.service_id, "label": event_label(guest.service), "current": True}]),
-            "max_upload_mb": settings.VITRINE_MAX_UPLOAD_MB,
+            "max_upload_mb": vitrine_config.max_upload_mb(),
             "on_device": pins.device_for(request, person) is not None,
         },
     )
