@@ -124,7 +124,7 @@ Guests tap the ♡ on a picture (in the library, in their set, or in the **Favor
 
 ## Ordering a set on the guest page
 
-In **My set**, guests drag a file by its ⠿ handle (left of the picture) to change the order; the list moves under the finger and scrolls near the edges, and the order is saved when they let go. With a keyboard: focus the handle and press ↑ / ↓. *Options* → *Move up* / *Move down* does the same.
+In **My set**, guests drag a file by its ⠿ handle (left of the picture) to change the order; the list moves under the finger and scrolls near the edges, and the order is saved when they let go. One drag can move a file any number of places (from the bottom straight to 3rd), and drifting left or right off the handle on the way doesn't drop it. With a keyboard: focus the handle and press ↑ / ↓. *Options* → *Move up* / *Move down* does the same.
 
 The bin button at the right of each file removes it from the set at once (the file stays in their library); **Undo** in the bar at the bottom puts it back in the same place for a few seconds.
 

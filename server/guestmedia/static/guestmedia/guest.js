@@ -281,6 +281,7 @@
     var grabOffset = e.clientY - rect.top;
     var pointerY = e.clientY;
     var scrollTimer = null;
+    var pointerId = e.pointerId;
     ui.dragging = true;
     item.classList.add('dragging');
     list.classList.add('sorting');
@@ -300,6 +301,8 @@
       }
       if (target !== item.nextSibling) {
         list.insertBefore(item, target);
+        // Moving the row drops the browser's pointer capture; take it back so the drag goes on.
+        try { handle.setPointerCapture(pointerId); } catch (err) { /* pointer already gone */ }
         natural = item.getBoundingClientRect().top;
       }
       item.style.transform = 'translateY(' + (top - natural) + 'px)';
@@ -311,7 +314,6 @@
       else if (pointerY > window.innerHeight - edge) speed = Math.ceil((pointerY - (window.innerHeight - edge)) / 6);
       if (speed) { window.scrollBy(0, speed); place(); }
     }
-    var pointerId = e.pointerId;
     var ended = false;
     function moveHandler(ev) {
       if (ev.pointerId !== pointerId) return;
@@ -327,7 +329,7 @@
       window.removeEventListener('pointerup', upHandler);
       window.removeEventListener('pointercancel', upHandler);
       window.removeEventListener('blur', end);
-      handle.removeEventListener('lostpointercapture', end);
+      document.removeEventListener('visibilitychange', end);
       clearInterval(scrollTimer);
       item.style.transform = '';
       item.classList.remove('dragging');
@@ -345,11 +347,13 @@
       }
     }
     // On the window, not the handle: moving sideways off the handle must not lose the drag.
+    // Not on 'lostpointercapture': moving the row in the list releases the capture every time
+    // it passes a neighbour, which used to end the drag after one place.
     window.addEventListener('pointermove', moveHandler);
     window.addEventListener('pointerup', upHandler);
     window.addEventListener('pointercancel', upHandler);
     window.addEventListener('blur', end);
-    handle.addEventListener('lostpointercapture', end);
+    document.addEventListener('visibilitychange', end);
     scrollTimer = setInterval(autoScroll, 16);
     place();
   }
