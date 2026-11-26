@@ -77,6 +77,7 @@ Stack environment variables. Empty or missing means the default. The alert and b
 | `VITRINE_PRESYNC_DAYS` | `14` | How many days ahead an agent receives its location's events (and downloads their files) |
 | `VITRINE_PUBLIC_URL` | empty | Base of guest links; empty = the address /manage/ was opened with |
 | `VITRINE_VIDEO_FPS` | `25` | Frame rate videos are converted to |
+| `VITRINE_VIDEO_PRESET` | `ultrafast` | x264 speed for converting videos: `ultrafast` (ready soonest, files about 2–3× bigger), `veryfast`, `medium` (smallest files, slowest). **Settings → Storage** overrides it |
 | `VITRINE_FILMSTRIP_INTERVAL` | `5` | Seconds between cue-panel frames |
 | `VITRINE_MAX_UPLOAD_MB` | `4096` | Largest upload per file, unless set in **Settings → Storage** (in GB there). A file over the limit, or an empty one (a cloud file not downloaded yet), is refused with a message saying which. |
 | `VITRINE_TRASH_DAYS` | `30` | Days before trash is emptied |

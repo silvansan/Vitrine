@@ -1476,3 +1476,46 @@ class UploadLimitTests(TestCase):
         self.assertEqual(ok.status_code, 201)
         self.client.post("/manage/settings/", {"action": "uploads", "max_upload_gb": ""})
         self.assertIsNone(SiteSettings.load().max_upload_mb)
+
+
+class ConversionProgressTests(TestCase):
+    def test_ffmpeg_reports_progress(self):
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        from .processing import process_file
+
+        tmp = Path(tempfile.mkdtemp())
+        src = tmp / "clip.mov"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=4",
+                        "-c:v", "mpeg4", str(src)], check=True)
+        seen = []
+        result = process_file(src, "clip.mov", "Maria", progress=lambda f, stage: seen.append((round(f, 2), stage)),
+                              preset="ultrafast")
+        self.assertEqual(result["kind"], "video")
+        converting = [f for f, stage in seen if stage == "converting"]
+        self.assertTrue(converting and converting[-1] >= 0.9, seen)
+        self.assertEqual(seen[-1], (1.0, "finishing"))
+
+    def test_progress_endpoint_and_text(self):
+        from django.contrib.auth.models import User
+
+        from . import progress
+
+        User.objects.create_superuser("boss", "b@example.org", "pw")
+        self.client.login(username="boss", password="pw")
+        org = Organization.objects.create(name="Main")
+        busy = MediaAsset.objects.create(owner_name="Maria", organization=org, original_name="v.mp4", status="processing")
+        queued = MediaAsset.objects.create(owner_name="Maria", organization=org, original_name="w.mp4", status="processing")
+        done = MediaAsset.objects.create(owner_name="Maria", organization=org, original_name="x.mp4", status="ready")
+        reporter = progress.Reporter(busy.pk)
+        reporter.started -= 30  # 30 s in, 25 % done → about 90 s left
+        reporter(0.25)
+        data = self.client.get(f"/manage/progress?ids={busy.pk},{queued.pk},{done.pk}").json()
+        self.assertEqual(data[str(busy.pk)]["pct"], 25)
+        self.assertEqual(data[str(busy.pk)]["text"], "Converting · 25% · about 2 min left")
+        self.assertEqual(data[str(queued.pk)]["text"], "Waiting to be converted…")
+        self.assertEqual(data[str(done.pk)]["status"], "ready")
+        reporter(1.0, "finishing")
+        self.assertIn("Almost ready", self.client.get(f"/manage/progress?ids={busy.pk}").json()[str(busy.pk)]["text"])

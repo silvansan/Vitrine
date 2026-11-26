@@ -50,6 +50,18 @@ def offline_alert_minutes():
     return site().offline_alert_minutes or django_settings.VITRINE_OFFLINE_ALERT_MINUTES
 
 
+VIDEO_PRESETS = [
+    ("ultrafast", "Fastest (ultrafast): ready soonest, files about 2–3× bigger"),
+    ("veryfast", "Fast (veryfast): a good middle"),
+    ("medium", "Smallest files (medium): slowest"),
+]
+
+
+def video_preset():
+    value = site().video_preset or django_settings.VITRINE_VIDEO_PRESET
+    return value if value in dict(VIDEO_PRESETS) else "ultrafast"
+
+
 def max_upload_mb():
     """Largest upload per file, in MB (Settings → Storage, else VITRINE_MAX_UPLOAD_MB)."""
     return site().max_upload_mb or django_settings.VITRINE_MAX_UPLOAD_MB

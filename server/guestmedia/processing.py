@@ -65,6 +65,25 @@ def run(cmd):
     return result.stdout
 
 
+def run_progress(cmd, duration_s, report):
+    """Run ffmpeg and call report(fraction 0..1) as it goes (from its -progress output)."""
+    cmd = [cmd[0], "-progress", "pipe:1", "-nostats"] + list(cmd[1:])
+    logger.info("run: %s", " ".join(str(c) for c in cmd))
+    with tempfile.TemporaryFile() as err:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err, text=True)
+        for line in proc.stdout:
+            key, _, value = line.strip().partition("=")
+            if key in ("out_time_us", "out_time_ms") and value.isdigit() and duration_s > 0:
+                # Both are microseconds (ffmpeg's out_time_ms is misnamed).
+                try:
+                    report(min(1.0, int(value) / 1e6 / duration_s))
+                except Exception:  # progress must never stop a conversion
+                    logger.debug("progress report failed", exc_info=True)
+        if proc.wait() != 0:
+            err.seek(0)
+            raise ProcessingError(err.read().decode(errors="replace")[-2000:])
+
+
 def probe(path):
     out = run(["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)])
     return json.loads(out)
@@ -186,7 +205,7 @@ def can_pass_through(info):
     return all(checks)
 
 
-def pass_through(src, processed, info):
+def pass_through(src, processed, info, progress=None):
     audio = audio_stream(info)
     audio_ok = audio is not None and audio.get("codec_name") == "aac" and str(audio.get("sample_rate")) == "48000"
     cmd = ["ffmpeg", "-y", "-hide_banner", "-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy"]
@@ -195,16 +214,27 @@ def pass_through(src, processed, info):
     else:
         cmd += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
     cmd += ["-movflags", "+faststart", str(processed)]
-    run(cmd)
+    run_progress(cmd, source_duration(info), progress or (lambda f: None))
 
 
-def process_video(src, out_dir):
+def source_duration(info):
+    try:
+        return float(info.get("format", {}).get("duration") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def process_video(src, out_dir, progress=None, preset="ultrafast"):
+    """progress(fraction, stage): stage "converting" then "finishing" (thumbnail and filmstrip)."""
+    report = (lambda f: progress(f, "converting")) if progress else (lambda f: None)
     fps = settings.VITRINE_VIDEO_FPS
     processed = out_dir / "video.mp4"
     source_info = probe(src)
     if can_pass_through(source_info):
         logger.info("%s is already H.264 1080p at %s fps: copying without re-encoding", src, fps)
-        pass_through(src, processed, source_info)
+        pass_through(src, processed, source_info, report)
+        if progress:
+            progress(1.0, "finishing")
         return finish_video(processed, out_dir, passed_through=True)
     filter_graph = (
         f"[0:v]scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=increase,"
@@ -212,16 +242,20 @@ def process_video(src, out_dir):
         f"[0:v]scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=decrease[fg];"
         f"[bg][fg]overlay=(W-w)/2:(H-h)/2,fps={fps},format=yuv420p,setsar=1[v]"
     )
-    run(
+    run_progress(
         [
             "ffmpeg", "-y", "-hide_banner", "-i", str(src),
             "-filter_complex", filter_graph,
             "-map", "[v]", "-map", "0:a:0?",
-            "-c:v", "libx264", "-preset", "medium", "-profile:v", "high", "-crf", "20",
+            "-c:v", "libx264", "-preset", preset, "-profile:v", "high", "-crf", "20",
             "-g", str(fps * 2), "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
             "-movflags", "+faststart", str(processed),
-        ]
+        ],
+        source_duration(source_info),
+        report,
     )
+    if progress:
+        progress(1.0, "finishing")
     return finish_video(processed, out_dir, passed_through=False)
 
 
@@ -360,8 +394,9 @@ def process_audio(src, out_dir, original_name, owner):
     return {"processed": processed, "thumb": thumb, "width": TARGET_W, "height": TARGET_H, "duration_ms": duration_ms}
 
 
-def process_file(src, original_name, owner=""):
-    """Process one upload. Returns a dict with the produced files (in a temp dir)."""
+def process_file(src, original_name, owner="", progress=None, preset="ultrafast"):
+    """Process one upload. Returns a dict with the produced files (in a temp dir).
+    progress(fraction, stage) is called while a video converts; preset is x264's speed."""
     src = Path(src)
     kind = detect_kind(src, original_name)
     out_dir = Path(tempfile.mkdtemp(prefix="vitrine-"))
@@ -371,7 +406,7 @@ def process_file(src, original_name, owner=""):
         elif kind == "audio":
             result = process_audio(src, out_dir, original_name, owner)
         else:
-            result = process_video(src, out_dir)
+            result = process_video(src, out_dir, progress=progress, preset=preset)
     except Exception:
         shutil.rmtree(out_dir, ignore_errors=True)
         raise

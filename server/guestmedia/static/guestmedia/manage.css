@@ -158,3 +158,8 @@ label.check{display:inline-flex;flex-direction:row;align-items:center;gap:8px}
 .disk-bar{height:12px;border-radius:6px;background:rgba(127,127,127,.18);overflow:hidden}
 .disk-bar i{display:block;height:100%;background:var(--ok)}
 .disk-bar.low i{background:var(--danger)}
+/* Videos being converted (progress.js) */
+.ph.converting{display:flex;align-items:center;justify-content:center;padding:0 14px}
+.conv{display:flex;flex-direction:column;gap:8px;width:100%;max-width:240px;text-align:center;font-size:13px}
+.conv-bar{display:block;height:6px;border-radius:3px;background:rgba(0,0,0,.1);overflow:hidden}
+.conv-bar i{display:block;height:100%;width:2%;background:var(--accent,#2F6FED);border-radius:3px;transition:width .8s linear}

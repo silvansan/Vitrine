@@ -99,7 +99,7 @@
   <div class="tiles">
     {% for a in uploads %}
       <a class="tile" href="{% url 'manage-asset' a.pk %}">
-        {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph">{{ a.get_status_display }}</div>{% endif %}
+        {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph"{% if a.status == 'processing' %} data-progress="{{ a.pk }}" data-thumb="{% url 'manage-asset-file' a.pk 'thumb' %}"{% endif %}>{{ a.get_status_display }}</div>{% endif %}
         <div class="tile-body">{{ a.original_name }}<div class="muted">{{ a.get_approval_display }}</div></div>
       </a>
     {% empty %}<p class="muted">No uploads yet.</p>{% endfor %}

@@ -799,6 +799,7 @@ class SiteSettings(models.Model):
     )
     email_from = models.CharField(max_length=200, blank=True)
     offline_alert_minutes = models.PositiveIntegerField(null=True, blank=True)
+    video_preset = models.CharField(max_length=10, blank=True, help_text="x264 speed for converting videos.")
     max_upload_mb = models.PositiveIntegerField(null=True, blank=True, help_text="Largest upload per file; empty: VITRINE_MAX_UPLOAD_MB.")
     sync_check_time = models.CharField(max_length=5, blank=True, help_text="HH:MM")
     summary_time = models.CharField(max_length=5, blank=True, help_text="HH:MM, morning summary on event days")

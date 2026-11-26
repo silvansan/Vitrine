@@ -84,6 +84,8 @@ VITRINE_TRASH_DAYS = env_int("VITRINE_TRASH_DAYS", 30)
 VITRINE_PRESYNC_DAYS = env_int("VITRINE_PRESYNC_DAYS", 14)
 # Frame rate of the vMix project; videos are converted to this constant frame rate.
 VITRINE_VIDEO_FPS = env_int("VITRINE_VIDEO_FPS", 25)
+# x264 speed: ultrafast (ready soonest, bigger files), veryfast, medium. Settings → Storage overrides it.
+VITRINE_VIDEO_PRESET = os.environ.get("VITRINE_VIDEO_PRESET", "ultrafast")
 # Seconds between filmstrip frames used by the cue panel.
 VITRINE_FILMSTRIP_INTERVAL = env_int("VITRINE_FILMSTRIP_INTERVAL", 5)
 # Largest single upload, in megabytes.

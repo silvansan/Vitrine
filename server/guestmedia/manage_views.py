@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import models
 from django.db.models import Count, Q, Sum
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -540,6 +540,27 @@ def asset_detail(request, pk):
 
 
 @staff_member_required
+def conversion_progress(request):
+    """For the Library tiles: how far each video's conversion is (?ids=1,2,3)."""
+    from . import progress
+
+    ids = [int(i) for i in request.GET.get("ids", "").split(",") if i.isdigit()][:200]
+    status = dict(MediaAsset.all_objects.filter(pk__in=ids).values_list("pk", "status"))
+    infos = progress.get_many([i for i in ids if status.get(i) == MediaAsset.STATUS_PROCESSING])
+    out = {}
+    for i in ids:
+        if i not in status:
+            continue
+        info = infos.get(i)
+        out[i] = {
+            "status": status[i],
+            "pct": (info or {}).get("pct", 0) if info and info.get("stage") == "converting" else (100 if info and info.get("stage") == "finishing" else 0),
+            "text": progress.describe(info) if status[i] == MediaAsset.STATUS_PROCESSING else "",
+        }
+    return JsonResponse(out)
+
+
+@staff_member_required
 def asset_file(request, pk, variant):
     asset = get_object_or_404(MediaAsset.all_objects, pk=pk)
     field = {"processed": asset.processed, "thumb": asset.thumb, "filmstrip": asset.filmstrip, "original": asset.original}.get(variant)
@@ -890,7 +911,9 @@ def site_settings(request):
             except ValueError:
                 messages.error(request, "Type the largest upload in GB, for example 8.")
                 return redirect(reverse("manage-settings") + "#storage")
-            s.save(update_fields=["max_upload_mb"])
+            preset = P.get("video_preset", "")
+            s.video_preset = preset if preset in dict(config.VIDEO_PRESETS) else ""
+            s.save(update_fields=["max_upload_mb", "video_preset"])
             messages.success(request, f"Uploads up to {config.max_upload_mb() / 1024:g} GB per file.")
             return redirect(reverse("manage-settings") + "#storage")
         if action == "alerts":
@@ -1005,6 +1028,8 @@ def site_settings(request):
             "offline_minutes": config.offline_alert_minutes(),
             "max_upload_gb": f"{config.max_upload_mb() / 1024:g}",
             "env_upload_gb": f"{settings.VITRINE_MAX_UPLOAD_MB / 1024:g}",
+            "video_presets": config.VIDEO_PRESETS,
+            "video_preset": config.video_preset(),
             "sync_time": config.sync_check_time(),
             "summary_time": config.summary_time(),
         },

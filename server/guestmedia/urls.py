@@ -55,6 +55,7 @@ urlpatterns = [
     path("manage/library/", manage_views.library, name="manage-library"),
     path("manage/asset/<int:pk>/", manage_views.asset_detail, name="manage-asset"),
     path("manage/asset/<int:pk>/approve", manage_views.approve, name="manage-approve"),
+    path("manage/progress", manage_views.conversion_progress, name="manage-progress"),
     path("manage/asset/<int:pk>/<str:variant>", manage_views.asset_file, name="manage-asset-file"),
     path("manage/agents/", manage_views.agents, name="manage-agents"),
     path("manage/qr.svg", manage_views.qr_svg, name="manage-qr"),

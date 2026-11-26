@@ -29,9 +29,14 @@ def process_asset(self, asset_id):
     asset.error = ""
     asset.save(update_fields=["status", "error"])
 
+    from . import config, progress
+
+    reporter = progress.Reporter(asset.pk)
     try:
-        result = process_file(asset.original.path, asset.original_name, asset.owner_name)
+        result = process_file(asset.original.path, asset.original_name, asset.owner_name,
+                              progress=reporter, preset=config.video_preset())
     except Exception as exc:
+        reporter.done()
         logger.exception("Processing failed for asset %s", asset_id)
         asset.status = MediaAsset.STATUS_FAILED
         asset.error = str(exc)[-2000:]
@@ -41,6 +46,7 @@ def process_asset(self, asset_id):
         alerts.conversion_failed(asset)
         return
 
+    reporter.done()
     try:
         base = f"library/{asset.pk}"
         for old in (asset.processed, asset.thumb, asset.filmstrip):

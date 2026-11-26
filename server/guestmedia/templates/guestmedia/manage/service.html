@@ -65,7 +65,7 @@
   <div class="tiles">
     {% for a in pending %}
       <div class="tile">
-        {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph">{{ a.get_status_display }}</div>{% endif %}
+        {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph"{% if a.status == 'processing' %} data-progress="{{ a.pk }}" data-thumb="{% url 'manage-asset-file' a.pk 'thumb' %}"{% endif %}>{{ a.get_status_display }}</div>{% endif %}
         <div class="tile-body">
           <a href="{% url 'manage-asset' a.pk %}">{{ a.original_name }}</a>
           <div class="muted">{{ a.owner_name }} · {{ a.get_kind_display|default:"…" }}</div>

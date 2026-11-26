@@ -68,13 +68,13 @@
   {% for a in assets %}
     <label class="tile selectable">
       <input type="checkbox" name="ids" value="{{ a.pk }}">
-      {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph">{{ a.get_status_display }}</div>{% endif %}
+      {% if a.thumb %}<img src="{% url 'manage-asset-file' a.pk 'thumb' %}" alt="">{% else %}<div class="ph"{% if a.status == 'processing' %} data-progress="{{ a.pk }}" data-thumb="{% url 'manage-asset-file' a.pk 'thumb' %}"{% endif %}>{{ a.get_status_display }}</div>{% endif %}
       <div class="tile-body">
         <a href="{% url 'manage-asset' a.pk %}">{{ a.original_name }}</a>
         <div class="muted">{{ a.owner_name }}{% if a.duration_ms %} · {{ a.duration_ms|mmss }}{% endif %}</div>
         <div class="tags">
           <span class="pill {{ a.approval }}">{{ a.get_approval_display }}</span>
-          {% if a.status != 'ready' %}<span class="pill">{{ a.get_status_display }}</span>{% endif %}
+          {% if a.status != 'ready' %}<span class="pill"{% if a.status == 'processing' %} data-progress-pill="{{ a.pk }}"{% endif %}>{{ a.get_status_display }}</span>{% endif %}
           {% if a.private %}<span class="pill">Private</span>{% endif %}
           {% if a.shared %}<span class="pill ok">Shared</span>{% endif %}
           {% if scope == 'shared' %}<span class="pill">from {{ a.organization.name }}</span>{% endif %}
