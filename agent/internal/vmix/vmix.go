@@ -185,8 +185,13 @@ func (c *Client) Call(ctx context.Context, function string, params map[string]st
 		return err
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 	if resp.StatusCode != http.StatusOK {
+		// vMix says why in the body ("Input not found", "Input string was not in a correct format.").
+		why := strings.TrimSpace(string(body))
+		if why != "" && len(why) < 200 && !strings.HasPrefix(why, "<") {
+			return fmt.Errorf("vMix %s: %s (%s)", function, resp.Status, why)
+		}
 		return fmt.Errorf("vMix %s: %s", function, resp.Status)
 	}
 	return nil

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -426,6 +427,28 @@ func (e *Engine) rememberVolume(name string, v float64) {
 
 func volumeText(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
+// fadeValue is SetVolumeFade's Value: "volume,milliseconds". vMix only takes a whole number
+// for the volume there (its own volumes have decimals, e.g. 84.63, which it refuses with a 500).
+func fadeValue(v float64, ms int) string {
+	vol := int(math.Round(v))
+	if vol < 0 {
+		vol = 0
+	}
+	if vol > 100 {
+		vol = 100
+	}
+	return strconv.Itoa(vol) + "," + strconv.Itoa(ms)
+}
+
+// fadeTo fades an input's volume; if vMix refuses the fade, it sets the volume at once,
+// so the sound is never left at 0.
+func (e *Engine) fadeTo(ctx context.Context, input string, v float64, ms int) {
+	if err := e.VMix.Call(ctx, "SetVolumeFade", map[string]string{"Input": input, "Value": fadeValue(v, ms)}); err != nil {
+		log.Printf("vMix SetVolumeFade %s: %v; setting the volume directly", input, err)
+		_ = e.VMix.Call(ctx, "SetVolume", map[string]string{"Input": input, "Value": volumeText(v)})
+	}
+}
+
 // soundIn turns a slot's audio on, fading up to its volume over fadeMs.
 func (e *Engine) soundIn(ctx context.Context, s store.Settings, in *vmix.Input, fadeMs int) {
 	if !s.VideoAudio || in == nil {
@@ -442,7 +465,7 @@ func (e *Engine) soundIn(ctx context.Context, s store.Settings, in *vmix.Input, 
 		log.Printf("vMix AudioOn %s: %v", name, err)
 	}
 	if fadeMs > 0 {
-		_ = e.VMix.Call(ctx, "SetVolumeFade", map[string]string{"Input": in.Key, "Value": volumeText(vol) + "," + strconv.Itoa(fadeMs)})
+		e.fadeTo(ctx, in.Key, vol, fadeMs)
 	}
 }
 
@@ -457,7 +480,7 @@ func (e *Engine) soundOut(ctx context.Context, s store.Settings, st *vmix.State,
 		}
 	}
 	if fadeMs > 0 {
-		_ = e.VMix.Call(ctx, "SetVolumeFade", map[string]string{"Input": name, "Value": "0," + strconv.Itoa(fadeMs)})
+		e.fadeTo(ctx, name, 0, fadeMs)
 		return
 	}
 	_ = e.VMix.Call(ctx, "AudioOff", map[string]string{"Input": name})
@@ -1025,17 +1048,14 @@ func (e *Engine) PlayAudio(media *Media, startMs int) error {
 		{"AudioOn", map[string]string{"Input": in.Key}},
 		{"Play", map[string]string{"Input": in.Key}},
 	}...)
-	if fade > 0 {
-		steps2 = append(steps2, struct {
-			fn     string
-			params map[string]string
-		}{"SetVolumeFade", map[string]string{"Input": in.Key, "Value": volumeText(e.volumeOf(name)) + "," + strconv.Itoa(fade)}})
-	}
 	for _, step := range steps2 {
 		if err := e.VMix.Call(ctx, step.fn, step.params); err != nil {
 			e.audioFailed(err)
 			return err
 		}
+	}
+	if fade > 0 {
+		e.fadeTo(ctx, in.Key, e.volumeOf(name), fade) // already playing: a refused fade must not stop it
 	}
 	e.mu.Lock()
 	e.status.Audio = AudioLive{AssetID: media.ID, PositionMs: startMs, DurationMs: media.DurationMs}
@@ -1078,7 +1098,7 @@ func (e *Engine) StopAudio() error {
 				e.rememberVolume(s.InputAudio, in.Volume)
 			}
 		}
-		_ = e.VMix.Call(ctx, "SetVolumeFade", map[string]string{"Input": s.InputAudio, "Value": "0," + strconv.Itoa(s.AudioFadeMs)})
+		e.fadeTo(ctx, s.InputAudio, 0, s.AudioFadeMs)
 		e.mu.Lock()
 		gen := e.audioGen
 		e.mu.Unlock()

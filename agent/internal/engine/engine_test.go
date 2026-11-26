@@ -238,3 +238,25 @@ func TestClipStopsAtMarkOut(t *testing.T) {
 		t.Fatalf("a fading clip should return to the default input (mix=%q)", fake.Active(2))
 	}
 }
+
+func TestFadeToVolumeWithDecimals(t *testing.T) {
+	// vMix reports volumes like 84.63 but refuses them in SetVolumeFade (500 Internal Server Error).
+	e, fake := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.Run(ctx)
+
+	if err := e.Take(1, 0); err != nil { // a photo on GM_A creates the slots
+		t.Fatal(err)
+	}
+	fake.SetInputVolume("GM_B", 84.63) // moved in vMix by the operator
+	if err := e.Take(2, 0); err != nil {
+		t.Fatal(err)
+	}
+	if st := e.Status(); st.Error != "" {
+		t.Fatalf("no error expected, got %q", st.Error)
+	}
+	if vol, fades := fake.Volume("GM_B"); vol != 85 || len(fades) == 0 || fades[len(fades)-1] != "85,300" {
+		t.Fatalf("the fade should go to the whole-number volume 85, got %v %v", vol, fades)
+	}
+}

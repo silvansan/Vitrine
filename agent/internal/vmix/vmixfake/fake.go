@@ -110,6 +110,15 @@ func (f *Fake) Audio(title string) bool {
 	return false
 }
 
+// SetInputVolume sets an input's volume, as if moved in vMix (vMix's own volumes have decimals).
+func (f *Fake) SetInputVolume(title string, v float64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if in := f.find(title); in != nil {
+		in.Volume = v
+	}
+}
+
 // Volume reports an input's volume (fades jump to their end value) and the fades sent to it.
 func (f *Fake) Volume(title string) (float64, []string) {
 	f.mu.Lock()
@@ -153,8 +162,13 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "SetVolumeFade":
 		if in != nil {
 			parts := strings.SplitN(q.Get("Value"), ",", 2)
-			v, _ := strconv.ParseFloat(parts[0], 64)
-			in.Volume = v
+			// Like vMix: the volume has to be a whole number here (SetVolume takes decimals).
+			v, err := strconv.Atoi(parts[0])
+			if err != nil || len(parts) != 2 {
+				http.Error(w, "Input string was not in a correct format.", http.StatusInternalServerError)
+				return
+			}
+			in.Volume = float64(v)
 			in.Fades = append(in.Fades, q.Get("Value"))
 		}
 	case "AudioOn", "AudioOff", "AudioAutoOn", "AudioAutoOff":
